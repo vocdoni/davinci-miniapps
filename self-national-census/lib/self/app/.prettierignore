@@ -1,0 +1,11 @@
+android/
+deployments/
+ios/
+node_modules/
+src/assets/animations/
+witnesscalc/
+vendor/
+android/
+.tamagui/
+web/dist/
+*.md

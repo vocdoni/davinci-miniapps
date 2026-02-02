@@ -1,0 +1,204 @@
+source "https://cdn.cocoapods.org/"
+use_frameworks!
+require "tmpdir"
+
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command("node", ["-p",
+                                                 'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+project "Self.xcodeproj"
+
+# Define consistent iOS deployment target
+IOS_DEPLOYMENT_TARGET = "15.1"
+
+platform :ios, IOS_DEPLOYMENT_TARGET if !ENV["ACT"]
+prepare_react_native_project!
+
+flipper_enabled = ENV["NO_FLIPPER"] != "1"
+flipper_config = { "Flipper" => flipper_enabled ? "~> 0.125.0" : nil }
+
+linkage = ENV["USE_FRAMEWORKS"]
+if linkage != nil
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage.to_sym
+end
+
+def using_https_git_auth?
+  begin
+    # backticks run command in shell and capture stdout, 2>&1 captures stderr as well
+    auth_data = `gh auth status 2>&1`
+    auth_data.include?("Logged in to github.com account") &&
+      auth_data.include?("Git operations protocol: https")
+  rescue => e
+    # Avoid printing auth-related details in CI logs.
+    false
+  end
+end
+
+target "Self" do
+  config = use_native_modules!
+
+  use_frameworks!
+  # Skip NFCPassportReader for e2e testing to avoid build issues
+  unless ENV["E2E_TESTING"] == "1"
+    # Check if we're running in a selfxyz repo or an external fork
+    is_selfxyz_repo = ENV["GITHUB_REPOSITORY"]&.start_with?("selfxyz/") || ENV["GITHUB_REPOSITORY"].nil?
+
+    if !is_selfxyz_repo
+      # External fork - use public NFCPassportReader repository (placeholder)
+      # TODO: Replace with actual public NFCPassportReader repository URL
+      nfc_repo_url = "https://github.com/PLACEHOLDER/NFCPassportReader.git"
+    elsif ENV["GITHUB_ACTIONS"] == "true"
+      # CI: NEVER embed credentials in URLs. Rely on workflow-provided auth via:
+      # - ~/.netrc or a Git credential helper, and token masking in logs.
+      nfc_repo_url = "https://github.com/selfxyz/NFCPassportReader.git"
+    elsif using_https_git_auth?
+      # Local development with HTTPS GitHub auth via gh - use HTTPS to private repo
+      nfc_repo_url = "https://github.com/selfxyz/NFCPassportReader.git"
+    else
+      # Local development in selfxyz repo - use SSH to private repo
+      nfc_repo_url = "git@github.com:selfxyz/NFCPassportReader.git"
+    end
+
+    pod "NFCPassportReader", git: nfc_repo_url, commit: "9eff7c4e3a9037fdc1e03301584e0d5dcf14d76b"
+  end
+
+  pod "QKMRZScanner"
+  pod "lottie-ios"
+  pod "SwiftQRScanner", :git => "https://github.com/vinodiOS/SwiftQRScanner"
+  pod "Mixpanel-swift", "~> 5.0.0"
+  # RNReactNativeHapticFeedback is handled by autolinking
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => true,
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    # Flipper設定は削除
+  )
+
+  pod "Firebase", :modular_headers => true
+  pod "FirebaseCore", :modular_headers => true
+  pod "FirebaseCoreInternal", :modular_headers => true
+  pod "GoogleUtilities", :modular_headers => true
+  pod "FirebaseMessaging"
+
+  if flipper_enabled
+    pod "RCT-Folly", :podspec => "#{config[:reactNativePath]}/third-party-podspecs/RCT-Folly.podspec"
+  end
+
+  post_install do |installer|
+    installer.generated_projects.each do |project|
+      project.targets.each do |target|
+        if target.name == "RNZipArchive"
+          target.source_build_phase.files.each do |file|
+            if file.settings && file.settings["COMPILER_FLAGS"]
+              file.settings["COMPILER_FLAGS"] = ""
+            end
+          end
+        end
+
+        target.build_configurations.each do |config|
+          config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = IOS_DEPLOYMENT_TARGET
+          config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= ["$(inherited)", "_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION"]
+        end
+      end
+    end
+
+    bitcode_strip_path = `xcrun --find bitcode_strip`.chop!
+
+    def strip_bitcode_from_framework(bitcode_strip_path, framework_relative_path)
+      framework_path = File.join(Dir.pwd, framework_relative_path)
+      command = "#{bitcode_strip_path} #{framework_path} -r -o #{framework_path}"
+      puts "Stripping bitcode: #{command}"
+      system(command)
+    end
+
+    # Only strip OpenSSL bitcode if NFCPassportReader is included (not in e2e testing)
+    unless ENV["E2E_TESTING"] == "1"
+      framework_paths = [
+        "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64/OpenSSL.framework/OpenSSL",
+        "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64_x86_64-maccatalyst/OpenSSL.framework/OpenSSL",
+        "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/ios-arm64_x86_64-simulator/OpenSSL.framework/OpenSSL",
+        "Pods/OpenSSL-Universal/Frameworks/OpenSSL.xcframework/macos-arm64_x86_64/OpenSSL.framework/OpenSSL",
+      ]
+
+      framework_paths.each do |framework_relative_path|
+        strip_bitcode_from_framework(bitcode_strip_path, framework_relative_path)
+      end
+    end
+
+    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      # :ccache_enabled => true
+    )
+
+    installer.pods_project.targets.each do |target|
+      if target.name == "RNReactNativeHapticFeedback"
+        target.build_configurations.each do |config|
+          config.build_settings["OTHER_LDFLAGS"] ||= ["$(inherited)"]
+          config.build_settings["OTHER_LDFLAGS"] << "-framework AudioToolbox"
+        end
+      end
+
+      # Fix for React Native Sentry warnings
+      if target.name == "RNSentry"
+        target.build_configurations.each do |config|
+          config.build_settings["CLANG_WARN_NULLABLE_TO_NONNULL_CONVERSION"] = "NO"
+          config.build_settings["CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF"] = "NO"
+          config.build_settings["GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS"] = "NO"
+        end
+      end
+    end
+
+    # update QKCutoutView.swift to hide OCR border
+    qkCutoutView = "Pods/QKMRZScanner/QKMRZScanner/QKCutoutView.swift"
+    if File.exist?(qkCutoutView)
+      # Ensure the file is writable
+      system("chmod u+w #{qkCutoutView}")
+
+      text = File.read(qkCutoutView)
+      # Only modify if the line exists and is not already commented
+      if text.include?("addBorderAroundCutout()") && !text.include?("// addBorderAroundCutout()")
+        new_text = text.gsub(/^(\s*)(addBorderAroundCutout\s*\(\s*\))/, '\1// \2')
+        File.write(qkCutoutView, new_text)
+      end
+    end
+
+    # Disable code signing for Pod targets to avoid conflicts with main app signing
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+
+        # Fix for Rosetta emulator builds - exclude arm64 for simulator
+        config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = "arm64"
+      end
+    end
+
+    # Add E2E_TESTING compilation condition for main app target when environment variable is set
+    if ENV["E2E_TESTING"] == "1"
+      # Find Self.xcodeproj and add E2E_TESTING compilation condition
+      self_project_path = File.join(installer.sandbox.project_path, "../Self.xcodeproj")
+      if File.exist?(self_project_path)
+        project = Xcodeproj::Project.open(self_project_path)
+        project.targets.each do |target|
+          if target.name == "Self"
+            target.build_configurations.each do |config|
+              existing_conditions = config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] || ""
+              unless existing_conditions.to_s.include?("E2E_TESTING")
+                config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = (existing_conditions.to_s + " E2E_TESTING").strip
+              end
+            end
+          end
+        end
+        project.save
+      end
+    end
+  end
+end

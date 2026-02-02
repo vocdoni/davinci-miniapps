@@ -1,0 +1,25 @@
+[
+  {
+    "path": "./dist/cjs/index.cjs",
+    "name": "Full bundle",
+    "limit": "80 s"
+  },
+  {
+    "path": "./dist/cjs/index.cjs",
+    "name": "SelfQRcodeWrapper import",
+    "import": "SelfQRcodeWrapper",
+    "limit": "80 s"
+  },
+  {
+    "path": "./dist/cjs/index.cjs",
+    "name": "SelfQRcode import",
+    "import": "SelfQRcode",
+    "limit": "80 s"
+  },
+  {
+    "path": "./dist/cjs/index.cjs",
+    "name": "countries import",
+    "import": "countries",
+    "limit": "80 s"
+  }
+]

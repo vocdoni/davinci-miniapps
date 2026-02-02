@@ -1,0 +1,7 @@
+appId: com.proofofpassportapp
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "earn-points-button"
+    timeout: ${LAUNCH_WAIT_MS:60000}

@@ -1,0 +1,31 @@
+contracts/contracts/RegisterASCII.txt
+sdk/.env
+.DS_Store
+# Exception: Include mobile-sdk-alpha AAR files
+!packages/mobile-sdk-alpha/dist/android/*.aar
+dist
+**/node_modules
+**/node_modules/
+showcase
+.codegpt
+**/.yarn/
+output/*
+*.tsbuildinfo
+.yarnrc.yml
+.giga/tasks/*
+package-lock.json
+
+# CI-generated tarballs (don't commit these!)
+mobile-sdk-alpha-ci.tgz
+**/mobile-sdk-alpha-*.tgz
+/tmp/mobile-sdk-alpha*.tgz
+dataInput.d.ts
+packages/mobile-sdk-alpha/docs/docstrings-report.json
+
+# Private Android modules (cloned at build time)
+app/android/android-passport-nfc-reader/
+
+# Foundry
+contracts/out/
+contracts/cache_forge/
+contracts/broadcast/
