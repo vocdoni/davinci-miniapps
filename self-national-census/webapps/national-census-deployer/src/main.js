@@ -9,6 +9,7 @@ const POSEIDON_T3 = '0xF134707a4C4a3a76b8410fC0294d620A7c341581';
 const CHAIN_ID_HEX = '0xa4ec';
 const CHAIN_ID_DEC = 42220;
 const INDEXER_URL = env.VITE_ONCHAIN_CENSUS_INDEXER_URL ?? '';
+const APP_URL = env.VITE_NATIONAL_CENSUS_APP_URL ?? '';
 
 const nationalityInput = document.getElementById('nationality');
 const minAgeInput = document.getElementById('minAge');
@@ -34,6 +35,9 @@ const walletAddressEl = document.getElementById('walletAddress');
 const configStatusEl = document.getElementById('configStatus');
 const txHashEl = document.getElementById('txHash');
 const contractAddressEl = document.getElementById('contractAddress');
+const appLinkInput = document.getElementById('appLink');
+const copyAppLinkButton = document.getElementById('copyAppLink');
+const openAppLinkButton = document.getElementById('openAppLink');
 
 const scopeHelp = document.getElementById('scopeHelp');
 const nationalityHelp = document.getElementById('nationalityHelp');
@@ -41,6 +45,7 @@ const nationalityHelp = document.getElementById('nationalityHelp');
 let currentAccount = '';
 let currentTx = '';
 let currentContract = '';
+let currentAppLink = '';
 let computedConfigId = '';
 let configRegistered = false;
 let configCheckNonce = 0;
@@ -54,6 +59,70 @@ const HUB_INTERFACE = new Interface([
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.classList.toggle('is-error', isError);
+}
+
+function encodeBase64UrlJson(payload) {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function resolveNationalCensusAppBaseUrl() {
+  const configured = String(APP_URL || '').trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  const currentUrl = new URL(window.location.href);
+  if (/\/deployer\/?$/.test(currentUrl.pathname)) {
+    currentUrl.pathname = currentUrl.pathname.replace(/\/deployer\/?$/, '/app');
+    currentUrl.search = '';
+    currentUrl.hash = '';
+    return currentUrl.toString().replace(/\/+$/, '');
+  }
+
+  return `${window.location.origin}/app`;
+}
+
+function buildNationalCensusAppLink(config) {
+  const contractAddress = String(config.contractAddress || '').trim();
+  const scope = String(config.scope || '').trim();
+  const minAge = Number(config.minAge);
+  const nationality = String(config.nationality || '').trim().toUpperCase();
+  const network = String(config.network || '').trim();
+
+  if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) return '';
+  if (!scope || scope.length > 31) return '';
+  if (!Number.isFinite(minAge) || minAge <= 0 || minAge > 99) return '';
+  if (!/^[A-Z]{2,3}$/.test(nationality)) return '';
+
+  const envPayload = encodeBase64UrlJson({
+    v: 1,
+    contractAddress,
+    scope,
+    minAge: Math.trunc(minAge),
+    nationality,
+    network: network || 'celo',
+  });
+
+  return `${resolveNationalCensusAppBaseUrl()}/?env=${envPayload}`;
+}
+
+function setAppLink(url) {
+  currentAppLink = url || '';
+  if (appLinkInput) {
+    appLinkInput.value = currentAppLink;
+  }
+  if (copyAppLinkButton) {
+    copyAppLinkButton.disabled = !currentAppLink;
+  }
+  if (openAppLinkButton) {
+    openAppLinkButton.disabled = !currentAppLink;
+  }
 }
 
 function normalizeNationality(value) {
@@ -105,6 +174,7 @@ function updateOutputs() {
   computedConfigIdInput.value = '';
   computedConfigId = '';
   configRegistered = false;
+  setAppLink('');
   if (configStatusEl) {
     configStatusEl.textContent = '—';
   }
@@ -136,24 +206,26 @@ function updateOutputs() {
 function updateButtons() {
   const canDeploy = Boolean(
     currentAccount &&
-      isNationalityCode(normalizeNationality(nationalityInput.value)) &&
-      normalizeMinAge(minAgeInput.value) &&
-      normalizeScope(scopeSeedInput.value).length > 0 &&
-      normalizeScope(scopeSeedInput.value).length <= 31 &&
-      computedConfigId &&
-      configRegistered
+    isNationalityCode(normalizeNationality(nationalityInput.value)) &&
+    normalizeMinAge(minAgeInput.value) &&
+    normalizeScope(scopeSeedInput.value).length > 0 &&
+    normalizeScope(scopeSeedInput.value).length <= 31 &&
+    computedConfigId &&
+    configRegistered
   );
   const canRegister = Boolean(
     currentAccount &&
-      normalizeMinAge(minAgeInput.value) &&
-      computedConfigId &&
-      !configRegistered
+    normalizeMinAge(minAgeInput.value) &&
+    computedConfigId &&
+    !configRegistered
   );
   deployButton.disabled = !canDeploy;
   registerConfigButton.disabled = !canRegister;
   copyTxButton.disabled = !currentTx;
   copyAddressButton.disabled = !currentContract;
   copyConfigIdButton.disabled = !computedConfigId;
+  if (copyAppLinkButton) copyAppLinkButton.disabled = !currentAppLink;
+  if (openAppLinkButton) openAppLinkButton.disabled = !currentAppLink;
 }
 
 async function ensureChain() {
@@ -197,16 +269,22 @@ async function connectWallet() {
   }
 }
 
-function buildDeployData() {
+function getCurrentCensusConfig() {
+  return {
+    nationality: normalizeNationality(nationalityInput.value),
+    minAge: normalizeMinAge(minAgeInput.value),
+    scopeSeed: normalizeScope(scopeSeedInput.value),
+    network: 'celo',
+  };
+}
+
+function buildDeployData(config) {
   const bytecode = artifact.bytecode?.object ?? artifact.bytecode;
   const coder = AbiCoder.defaultAbiCoder();
-  const nationality = normalizeNationality(nationalityInput.value);
-  const minAge = normalizeMinAge(minAgeInput.value);
-  const scopeSeed = normalizeScope(scopeSeedInput.value);
   const configId = computedConfigId;
   const encodedArgs = coder.encode(
     ['address', 'string', 'bytes32', 'string', 'uint256'],
-    [HUB_ADDRESS, scopeSeed, configId, nationality, BigInt(minAge)]
+    [HUB_ADDRESS, config.scopeSeed, configId, config.nationality, BigInt(config.minAge)]
   );
   return `${bytecode}${encodedArgs.slice(2)}`;
 }
@@ -309,8 +387,19 @@ async function deployContract() {
   const ok = await ensureChain();
   if (!ok) return;
   try {
+    const censusConfig = getCurrentCensusConfig();
+    if (!isNationalityCode(censusConfig.nationality)) {
+      throw new Error('Invalid nationality format');
+    }
+    if (!censusConfig.minAge) {
+      throw new Error('Minimum age is required');
+    }
+    if (!censusConfig.scopeSeed || censusConfig.scopeSeed.length > 31) {
+      throw new Error('Scope seed must be between 1 and 31 characters');
+    }
+
     setStatus('Preparing deployment…');
-    const data = buildDeployData();
+    const data = buildDeployData(censusConfig);
     const params = [{ from: currentAccount, data }];
     const gas = await window.ethereum.request({ method: 'eth_estimateGas', params });
     const txHash = await window.ethereum.request({
@@ -325,6 +414,15 @@ async function deployContract() {
     if (receipt && receipt.contractAddress) {
       currentContract = receipt.contractAddress;
       contractAddressEl.textContent = receipt.contractAddress;
+      setAppLink(
+        buildNationalCensusAppLink({
+          contractAddress: receipt.contractAddress,
+          scope: censusConfig.scopeSeed,
+          minAge: Number(censusConfig.minAge),
+          nationality: censusConfig.nationality,
+          network: censusConfig.network,
+        })
+      );
       updateButtons();
       if (!INDEXER_URL) {
         setStatus('Deployment confirmed. Indexer URL not configured.');
@@ -384,7 +482,7 @@ async function registerConfig() {
 
 function copyText(value) {
   if (!value) return;
-  navigator.clipboard.writeText(value).catch(() => {});
+  navigator.clipboard.writeText(value).catch(() => { });
 }
 
 [nationalityInput, minAgeInput, scopeSeedInput].forEach((input) =>
@@ -397,6 +495,15 @@ deployButton.addEventListener('click', deployContract);
 copyTxButton.addEventListener('click', () => copyText(currentTx));
 copyAddressButton.addEventListener('click', () => copyText(currentContract));
 copyConfigIdButton.addEventListener('click', () => copyText(computedConfigId));
+if (copyAppLinkButton) {
+  copyAppLinkButton.addEventListener('click', () => copyText(currentAppLink));
+}
+if (openAppLinkButton) {
+  openAppLinkButton.addEventListener('click', () => {
+    if (!currentAppLink) return;
+    window.open(currentAppLink, '_blank', 'noopener,noreferrer');
+  });
+}
 
 hubInput.value = HUB_ADDRESS;
 poseidonInput.value = POSEIDON_T3;
@@ -406,4 +513,5 @@ nationalityInput.value = env.VITE_NATIONALITY ?? '';
 minAgeInput.value = env.VITE_MIN_AGE ?? '';
 scopeSeedInput.value = env.VITE_SCOPE_SEED ?? '';
 
+setAppLink('');
 updateOutputs();

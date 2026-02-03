@@ -907,6 +907,10 @@ button.choice-card:not(:disabled):hover {
 }
 
 .status {
+  display: inline-block;
+  width: 100%;
+  position: relative;
+  overflow-wrap: break-word;
   font-size: 12px;
   color: var(--muted);
 }

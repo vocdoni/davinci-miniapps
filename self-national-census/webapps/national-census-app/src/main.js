@@ -8,7 +8,7 @@ import { buildSelfApp, getQrLink, getUniversalLink, WS_DB_RELAYER } from './self
 
 const env = import.meta.env;
 const CONFIG = {
-  appName: env.VITE_APP_NAME ?? '',
+  appName: env.VITE_APP_NAME ?? 'National Census',
   endpoint: env.VITE_CONTRACT_ADDRESS ?? '',
   scope: env.VITE_SCOPE ?? '',
   endpointType: env.VITE_NETWORK ?? 'celo',
@@ -22,6 +22,55 @@ const CONFIG = {
   onchainIndexerUrl: env.VITE_ONCHAIN_CENSUS_INDEXER_URL ?? '',
   davinciEnv: env.VITE_DAVINCI_ENV ?? 'dev',
 };
+
+function decodeBase64UrlJson(value) {
+  try {
+    const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = `${normalized}${'='.repeat((4 - (normalized.length % 4)) % 4)}`;
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function applyConfigOverridesFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get('env');
+  if (!encoded) return;
+
+  const override = decodeBase64UrlJson(encoded);
+  if (!override || typeof override !== 'object') return;
+
+  const contract = String(override.contractAddress ?? override.contract ?? '').trim();
+  if (/^0x[a-fA-F0-9]{40}$/.test(contract)) {
+    CONFIG.endpoint = contract;
+  }
+
+  const scope = String(override.scope ?? '').trim();
+  if (scope && scope.length <= 31) {
+    CONFIG.scope = scope;
+  }
+
+  const minAge = Number(override.minAge);
+  if (Number.isFinite(minAge) && minAge > 0 && minAge <= 99) {
+    CONFIG.minAge = Math.trunc(minAge);
+  }
+
+  const nationality = String(override.nationality ?? '').trim().toUpperCase();
+  if (/^[A-Z]{2,3}$/.test(nationality)) {
+    CONFIG.nationality = nationality;
+  }
+
+  const network = String(override.network ?? '').trim();
+  if (network === 'celo' || network === 'staging_celo') {
+    CONFIG.endpointType = network;
+  }
+}
+
+applyConfigOverridesFromUrl();
 
 const configApp = document.getElementById('configApp');
 const configContract = document.getElementById('configContract');

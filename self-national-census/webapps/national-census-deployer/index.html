@@ -114,6 +114,18 @@
         <button type="button" id="copyTx" class="ghost" disabled>Copy tx hash</button>
         <button type="button" id="copyAddress" class="ghost" disabled>Copy contract</button>
       </div>
+
+      <div class="field">
+        <label for="appLink">National Census App link</label>
+        <input id="appLink" type="text" readonly placeholder="Link will be available after deployment" />
+        <div class="actions">
+          <button type="button" id="openAppLink" class="ghost" disabled>Open app</button>
+          <button type="button" id="copyAppLink" class="ghost" disabled>Copy app link</button>
+        </div>
+        <p class="helper">
+          Includes an <code>env</code> URL param with contract, scope, minimum age and nationality.
+        </p>
+      </div>
     </section>
   </main>
 
