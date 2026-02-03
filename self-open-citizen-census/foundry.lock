@@ -1,0 +1,8 @@
+{
+  "lib/davinci-contracts": {
+    "tag": {
+      "name": "v0.0.36",
+      "rev": "26e513fc951ad8ad78db17f800ff6dd87216bdd8"
+    }
+  }
+}

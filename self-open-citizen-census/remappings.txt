@@ -1,0 +1,11 @@
+erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/
+forge-std/=lib/forge-std/src/
+halmos-cheatcodes/=lib/openzeppelin-contracts/lib/halmos-cheatcodes/src/
+openzeppelin-contracts/=lib/openzeppelin-contracts/
+poseidon-solidity/=lib/poseidon-solidity/contracts/
+zk-kit.solidity/=lib/zk-kit.solidity/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@selfxyz/contracts/=lib/self/contracts/
+@openzeppelin/contract/=lib/davinci-contracts/lib/openzeppelin-contracts/contracts/
+davinci-contracts/=lib/davinci-contracts/
+self/=lib/self/contracts/

@@ -1,0 +1,3 @@
+[submodule "self-open-citizen-census/lib/davinci-contracts"]
+	path = self-open-citizen-census/lib/davinci-contracts
+	url = https://github.com/vocdoni/davinci-contracts

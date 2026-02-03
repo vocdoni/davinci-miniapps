@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="Open Citizen Census Platform to register verified adults and create voting processes backed by national eligibility checks." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Open Citizen Census" />
+  <meta property="og:title" content="Open Citizen Census App" />
+  <meta property="og:description"
+    content="Register verified adults and create voting processes backed by national eligibility checks." />
+  <meta property="og:url" content="https://open-citizen-census.davinci.ninja/app" />
+  <meta property="og:image" content="https://open-citizen-census.davinci.ninja/app/assets/davinci_icon.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Open Citizen Census App" />
+  <meta name="twitter:description"
+    content="Register verified adults and create voting processes backed by national eligibility checks." />
+  <meta name="twitter:image" content="https://open-citizen-census.davinci.ninja/app/assets/davinci_icon.png" />
+  <link rel="icon" type="image/png" href="./assets/davinci_icon.png" />
+  <title>Open Citizen Census App</title>
+</head>
+
+<body>
+  <main class="shell">
+    <section id="view-home" class="view is-active">
+      <header class="hero landing-hero">
+        <p class="eyebrow">Open Citizen Census App</p>
+        <h1>Open Citizen Census Platform</h1>
+        <p class="subhead">
+          Manage verified census registration and launch processes that rely on national eligibility checks. Start with
+          registration to be part of the census or continue to process creation using it.
+        </p>
+      </header>
+
+      <div class="highlights landing-highlights">
+        <div class="highlight-card">
+          <span>Minimum age</span>
+          <strong data-highlight="minAge">—</strong>
+        </div>
+        <div class="highlight-card">
+          <span>Required nationality</span>
+          <strong data-highlight="nationality">—</strong>
+        </div>
+      </div>
+
+      <div class="choice-grid">
+        <button type="button" class="choice-card" data-route="register">
+          <div class="choice-content">
+            <h2 class="choice-title">Census Registration</h2>
+            <p>
+              Include your self in the <strong>national onchain census</strong> by registering as a verified adult. This
+              flow will guide you through connecting your wallet, signing, and generating a Self QR for registration.
+            </p>
+            <div class="choice-icon" aria-hidden="true">
+              <img src="./assets/census-registration.svg" alt="" aria-hidden="true" />
+            </div>
+          </div>
+        </button>
+        <button type="button" class="choice-card" data-route="process">
+          <div class="choice-content">
+            <h2 class="choice-title">Process creation</h2>
+            <p>
+              Create a new voting process using <strong>Davinci Protocol</strong> that leverages the open citizen census
+              for
+              eligibility verification. This flow focuses only on process creation and returns the new process ID.
+            </p>
+            <div class="choice-icon" aria-hidden="true">
+              <img src="./assets/create-process.svg" alt="" aria-hidden="true" />
+            </div>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <section id="view-registration" class="view">
+      <div class="section-header">
+        <button class="ghost back" type="button" data-route="home">Back</button>
+        <h2>Census Registration</h2>
+      </div>
+
+      <header class="hero">
+        <p class="eyebrow">Census Registration</p>
+        <h1>Register as a verified adult in a national onchain census</h1>
+        <p class="subhead">
+          This app generates a secure Self QR for your wallet address so you can prove eligibility without exposing
+          personal data. If you meet the minimum age and nationality requirements, your address is added to the census.
+        </p>
+        <div class="highlights">
+          <div class="highlight-card">
+            <span>Minimum age</span>
+            <strong data-highlight="minAge">—</strong>
+          </div>
+          <div class="highlight-card">
+            <span>Required nationality</span>
+            <strong data-highlight="nationality">—</strong>
+          </div>
+        </div>
+
+        <details class="extended">
+          <summary>Extended info</summary>
+          <div class="config-list">
+            <div>
+              <span>App</span>
+              <strong id="configApp"></strong>
+            </div>
+            <div>
+              <span>Contract</span>
+              <strong id="configContract"></strong>
+            </div>
+            <div>
+              <span>Scope seed</span>
+              <strong id="configScope"></strong>
+            </div>
+            <div>
+              <span>Network</span>
+              <strong id="configNetwork"></strong>
+            </div>
+            <div>
+              <span>Min age</span>
+              <strong id="configMinAge"></strong>
+            </div>
+            <div>
+              <span>Nationality</span>
+              <strong id="configNationality"></strong>
+            </div>
+          </div>
+        </details>
+      </header>
+
+      <section class="progress" id="progress" data-step="0">
+        <div class="progress-header">
+          <h2>How it works</h2>
+          <p>Connect and sign to prove ownership, then scan the QR to register in the census.</p>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-steps">
+          <div class="progress-step" data-step="1">
+            <span class="dot"></span>
+            <div>
+              <strong>Connect &amp; sign</strong>
+              <span>Prove wallet ownership with a one-time signature.</span>
+            </div>
+          </div>
+          <div class="progress-step" data-step="2">
+            <span class="dot"></span>
+            <div>
+              <strong>Scan to register</strong>
+              <span>Scan the QR in the Self app to join the census.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid registration-steps">
+        <section class="panel step-card" id="connectPanel">
+          <div class="step-label">Step 1</div>
+          <div class="step-header">
+            <h2>Connect &amp; sign</h2>
+            <span id="signatureBadge" class="badge is-hidden">Verified</span>
+          </div>
+          <div class="wallet-box">
+            <p class="note">We will request a one-time signature to confirm the address.</p>
+            <div class="actions connect-actions">
+              <button id="connectWallet" type="button">Connect wallet</button>
+              <span id="connectNotice" class="status notice is-hidden"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel step-card" id="qrPanel">
+          <div class="step-label">Step 2</div>
+          <div class="step-header">
+            <h2>Scan to register</h2>
+            <span id="registrationBadge" class="badge success is-hidden">Registered</span>
+          </div>
+          <label class="account-field">
+            Connected account
+            <input id="userAddress" type="text" readonly />
+          </label>
+          <div class="qr-box">
+            <img id="qr" alt="Self QR" />
+            <button id="generate" type="button" class="qr-refresh" aria-label="Refresh QR">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M20 4v6h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                  stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+          <div class="actions">
+            <span id="status" class="status">Connect wallet to start.</span>
+          </div>
+          <details class="disclosure">
+            <summary>Show registration link</summary>
+            <label>
+              Deep link
+              <textarea id="link" rows="4" readonly></textarea>
+            </label>
+            <button id="copyLink" type="button" class="ghost">Copy link</button>
+          </details>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-process" class="view">
+      <div class="section-header">
+        <button class="ghost back" type="button" data-route="home">Back</button>
+        <h2>Process creation</h2>
+      </div>
+      <div class="process-layout">
+        <section class="panel process-panel">
+          <p class="eyebrow">Open Citizen Census process</p>
+          <h3>Create a census-backed process</h3>
+          <p>
+            Configure a new voting process that uses the Open Citizen Census registry for eligibility checks. The
+            process
+            will only allow verified adults that meet the minimum age and nationality requirements. The final output is
+            the process ID.
+          </p>
+          <label class="process-env">
+            Environment
+            <select id="processEnv">
+              <option value="dev">Development</option>
+              <option value="production">Production</option>
+            </select>
+          </label>
+          <div class="highlights process-highlights">
+            <div class="highlight-card">
+              <span>Minimum age</span>
+              <strong data-highlight="minAge">—</strong>
+            </div>
+            <div class="highlight-card">
+              <span>Required nationality</span>
+              <strong data-highlight="nationality">—</strong>
+            </div>
+          </div>
+          <div class="config-list process-config">
+            <div>
+              <span>Census contract</span>
+              <strong id="processContract"></strong>
+            </div>
+            <div>
+              <span>Census data URI</span>
+              <strong id="processCensusUri"></strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="progress process-progress" id="processProgress" data-step="0">
+          <div class="progress-header">
+            <h2>Process steps</h2>
+            <p>Connect the creator wallet, configure the process, then receive the process ID.</p>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="processProgressFill"></div>
+          </div>
+          <div class="progress-steps">
+            <div class="progress-step" data-step="1">
+              <span class="dot"></span>
+              <div>
+                <strong>Connect wallet</strong>
+                <span>Identify the process creator wallet.</span>
+              </div>
+            </div>
+            <div class="progress-step" data-step="2">
+              <span class="dot"></span>
+              <div>
+                <strong>Configure process</strong>
+                <span>Define details, timing, and questions.</span>
+              </div>
+            </div>
+            <div class="progress-step" data-step="3">
+              <span class="dot"></span>
+              <div>
+                <strong>Process ready</strong>
+                <span>Receive the process ID and voting link.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <form id="processForm" class="process-form">
+          <div class="grid process-steps">
+            <section class="panel step-card process-step" id="processConnectPanel" data-step="1">
+              <div class="step-label">Step 1</div>
+              <div class="step-header">
+                <h2>Connect wallet</h2>
+              </div>
+              <p class="note">The connected wallet will create the process and return the process ID.</p>
+              <div class="actions connect-actions">
+                <button id="processConnect" type="button">Connect wallet</button>
+                <span id="processNotice" class="status notice is-hidden"></span>
+              </div>
+            </section>
+
+            <section class="panel step-card process-step" id="processConfigPanel" data-step="2">
+              <div class="step-label">Step 2</div>
+              <div class="step-header">
+                <h2>Configure process</h2>
+              </div>
+              <label class="account-field">
+                Connected account
+                <input id="processAccount" type="text" readonly />
+              </label>
+              <div class="form-section">
+                <div class="form-grid two-col">
+                  <label>
+                    Process title
+                    <input id="processTitle" type="text" placeholder="National election 2026" required />
+                  </label>
+                  <label>
+                    Maximum voters
+                    <input id="processMaxVoters" type="number" min="1" step="1" value="10000" required />
+                  </label>
+                </div>
+                <label>
+                  Description
+                  <textarea id="processDescription" rows="3"
+                    placeholder="Describe the goal, eligibility, and expected participation."></textarea>
+                </label>
+                <div class="form-grid two-col">
+                  <label>
+                    Start date &amp; time
+                    <input id="processStart" type="datetime-local" />
+                  </label>
+                  <label>
+                    Duration (hours)
+                    <input id="processDuration" type="number" min="0.5" step="0.5" value="24" required />
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <div class="form-head">
+                  <h3>Questions</h3>
+                </div>
+                <div id="questionList" class="question-list"></div>
+                <div class="question-actions">
+                  <button id="addQuestion" type="button" class="ghost">Add question</button>
+                  <span id="questionCounter" class="status"></span>
+                </div>
+                <p class="note">Each question needs at least two choices. Maximum 8 questions.</p>
+              </div>
+
+              <div class="actions process-actions">
+                <button id="createProcess" type="submit">Create process</button>
+                <span id="processStatus" class="status">Complete the form to create a new process and receive its
+                  ID.</span>
+              </div>
+            </section>
+
+            <section class="panel step-card process-step" id="processResultPanel" data-step="3">
+              <div class="step-label">Step 3</div>
+              <div class="step-header">
+                <h2>Process ready</h2>
+              </div>
+              <div id="processResult" class="result-card is-hidden">
+                <strong>Process created</strong>
+                <div class="result-grid">
+                  <div>
+                    <span>Process ID</span>
+                    <code id="processIdOutput"></code>
+                  </div>
+                  <div>
+                    <span>Voting link</span>
+                    <a id="processLinkOutput" href="#" target="_blank" rel="noreferrer"></a>
+                  </div>
+                </div>
+              </div>
+              <p class="note">Share the voting link with eligible voters.</p>
+            </section>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-row">
+      <span>Powered by</span>
+      <img class="logo-davinci" src="./assets/davinci_logo.png" alt="Davinci logo" />
+      <span>and</span>
+      <img src="./assets/self_logo.png" alt="Self logo" />
+    </div>
+    <div class="footer-row">
+      <span>Made with</span>
+      <span class="heart">❤️</span>
+      <span>by</span>
+      <img src="./assets/vocdoni_logo.png" alt="Vocdoni logo" />
+    </div>
+  </footer>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
