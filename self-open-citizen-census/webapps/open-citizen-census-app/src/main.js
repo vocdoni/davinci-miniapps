@@ -20,7 +20,8 @@ const CONFIG = {
   ofacEnabled: env.VITE_SELF_OFAC_ENABLED ?? '',
   forbiddenCountries: env.VITE_SELF_FORBIDDEN_COUNTRIES ?? '',
   onchainIndexerUrl: env.VITE_ONCHAIN_CENSUS_INDEXER_URL ?? '',
-  davinciEnv: env.VITE_DAVINCI_ENV ?? 'dev',
+  davinciSequencerUrl: env.VITE_DAVINCI_SEQUENCER_URL ?? '',
+  davinciAppUrl: env.VITE_DAVINCI_APP_URL ?? '',
 };
 
 function decodeBase64UrlJson(value) {
@@ -99,7 +100,8 @@ const viewRegistration = document.getElementById('view-registration');
 const viewProcess = document.getElementById('view-process');
 const processContract = document.getElementById('processContract');
 const processCensusUri = document.getElementById('processCensusUri');
-const processEnvSelect = document.getElementById('processEnv');
+const processSequencerUrl = document.getElementById('processSequencerUrl');
+const processAppUrl = document.getElementById('processAppUrl');
 const processProgress = document.getElementById('processProgress');
 const processProgressFill = document.getElementById('processProgressFill');
 const processConnectPanel = document.getElementById('processConnectPanel');
@@ -149,19 +151,6 @@ const CHAIN_IDS = {
 const CHAIN_ID_NUM = {
   celo: '42220',
   staging_celo: '44787',
-};
-
-const PROCESS_ENVIRONMENTS = {
-  production: {
-    label: 'Production',
-    sequencerUrl: 'https://sequencer1.davinci.vote',
-    appUrl: 'https://app.davinci.vote',
-  },
-  dev: {
-    label: 'Development',
-    sequencerUrl: 'https://sequencer-dev.davinci.vote',
-    appUrl: 'https://app-dev.davinci.vote',
-  },
 };
 
 function setStatus(message, isError = false) {
@@ -263,9 +252,11 @@ function fillConfig() {
   if (processCensusUri) {
     processCensusUri.textContent = buildCensusUri() || 'Missing';
   }
-  if (processEnvSelect) {
-    const envValue = PROCESS_ENVIRONMENTS[CONFIG.davinciEnv] ? CONFIG.davinciEnv : 'dev';
-    processEnvSelect.value = envValue;
+  if (processSequencerUrl) {
+    processSequencerUrl.textContent = CONFIG.davinciSequencerUrl || 'Missing';
+  }
+  if (processAppUrl) {
+    processAppUrl.textContent = CONFIG.davinciAppUrl || 'Missing';
   }
   highlightMinAgeEls.forEach((el) => {
     el.textContent = displayMinAge ? `${displayMinAge}+` : '—';
@@ -320,9 +311,11 @@ function buildCensusUri() {
   return `${trimmedBase}/${chainId}/${contract.toLowerCase()}/graphql`;
 }
 
-function getSelectedProcessEnv() {
-  const key = processEnvSelect?.value || CONFIG.davinciEnv || 'production';
-  return PROCESS_ENVIRONMENTS[key] ?? PROCESS_ENVIRONMENTS.production;
+function getConfiguredDavinciUrls() {
+  return {
+    sequencerUrl: String(CONFIG.davinciSequencerUrl || '').trim(),
+    appUrl: String(CONFIG.davinciAppUrl || '').trim(),
+  };
 }
 
 function normalizeProcessId(processId) {
@@ -897,8 +890,15 @@ async function handleProcessSubmit(event) {
     return;
   }
 
-  const envConfig = getSelectedProcessEnv();
-  const sequencerUrl = envConfig.sequencerUrl;
+  const { sequencerUrl, appUrl } = getConfiguredDavinciUrls();
+  if (!sequencerUrl) {
+    setProcessStatus('Missing VITE_DAVINCI_SEQUENCER_URL.', true);
+    return;
+  }
+  if (!appUrl) {
+    setProcessStatus('Missing VITE_DAVINCI_APP_URL.', true);
+    return;
+  }
   const censusUri = buildCensusUri();
   if (!censusUri) {
     setProcessStatus('Onchain census indexer URL is required to build the census URI.', true);
@@ -982,7 +982,7 @@ async function handleProcessSubmit(event) {
     const processId = normalizeProcessId(result.processId);
     if (processIdOutput) processIdOutput.textContent = processId;
     if (processLinkOutput) {
-      const baseUrl = envConfig.appUrl.replace(/\/$/, '');
+      const baseUrl = appUrl.replace(/\/$/, '');
       const voteUrl = `${baseUrl}/vote/${processId}`;
       processLinkOutput.href = voteUrl;
       processLinkOutput.textContent = voteUrl;

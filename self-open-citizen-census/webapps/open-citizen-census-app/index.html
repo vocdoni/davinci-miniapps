@@ -222,13 +222,6 @@
             will only allow verified adults that meet the minimum age and nationality requirements. The final output is
             the process ID.
           </p>
-          <label class="process-env">
-            Environment
-            <select id="processEnv">
-              <option value="dev">Development</option>
-              <option value="production">Production</option>
-            </select>
-          </label>
           <div class="highlights process-highlights">
             <div class="highlight-card">
               <span>Minimum age</span>
@@ -239,16 +232,27 @@
               <strong data-highlight="nationality">—</strong>
             </div>
           </div>
-          <div class="config-list process-config">
-            <div>
-              <span>Census contract</span>
-              <strong id="processContract"></strong>
+          <details class="extended">
+            <summary>Environment info</summary>
+            <div class="config-list">
+              <div>
+                <span>Census contract</span>
+                <strong id="processContract"></strong>
+              </div>
+              <div>
+                <span>Census data URI</span>
+                <strong id="processCensusUri"></strong>
+              </div>
+              <div>
+                <span>Davinci sequencer URL</span>
+                <strong id="processSequencerUrl"></strong>
+              </div>
+              <div>
+                <span>Davinci app URL</span>
+                <strong id="processAppUrl"></strong>
+              </div>
             </div>
-            <div>
-              <span>Census data URI</span>
-              <strong id="processCensusUri"></strong>
-            </div>
-          </div>
+          </details>
         </section>
 
         <section class="progress process-progress" id="processProgress" data-step="0">

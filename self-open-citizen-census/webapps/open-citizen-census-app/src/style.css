@@ -368,10 +368,6 @@ h1 {
   line-height: 1.6;
 }
 
-.process-env {
-  margin-top: 18px;
-}
-
 .process-layout {
   display: grid;
   gap: 24px;
@@ -379,10 +375,6 @@ h1 {
 
 .process-highlights {
   margin-top: 18px;
-}
-
-.process-config {
-  margin: 18px 0 0;
 }
 
 .process-form {
