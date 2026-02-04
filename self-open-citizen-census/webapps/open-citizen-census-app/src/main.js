@@ -79,12 +79,18 @@ const configScope = document.getElementById('configScope');
 const configNetwork = document.getElementById('configNetwork');
 const configMinAge = document.getElementById('configMinAge');
 const configNationality = document.getElementById('configNationality');
+const censusMembersDetails = document.getElementById('censusMembersDetails');
+const refreshCensusMembersButton = document.getElementById('refreshCensusMembers');
+const censusMembersStatusEl = document.getElementById('censusMembersStatus');
+const censusMembersCountEl = document.getElementById('censusMembersCount');
+const censusMembersListEl = document.getElementById('censusMembersList');
 const highlightMinAgeEls = document.querySelectorAll('[data-highlight="minAge"]');
 const highlightNationalityEls = document.querySelectorAll('[data-highlight="nationality"]');
 const userAddressInput = document.getElementById('userAddress');
 const qrImg = document.getElementById('qr');
 const linkOutput = document.getElementById('link');
 const statusEl = document.getElementById('status');
+const registrationConfirmationEl = document.getElementById('registrationConfirmation');
 const connectNoticeEl = document.getElementById('connectNotice');
 const connectWalletButton = document.getElementById('connectWallet');
 const generateButton = document.getElementById('generate');
@@ -119,6 +125,8 @@ const processDurationInput = document.getElementById('processDuration');
 const questionCounter = document.getElementById('questionCounter');
 const processLinkOutput = document.getElementById('processLinkOutput');
 const processStatusEl = document.getElementById('processStatus');
+const processLoaderEl = document.getElementById('processLoader');
+const processLoaderMessageEl = document.getElementById('processLoaderMessage');
 const processResultEl = document.getElementById('processResult');
 const processIdOutput = document.getElementById('processIdOutput');
 const addQuestionButton = document.getElementById('addQuestion');
@@ -133,10 +141,32 @@ let pollCleanup = null;
 let processAccount = '';
 let processSubmitting = false;
 let processCreated = false;
+let censusMembersLoaded = false;
+let censusMembersLoading = false;
 
 const MAX_QUESTIONS = 8;
+const PROCESS_LOOKUP_TIMEOUT_MS = 60_000;
+const PROCESS_LOOKUP_INTERVAL_MS = 3_000;
+const CENSUS_MEMBERS_PAGE_SIZE = 100;
+const CENSUS_MEMBERS_MAX_PAGES = 200;
 
 const WEIGHT_OF_SELECTOR = '0xdd4bc101';
+const GET_WEIGHT_CHANGE_EVENTS_QUERY = `
+  query GetWeightChangeEvents($first: Int!, $skip: Int!) {
+    weightChangeEvents(
+      first: $first
+      skip: $skip
+      orderBy: blockNumber
+      orderDirection: asc
+    ) {
+      account {
+        id
+      }
+      previousWeight
+      newWeight
+    }
+  }
+`;
 
 const NETWORK_LABELS = {
   celo: 'Celo Mainnet',
@@ -158,6 +188,50 @@ function setStatus(message, isError = false) {
   statusEl.style.color = isError ? '#ff9b9b' : '';
 }
 
+function clearRegistrationConfirmation() {
+  if (!registrationConfirmationEl) return;
+  registrationConfirmationEl.textContent = '';
+  registrationConfirmationEl.classList.add('is-hidden');
+}
+
+function setRegistrationConfirmation(address) {
+  if (!registrationConfirmationEl) return;
+  const normalizedAddress = String(address || '').trim();
+  if (!normalizedAddress) return;
+  registrationConfirmationEl.textContent = `The address '${normalizedAddress}' was successfully added to the onchain census, now you can vote in any process that uses it.`;
+  registrationConfirmationEl.classList.remove('is-hidden');
+}
+
+function setCensusMembersStatus(message, isError = false) {
+  if (!censusMembersStatusEl) return;
+  censusMembersStatusEl.textContent = message;
+  censusMembersStatusEl.style.color = isError ? '#ff9b9b' : '';
+}
+
+function setCensusMembersCount(value) {
+  if (!censusMembersCountEl) return;
+  censusMembersCountEl.textContent = value;
+}
+
+function renderCensusMembersAddresses(addresses) {
+  if (!censusMembersListEl) return;
+  censusMembersListEl.innerHTML = '';
+  if (!addresses.length) {
+    const item = document.createElement('li');
+    item.className = 'is-empty';
+    item.textContent = 'No addresses currently in the census.';
+    censusMembersListEl.append(item);
+    return;
+  }
+  addresses.forEach((address) => {
+    const item = document.createElement('li');
+    const code = document.createElement('code');
+    code.textContent = address;
+    item.append(code);
+    censusMembersListEl.append(item);
+  });
+}
+
 function setConnectNotice(message, isError = false) {
   if (!connectNoticeEl) return;
   if (!message) {
@@ -177,6 +251,14 @@ function setProcessStatus(message, isError = false) {
   if (!processStatusEl) return;
   processStatusEl.textContent = message;
   processStatusEl.style.color = isError ? '#ff9b9b' : '';
+}
+
+function setProcessLoader(isVisible, message = '') {
+  if (!processLoaderEl) return;
+  processLoaderEl.classList.toggle('is-hidden', !isVisible);
+  if (processLoaderMessageEl) {
+    processLoaderMessageEl.textContent = message || '';
+  }
 }
 
 function setProcessNotice(message, isError = false) {
@@ -221,6 +303,9 @@ function updateProcessButtons() {
 
 function setProcessLoading(isLoading) {
   processSubmitting = isLoading;
+  if (!isLoading) {
+    setProcessLoader(false);
+  }
   if (!processForm) return;
   const elements = processForm.querySelectorAll('input, textarea, button, select');
   elements.forEach((el) => {
@@ -311,11 +396,186 @@ function buildCensusUri() {
   return `${trimmedBase}/${chainId}/${contract.toLowerCase()}/graphql`;
 }
 
+function toHttpCensusQueryUrl(censusUri) {
+  const value = String(censusUri || '').trim();
+  if (!value) return '';
+  if (/^graphql:\/\//i.test(value)) {
+    return value.replace(/^graphql:\/\//i, 'https://');
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  return `https://${value.replace(/^\/+/, '')}`;
+}
+
+function toBigIntOrZero(value) {
+  try {
+    return BigInt(String(value ?? '0'));
+  } catch {
+    return 0n;
+  }
+}
+
+async function fetchWeightChangeEventsPage(queryUrl, first, skip) {
+  const response = await fetch(queryUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: GET_WEIGHT_CHANGE_EVENTS_QUERY,
+      variables: { first, skip },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Indexer request failed (${response.status}).`);
+  }
+
+  const payload = await response.json();
+  const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+  if (errors.length > 0) {
+    const message = errors
+      .map((error) => error?.message)
+      .filter(Boolean)
+      .join(' | ');
+    throw new Error(message || 'Indexer query failed.');
+  }
+
+  const events = payload?.data?.weightChangeEvents;
+  if (!Array.isArray(events)) {
+    throw new Error('Invalid indexer response payload.');
+  }
+
+  return events;
+}
+
+async function fetchCurrentCensusAddresses() {
+  const censusUri = buildCensusUri();
+  const queryUrl = toHttpCensusQueryUrl(censusUri);
+  if (!queryUrl) {
+    throw new Error('Missing census URI. Check indexer URL and contract configuration.');
+  }
+
+  const latestWeightsByAddress = new Map();
+  let skip = 0;
+  let page = 0;
+  let reachedPaginationLimit = true;
+
+  while (page < CENSUS_MEMBERS_MAX_PAGES) {
+    page += 1;
+    setCensusMembersStatus(`Loading census changes (page ${page})…`);
+    const events = await fetchWeightChangeEventsPage(queryUrl, CENSUS_MEMBERS_PAGE_SIZE, skip);
+
+    events.forEach((event) => {
+      const accountId = String(event?.account?.id || '').toLowerCase();
+      if (!/^0x[a-f0-9]{40}$/.test(accountId)) return;
+      latestWeightsByAddress.set(accountId, toBigIntOrZero(event?.newWeight));
+    });
+
+    if (events.length < CENSUS_MEMBERS_PAGE_SIZE) {
+      reachedPaginationLimit = false;
+      break;
+    }
+    skip += CENSUS_MEMBERS_PAGE_SIZE;
+  }
+
+  if (reachedPaginationLimit) {
+    throw new Error(`Reached pagination safety limit (${CENSUS_MEMBERS_MAX_PAGES} pages).`);
+  }
+
+  const addresses = [...latestWeightsByAddress.entries()]
+    .filter(([, weight]) => weight > 0n)
+    .map(([address]) => address)
+    .sort((a, b) => a.localeCompare(b));
+
+  return { addresses, pages: page };
+}
+
+async function loadCensusMembers(force = false) {
+  if (censusMembersLoading) return;
+  if (!force && censusMembersLoaded) return;
+
+  censusMembersLoading = true;
+  if (refreshCensusMembersButton) {
+    refreshCensusMembersButton.disabled = true;
+  }
+
+  try {
+    setCensusMembersStatus('Preparing census query…');
+    const { addresses, pages } = await fetchCurrentCensusAddresses();
+    renderCensusMembersAddresses(addresses);
+    setCensusMembersCount(String(addresses.length));
+    setCensusMembersStatus(`Loaded ${addresses.length} address(es) from ${pages} page(s).`);
+    censusMembersLoaded = true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch census addresses.';
+    if (!censusMembersLoaded) {
+      renderCensusMembersAddresses([]);
+      setCensusMembersCount('0');
+    }
+    setCensusMembersStatus(message, true);
+  } finally {
+    censusMembersLoading = false;
+    if (refreshCensusMembersButton) {
+      refreshCensusMembersButton.disabled = false;
+    }
+  }
+}
+
 function getConfiguredDavinciUrls() {
   return {
     sequencerUrl: String(CONFIG.davinciSequencerUrl || '').trim(),
     appUrl: String(CONFIG.davinciAppUrl || '').trim(),
   };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getProcessFromSequencer(sdk, processId) {
+  const normalized = normalizeProcessId(processId);
+  try {
+    return await sdk.getProcess(normalized);
+  } catch (error) {
+    const withoutPrefix = normalized.replace(/^0x/, '');
+    if (withoutPrefix === normalized) throw error;
+    return sdk.getProcess(withoutPrefix);
+  }
+}
+
+async function waitUntilProcessIsIndexed(sdk, processId, timeoutMs = PROCESS_LOOKUP_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  let attempt = 0;
+  let lastError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    attempt += 1;
+    const remainingMs = Math.max(timeoutMs - (Date.now() - startedAt), 0);
+    setProcessLoader(
+      true,
+      `Waiting for sequencer indexing... attempt ${attempt} (${Math.ceil(remainingMs / 1000)}s left).`,
+    );
+
+    try {
+      const process = await getProcessFromSequencer(sdk, processId);
+      if (process) return process;
+      lastError = null;
+    } catch (error) {
+      lastError = error;
+    }
+
+    const pauseMs = Math.min(PROCESS_LOOKUP_INTERVAL_MS, Math.max(timeoutMs - (Date.now() - startedAt), 0));
+    if (pauseMs <= 0) break;
+    await wait(pauseMs);
+  }
+
+  const lastErrorMessage = lastError instanceof Error ? ` Last response: ${lastError.message}` : '';
+  throw new Error(
+    `Process was created on-chain but is not yet available in the sequencer after ${Math.round(timeoutMs / 1000)}s.${lastErrorMessage}`,
+  );
 }
 
 function normalizeProcessId(processId) {
@@ -408,7 +668,8 @@ function startRegistrationPolling(address) {
       if (weight > 0n) {
         hasRegistered = true;
         updateButtons();
-        setStatus('Registration confirmed. Your address is now in the census.');
+        setRegistrationConfirmation(address);
+        setStatus('Registration confirmed.');
         resetPolling();
       }
     } catch {
@@ -525,6 +786,7 @@ async function connectWallet() {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     if (accounts && accounts.length > 0) {
       currentAccount = accounts[0];
+      clearRegistrationConfirmation();
       userAddressInput.value = currentAccount;
       hasSignature = false;
       hasQr = false;
@@ -650,6 +912,18 @@ async function generateQr(auto = false) {
 
 connectWalletButton.addEventListener('click', connectWallet);
 generateButton.addEventListener('click', generateQr);
+if (refreshCensusMembersButton) {
+  refreshCensusMembersButton.addEventListener('click', () => {
+    loadCensusMembers(true);
+  });
+}
+if (censusMembersDetails) {
+  censusMembersDetails.addEventListener('toggle', () => {
+    if (censusMembersDetails.open) {
+      loadCensusMembers();
+    }
+  });
+}
 if (processConnectButton) {
   processConnectButton.addEventListener('click', connectProcessWallet);
 }
@@ -706,6 +980,7 @@ function disconnectWallet(message, isError = false, showNotice = false, keepProg
   hasSignature = false;
   hasQr = false;
   hasRegistered = false;
+  clearRegistrationConfirmation();
   resetPolling();
   userAddressInput.value = '';
   qrImg.removeAttribute('src');
@@ -867,6 +1142,7 @@ async function connectProcessWallet() {
       processAccount = accounts[0];
       if (processAccountInput) processAccountInput.value = processAccount;
       processCreated = false;
+      setProcessLoader(false);
       if (processResultEl) processResultEl.classList.add('is-hidden');
       setProcessStatus('Wallet connected. Ready to create the process.');
       setProcessNotice('Wallet connected', false);
@@ -946,9 +1222,11 @@ async function handleProcessSubmit(event) {
   }
 
   const ballot = buildBallotFromQuestions(questions);
+  let createdProcessId = '';
 
   try {
     setProcessLoading(true);
+    setProcessLoader(true, 'Preparing process creation...');
     processCreated = false;
     setProcessStatus('Initializing Davinci SDK…');
     if (processResultEl) processResultEl.classList.add('is-hidden');
@@ -963,6 +1241,7 @@ async function handleProcessSubmit(event) {
     const sdk = new DavinciSDK({ signer, sequencerUrl });
     await sdk.init();
 
+    setProcessLoader(true, 'Submitting transaction to create the process...');
     setProcessStatus('Creating process on-chain…');
     const census = new OnchainCensus(CONFIG.endpoint, censusUri);
 
@@ -980,6 +1259,11 @@ async function handleProcessSubmit(event) {
     });
 
     const processId = normalizeProcessId(result.processId);
+    createdProcessId = processId;
+    setProcessStatus('Transaction confirmed. Waiting for sequencer to index process metadata...');
+    await waitUntilProcessIsIndexed(sdk, processId);
+
+    setProcessLoader(true, 'Process indexed. Finalizing voting link...');
     if (processIdOutput) processIdOutput.textContent = processId;
     if (processLinkOutput) {
       const baseUrl = appUrl.replace(/\/$/, '');
@@ -990,10 +1274,12 @@ async function handleProcessSubmit(event) {
     if (processResultEl) processResultEl.classList.remove('is-hidden');
     processCreated = true;
     updateProcessProgress();
-    setProcessStatus('Process created. Process ID ready.');
+    setProcessStatus('Process ready. Sequencer indexed it and the voting link is available.');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create process';
-    setProcessStatus(message, true);
+    const processNote = createdProcessId ? ` Process ID: ${createdProcessId}.` : '';
+    setProcessLoader(false);
+    setProcessStatus(`${message}${processNote}`, true);
   } finally {
     setProcessLoading(false);
   }

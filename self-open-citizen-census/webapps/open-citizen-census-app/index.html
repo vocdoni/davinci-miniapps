@@ -195,6 +195,8 @@
           <div class="actions">
             <span id="status" class="status">Connect wallet to start.</span>
           </div>
+          <div id="registrationConfirmation" class="status notice registration-confirmation is-hidden"
+            aria-live="polite"></div>
           <details class="disclosure">
             <summary>Show registration link</summary>
             <label>
@@ -205,6 +207,18 @@
           </details>
         </section>
       </div>
+      <details id="censusMembersDetails" class="extended">
+        <summary>Current addresses in the census</summary>
+        <div class="census-members-actions">
+          <button id="refreshCensusMembers" type="button" class="ghost small">Refresh list</button>
+          <span id="censusMembersStatus" class="status">Open this panel to load current census addresses.</span>
+        </div>
+        <div class="census-members-count">
+          <span>Current addresses</span>
+          <strong id="censusMembersCount">—</strong>
+        </div>
+        <ol id="censusMembersList" class="census-members-list"></ol>
+      </details>
     </section>
 
     <section id="view-process" class="view">
@@ -355,6 +369,10 @@
                 <button id="createProcess" type="submit">Create process</button>
                 <span id="processStatus" class="status">Complete the form to create a new process and receive its
                   ID.</span>
+              </div>
+              <div id="processLoader" class="process-loader is-hidden" role="status" aria-live="polite">
+                <span class="spinner" aria-hidden="true"></span>
+                <span id="processLoaderMessage">Preparing process creation…</span>
               </div>
             </section>
 
