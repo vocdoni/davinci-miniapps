@@ -15,10 +15,6 @@ const CONFIG = {
   minAge: env.VITE_MIN_AGE ? Number(env.VITE_MIN_AGE) : 18,
   nationality: env.VITE_NATIONALITY ?? '',
   websocketUrl: env.VITE_SELF_WEBSOCKET ?? WS_DB_RELAYER,
-  userData: env.VITE_SELF_USER_DATA ?? '',
-  deeplinkCallback: env.VITE_SELF_DEEPLINK_CALLBACK ?? '',
-  ofacEnabled: env.VITE_SELF_OFAC_ENABLED ?? '',
-  forbiddenCountries: env.VITE_SELF_FORBIDDEN_COUNTRIES ?? '',
   onchainIndexerUrl: env.VITE_ONCHAIN_CENSUS_INDEXER_URL ?? '',
   davinciSequencerUrl: env.VITE_DAVINCI_SEQUENCER_URL ?? '',
   davinciAppUrl: env.VITE_DAVINCI_APP_URL ?? '',
@@ -40,38 +36,54 @@ function decodeBase64UrlJson(value) {
 function applyConfigOverridesFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const encoded = params.get('env');
-  if (!encoded) return;
+  if (!encoded) {
+    return {
+      present: false,
+      valid: false,
+    };
+  }
 
   const override = decodeBase64UrlJson(encoded);
-  if (!override || typeof override !== 'object') return;
+  if (!override || typeof override !== 'object') {
+    return {
+      present: true,
+      valid: false,
+    };
+  }
 
   const contract = String(override.contractAddress ?? override.contract ?? '').trim();
-  if (/^0x[a-fA-F0-9]{40}$/.test(contract)) {
-    CONFIG.endpoint = contract;
+  if (!/^0x[a-fA-F0-9]{40}$/.test(contract)) {
+    return { present: true, valid: false };
   }
 
   const scope = String(override.scope ?? '').trim();
-  if (scope && scope.length <= 31) {
-    CONFIG.scope = scope;
+  if (!scope || scope.length > 31) {
+    return { present: true, valid: false };
   }
 
   const minAge = Number(override.minAge);
-  if (Number.isFinite(minAge) && minAge > 0 && minAge <= 99) {
-    CONFIG.minAge = Math.trunc(minAge);
+  if (!(Number.isFinite(minAge) && minAge > 0 && minAge <= 99)) {
+    return { present: true, valid: false };
   }
 
   const nationality = String(override.nationality ?? '').trim().toUpperCase();
+  const network = String(override.network ?? '').trim();
+  if (!(network === 'celo' || network === 'staging_celo')) {
+    return { present: true, valid: false };
+  }
+
+  CONFIG.endpoint = contract;
+  CONFIG.scope = scope;
+  CONFIG.minAge = Math.trunc(minAge);
+  CONFIG.endpointType = network;
   if (/^[A-Z]{2,3}$/.test(nationality)) {
     CONFIG.nationality = nationality;
   }
 
-  const network = String(override.network ?? '').trim();
-  if (network === 'celo' || network === 'staging_celo') {
-    CONFIG.endpointType = network;
-  }
+  return { present: true, valid: true };
 }
 
-applyConfigOverridesFromUrl();
+const urlEnvStatus = applyConfigOverridesFromUrl();
 
 const configApp = document.getElementById('configApp');
 const configContract = document.getElementById('configContract');
@@ -131,6 +143,8 @@ const processResultEl = document.getElementById('processResult');
 const processIdOutput = document.getElementById('processIdOutput');
 const addQuestionButton = document.getElementById('addQuestion');
 const questionList = document.getElementById('questionList');
+const configGatePopup = document.getElementById('configGatePopup');
+const configGatePopupMessage = document.getElementById('configGatePopupMessage');
 
 let currentAccount = '';
 let hasSignature = false;
@@ -351,15 +365,59 @@ function fillConfig() {
   });
 }
 
-function requireEnv() {
+function getMissingRequiredConfigVars() {
   const missing = [];
   if (!CONFIG.appName) missing.push('VITE_APP_NAME');
   if (!CONFIG.endpoint) missing.push('VITE_CONTRACT_ADDRESS');
   if (!CONFIG.scope) missing.push('VITE_SCOPE');
   if (!CONFIG.endpointType) missing.push('VITE_NETWORK');
   if (!normalizeMinAge(CONFIG.minAge)) missing.push('VITE_MIN_AGE');
+  return missing;
+}
+
+function showConfigGatePopup(message) {
+  if (!configGatePopup || !configGatePopupMessage) return;
+  configGatePopupMessage.textContent = message;
+  configGatePopup.hidden = false;
+  document.body.classList.add('app-blocked');
+}
+
+function getConfigRequiredMessage() {
+  const inlineMessage = String(configGatePopupMessage?.textContent || '').trim();
+  if (inlineMessage) return inlineMessage;
+  return 'Configuration information is required to use this app.';
+}
+
+function blockAppOnMissingConfiguration(message) {
+  const finalMessage = message || getConfigRequiredMessage();
+  showConfigGatePopup(finalMessage);
+  setStatus(finalMessage, true);
+  setConnectNotice(finalMessage, true);
+  setProcessStatus(finalMessage, true);
+  connectWalletButton.disabled = true;
+  generateButton.disabled = true;
+  if (processForm) {
+    processForm.querySelectorAll('input, textarea, button, select').forEach((el) => {
+      el.disabled = true;
+    });
+  }
+  if (addQuestionButton) addQuestionButton.disabled = true;
+}
+
+function validateBootConfig() {
+  const missingVars = getMissingRequiredConfigVars();
+  const hasEnvVars = missingVars.length === 0;
+  const hasValidUrlEnv = urlEnvStatus.present && urlEnvStatus.valid;
+  if (hasEnvVars || hasValidUrlEnv) {
+    return { ok: true, message: '' };
+  }
+  return { ok: false, message: getConfigRequiredMessage() };
+}
+
+function requireEnv() {
+  const missing = getMissingRequiredConfigVars();
   if (missing.length > 0) {
-    setStatus(`Missing env vars: ${missing.join(', ')}`, true);
+    setStatus(getConfigRequiredMessage(), true);
     connectWalletButton.disabled = true;
     generateButton.disabled = true;
     return false;
@@ -882,8 +940,8 @@ async function generateQr(auto = false) {
       userId: currentAccount,
       userIdType: 'hex',
       disclosures,
-      userDefinedData: CONFIG.userData,
-      deeplinkCallback: CONFIG.deeplinkCallback || undefined,
+      userDefinedData: '',
+      deeplinkCallback: undefined,
     });
 
     resetSocket();
@@ -1326,7 +1384,10 @@ hydrateProcessDefaults();
 if (processStatusEl) {
   setProcessStatus('Complete the form to create a new process and receive its ID.');
 }
-if (requireEnv()) {
+const bootConfig = validateBootConfig();
+if (!bootConfig.ok) {
+  blockAppOnMissingConfiguration(bootConfig.message);
+} else if (requireEnv()) {
   setStatus('Connect wallet to start.');
 }
 applyRoute(resolveRoute(window.location.hash));

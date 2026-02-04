@@ -38,6 +38,8 @@ const contractAddressEl = document.getElementById('contractAddress');
 const appLinkInput = document.getElementById('appLink');
 const copyAppLinkButton = document.getElementById('copyAppLink');
 const openAppLinkButton = document.getElementById('openAppLink');
+const configGatePopup = document.getElementById('configGatePopup');
+const configGatePopupMessage = document.getElementById('configGatePopupMessage');
 
 const scopeHelp = document.getElementById('scopeHelp');
 const nationalityHelp = document.getElementById('nationalityHelp');
@@ -49,6 +51,7 @@ let currentAppLink = '';
 let computedConfigId = '';
 let configRegistered = false;
 let configCheckNonce = 0;
+let appBlocked = false;
 
 const HUB_INTERFACE = new Interface([
   'function setVerificationConfigV2((bool olderThanEnabled,uint256 olderThan,bool forbiddenCountriesEnabled,uint256[4] forbiddenCountriesListPacked,bool[3] ofacEnabled)) returns (bytes32)',
@@ -59,6 +62,50 @@ const HUB_INTERFACE = new Interface([
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.classList.toggle('is-error', isError);
+}
+
+function showConfigGatePopup(message) {
+  if (!configGatePopup || !configGatePopupMessage) return;
+  configGatePopupMessage.textContent = message;
+  configGatePopup.hidden = false;
+  document.body.classList.add('app-blocked');
+}
+
+function getConfigRequiredMessage() {
+  const inlineMessage = String(configGatePopupMessage?.textContent || '').trim();
+  if (inlineMessage) return inlineMessage;
+  return 'Configuration information is required to use this app.';
+}
+
+function getMissingRequiredConfigVars() {
+  const missing = [];
+  const envNationality = normalizeNationality(env.VITE_NATIONALITY ?? '');
+  const envMinAge = normalizeMinAge(env.VITE_MIN_AGE ?? '');
+  const envScope = normalizeScope(env.VITE_SCOPE_SEED ?? '');
+  if (!isNationalityCode(envNationality)) missing.push('VITE_NATIONALITY');
+  if (!envMinAge) missing.push('VITE_MIN_AGE');
+  if (!envScope || envScope.length > 31) missing.push('VITE_SCOPE_SEED');
+  if (!String(INDEXER_URL || '').trim()) missing.push('VITE_ONCHAIN_CENSUS_INDEXER_URL');
+  if (!String(APP_URL || '').trim()) missing.push('VITE_OPEN_CITIZEN_CENSUS_APP_URL');
+  return missing;
+}
+
+function blockAppOnMissingConfiguration(message) {
+  const finalMessage = message || getConfigRequiredMessage();
+  appBlocked = true;
+  showConfigGatePopup(finalMessage);
+  setStatus(finalMessage, true);
+  document.querySelectorAll('input, textarea, button, select').forEach((el) => {
+    el.disabled = true;
+  });
+}
+
+function validateBootConfig() {
+  const missing = getMissingRequiredConfigVars();
+  if (missing.length === 0) {
+    return { ok: true };
+  }
+  return { ok: false, message: getConfigRequiredMessage() };
 }
 
 function encodeBase64UrlJson(payload) {
@@ -246,6 +293,7 @@ async function ensureChain() {
 }
 
 async function connectWallet() {
+  if (appBlocked) return;
   if (!window.ethereum) {
     setStatus('No wallet detected. Install MetaMask.', true);
     return;
@@ -376,6 +424,7 @@ async function startIndexer(contractAddress, startBlock) {
 }
 
 async function deployContract() {
+  if (appBlocked) return;
   if (!window.ethereum) {
     setStatus('No wallet detected. Install MetaMask.', true);
     return;
@@ -447,6 +496,7 @@ async function deployContract() {
 }
 
 async function registerConfig() {
+  if (appBlocked) return;
   if (!window.ethereum) {
     setStatus('No wallet detected. Install MetaMask.', true);
     return;
@@ -515,3 +565,8 @@ scopeSeedInput.value = env.VITE_SCOPE_SEED ?? '';
 
 setAppLink('');
 updateOutputs();
+
+const bootConfig = validateBootConfig();
+if (!bootConfig.ok) {
+  blockAppOnMissingConfiguration(bootConfig.message);
+}

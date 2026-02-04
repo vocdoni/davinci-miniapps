@@ -992,6 +992,53 @@ button.choice-card:not(:disabled):hover {
   flex-shrink: 0;
 }
 
+body.app-blocked {
+  overflow: hidden;
+}
+
+.blocking-popup[hidden] {
+  display: none;
+}
+
+.blocking-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.blocking-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 16, 16, 0.68);
+  backdrop-filter: blur(3px);
+}
+
+.blocking-popup-card {
+  position: relative;
+  max-width: 600px;
+  width: min(100%, 600px);
+  border-radius: 20px;
+  border: 1px solid rgba(31, 28, 24, 0.2);
+  background: #fbfaf7;
+  box-shadow: 0 28px 48px rgba(11, 11, 11, 0.28);
+  padding: 24px 24px 26px;
+}
+
+.blocking-popup-card h2 {
+  margin: 0 0 12px;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.blocking-popup-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
