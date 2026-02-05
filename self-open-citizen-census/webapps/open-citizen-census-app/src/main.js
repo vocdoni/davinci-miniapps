@@ -596,30 +596,33 @@ function wait(ms) {
 async function getProcessFromSequencer(sdk, processId) {
   const normalized = normalizeProcessId(processId);
   try {
-    return await sdk.getProcess(normalized);
+    return await sdk.api.sequencer.getProcess(normalized);
   } catch (error) {
     const withoutPrefix = normalized.replace(/^0x/, '');
     if (withoutPrefix === normalized) throw error;
-    return sdk.getProcess(withoutPrefix);
+    return sdk.api.sequencer.getProcess(withoutPrefix);
   }
+}
+
+function isProcessAcceptingVotes(process) {
+  if (!process || typeof process !== 'object') return false;
+  if (typeof process.isAcceptingVotes === 'boolean') return process.isAcceptingVotes;
+  return false;
 }
 
 async function waitUntilProcessIsIndexed(sdk, processId, timeoutMs = PROCESS_LOOKUP_TIMEOUT_MS) {
   const startedAt = Date.now();
-  let attempt = 0;
   let lastError = null;
 
   while (Date.now() - startedAt < timeoutMs) {
-    attempt += 1;
-    const remainingMs = Math.max(timeoutMs - (Date.now() - startedAt), 0);
     setProcessLoader(
       true,
-      `Waiting for sequencer indexing... attempt ${attempt} (${Math.ceil(remainingMs / 1000)}s left).`,
+      `Waiting for sequencer index the process...`,
     );
 
     try {
       const process = await getProcessFromSequencer(sdk, processId);
-      if (process) return process;
+      if (process && isProcessAcceptingVotes(process)) return process;
       lastError = null;
     } catch (error) {
       lastError = error;
@@ -632,7 +635,7 @@ async function waitUntilProcessIsIndexed(sdk, processId, timeoutMs = PROCESS_LOO
 
   const lastErrorMessage = lastError instanceof Error ? ` Last response: ${lastError.message}` : '';
   throw new Error(
-    `Process was created on-chain but is not yet available in the sequencer after ${Math.round(timeoutMs / 1000)}s.${lastErrorMessage}`,
+    `Process was created on-chain but did not become ready after ${Math.round(timeoutMs / 1000)}s.}${lastErrorMessage}`,
   );
 }
 
@@ -1318,7 +1321,7 @@ async function handleProcessSubmit(event) {
 
     const processId = normalizeProcessId(result.processId);
     createdProcessId = processId;
-    setProcessStatus('Transaction confirmed. Waiting for sequencer to index process metadata...');
+    setProcessStatus('Transaction confirmed. Waiting for sequencer indexing and voting readiness...');
     await waitUntilProcessIsIndexed(sdk, processId);
 
     setProcessLoader(true, 'Process indexed. Finalizing voting link...');
