@@ -4,14 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open Citizen Census</title>
+    <meta name="description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <link href="https://framerusercontent.com/images/xMROZlh3hRAVfVNJpALYIkrg98.svg" rel="icon" media="(prefers-color-scheme: light)" />
+    <link href="https://framerusercontent.com/images/juixxd0l5rADVORefaZSgWJ2s.png" rel="icon" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Open Citizen Census" />
+    <meta property="og:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <meta property="og:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Open Citizen Census" />
+    <meta name="twitter:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <meta name="twitter:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
   </head>
   <body>
-    <a class="skip-link" href="#mainContent">Skip to main content</a>
     <div class="app-shell">
       <header class="app-header">
         <div>
           <p class="eyebrow">Open Citizen Census</p>
-          <h1>Official-ID Voting Process Creator</h1>
+          <h1 id="appHeaderTitle">Official-ID Voting Process Creator</h1>
         </div>
       </header>
 
@@ -180,7 +190,6 @@
               <button id="showVoteDetailsBtn" type="button" class="ghost">Details</button>
             </div>
 
-            <p id="voteStatus" class="status" aria-live="polite">Enter a process ID and press Enter to resolve vote data.</p>
           </article>
 
           <dialog id="voteDetailsDialog" class="details-dialog">
@@ -350,10 +359,10 @@
     >
       <div class="blocking-popup-backdrop"></div>
       <div class="blocking-popup-card">
-        <p class="eyebrow">Voting context required</p>
+        <p class="eyebrow">Process ID required</p>
         <h2 id="voteContextGatePopupTitle">This voting link is incomplete</h2>
         <p id="voteContextGatePopupMessage">
-          Configuration information is required to use this app. Please request a complete voting link from the person or team that shared this app.
+          A valid process ID is required to use this app. Please request the complete /vote/:processId link from the person or team that shared this app.
         </p>
       </div>
     </div>

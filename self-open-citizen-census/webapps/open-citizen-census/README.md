@@ -15,7 +15,7 @@ The objective is to minimize user friction while preserving clear status visibil
 - End-to-end process creation at `/`.
 - Wallet connection for creation (injected wallet first, WalletConnect fallback).
 - Full creation pipeline with stage-by-stage status.
-- Voting flow at `/vote/:context` using a base64url context payload.
+- Voting flow at `/vote/:processId`.
 - Managed identity wallet generation/import for voting.
 - Self QR registration and readiness tracking (onchain + sequencer inclusion).
 - Vote submission and vote-status timeline.
@@ -27,8 +27,8 @@ The objective is to minimize user friction while preserving clear status visibil
 
 ## Route behavior
 - `/` -> create view.
-- `/vote/:context` -> vote view with required context.
-- `/vote` or invalid `/vote/:context` -> **blocking popup**; app is intentionally unusable until a valid context link is used.
+- `/vote/:processId` -> vote view with required process ID.
+- `/vote` or invalid `/vote/:processId` -> **blocking popup**; app is intentionally unusable until a valid process link is used.
 
 ## Functional requirements implemented
 ### Process creation
@@ -42,7 +42,8 @@ The objective is to minimize user friction while preserving clear status visibil
 - Process creation status timeline with final vote URL and copy action.
 
 ### Vote flow
-- Context-first navigation (`/vote/:context`) for deterministic process resolution.
+- Process-first navigation (`/vote/:processId`) for deterministic process resolution.
+- Additional voting context (`scope`, `minAge`, `country`, `network`) is resolved from sequencer metadata (`metadata.meta.selfConfig` + `metadata.meta.network`).
 - Process details popup with process metadata and URLs.
 - Self-based process registration card with automatic QR generation when context is ready.
 - Registration progress timeline:

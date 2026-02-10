@@ -31,7 +31,6 @@ const CONFIG = {
   network: String(env.VITE_NETWORK || 'celo').trim(),
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
-  davinciCensusUrl: String(env.VITE_DAVINCI_CENSUS_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
   selfAppName: String(env.VITE_SELF_APP_NAME || 'Open Citizen Census').trim(),
 };
@@ -43,7 +42,6 @@ const WEIGHT_OF_SELECTOR = '0xdd4bc101';
 const MASTER_SECRET_KEY = 'occ.masterSecret.v1';
 const VOTE_POLL_MS = 10_000;
 const LAST_SCOPE_SEED_KEY = 'occ.lastScopeSeed.v1';
-const VOTE_LINK_ENV_VERSION = 1;
 const VOTE_SUBMISSION_STORAGE_PREFIX = 'occ.voteSubmission.v1';
 const VOTE_STATUS_FLOW = ['pending', 'verified', 'aggregated', 'processed', 'settled'];
 const VOTE_STATUS_INFO = {
@@ -74,6 +72,9 @@ const VOTE_STATUS_INFO = {
 };
 const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
 const INTERNAL_RPC_RETRY_DELAY_MS = 1_500;
+const DEFAULT_DOCUMENT_TITLE = 'Open Citizen Census';
+const CREATE_HEADER_TITLE = 'Official-ID Voting Process Creator';
+const VOTE_HEADER_TITLE = 'Official-ID Voting Process';
 
 const HUB_INTERFACE = new Interface([
   'function setVerificationConfigV2((bool olderThanEnabled,uint256 olderThan,bool forbiddenCountriesEnabled,uint256[4] forbiddenCountriesListPacked,bool[3] ofacEnabled)) returns (bytes32)',
@@ -116,7 +117,6 @@ const state = {
   route: {
     name: 'create',
     processId: '',
-    contextPayload: null,
     contextPresent: false,
     contextValid: false,
   },
@@ -185,6 +185,7 @@ const state = {
 
 const createView = document.getElementById('createView');
 const voteView = document.getElementById('voteView');
+const appHeaderTitleEl = document.getElementById('appHeaderTitle');
 
 const createForm = document.getElementById('createForm');
 const createButton = document.getElementById('createBtn');
@@ -284,6 +285,7 @@ function setCreateStatus(message, isError = false) {
 }
 
 function setVoteStatus(message, isError = false) {
+  if (!voteStatusEl) return;
   voteStatusEl.textContent = message;
   voteStatusEl.dataset.state = isError ? 'error' : 'ok';
 }
@@ -304,7 +306,7 @@ function hideVoteContextGatePopup() {
 function getVoteContextRequiredMessage() {
   const inlineMessage = String(voteContextGatePopupMessage?.textContent || '').trim();
   if (inlineMessage) return inlineMessage;
-  return 'Configuration information is required to use this app.';
+  return 'A valid process ID is required to use this app.';
 }
 
 function setVoteSelfStatus(message, isError = false) {
@@ -328,6 +330,26 @@ function setButtonLabel(button, label, iconClass) {
   text.className = 'btn-text';
   text.textContent = label;
   button.append(text);
+}
+
+function getVoteProcessTitleForDocument() {
+  const raw = String(state.voteResolution.title || '').trim();
+  if (!raw || raw === '-') return '';
+  return raw;
+}
+
+function renderDocumentTitle() {
+  if (state.route.name === 'vote') {
+    const voteTitle = getVoteProcessTitleForDocument();
+    document.title = voteTitle ? `${voteTitle} - ${DEFAULT_DOCUMENT_TITLE}` : DEFAULT_DOCUMENT_TITLE;
+    return;
+  }
+  document.title = DEFAULT_DOCUMENT_TITLE;
+}
+
+function renderHeaderTitle() {
+  if (!appHeaderTitleEl) return;
+  appHeaderTitleEl.textContent = state.route.name === 'vote' ? VOTE_HEADER_TITLE : CREATE_HEADER_TITLE;
 }
 
 function applyStaticButtonIcons() {
@@ -387,6 +409,7 @@ function setVoteProcessDetails({
   voteSequencerUrlEl.textContent = displaySequencer;
 
   if (showVoteDetailsBtn) showVoteDetailsBtn.disabled = displayId === '-';
+  renderDocumentTitle();
 }
 
 function formatRemainingTimeFromEndMs(endDateMs) {
@@ -453,6 +476,10 @@ function normalizeProcessId(value) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return '';
   return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+}
+
+function isValidProcessId(value) {
+  return /^0x[a-fA-F0-9]{64}$/.test(String(value || '').trim());
 }
 
 function normalizeCountry(value) {
@@ -680,115 +707,52 @@ function removeBasePath(pathname) {
   return pathname || '/';
 }
 
-function encodeBase64UrlJson(payload) {
-  const json = JSON.stringify(payload);
-  const bytes = new TextEncoder().encode(json);
-  let binary = '';
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function decodeBase64UrlJson(value) {
-  try {
-    const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
-    const padded = `${normalized}${'='.repeat((4 - (normalized.length % 4)) % 4)}`;
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const json = new TextDecoder().decode(bytes);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeVoteEnvPayload(payload) {
-  if (!payload || typeof payload !== 'object') return null;
-  if (payload.v !== undefined && Number(payload.v) !== VOTE_LINK_ENV_VERSION) return null;
-
-  const processId = normalizeProcessId(payload.processId ?? payload.pid);
-  const contractAddress = String(payload.contractAddress ?? payload.contract ?? '').trim();
-  const censusUri = String(payload.censusUri ?? '').trim();
-  const scope = normalizeScope(payload.scope ?? payload.scopeSeed ?? '');
-  const minAge = normalizeMinAge(payload.minAge);
-  const country = normalizeCountry(payload.country || '');
-  const network = String(payload.network || '').trim();
-  const title = String(payload.title || '').trim();
-  const sequencerUrl = String(payload.sequencerUrl || '').trim();
-  const sanitized = {};
-
-  if (processId) sanitized.processId = processId;
-  if (/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) sanitized.contractAddress = contractAddress;
-  if (/^(https?:\/\/|graphql:\/\/)/i.test(censusUri)) sanitized.censusUri = censusUri;
-  if (scope && /^[\x00-\x7F]+$/.test(scope) && scope.length <= 31) sanitized.scope = scope;
-  if (minAge) sanitized.minAge = minAge;
-  if (/^[A-Z]{2,3}$/.test(country)) sanitized.country = country;
-  if (NETWORKS[network]) sanitized.network = network;
-  if (/^https?:\/\//i.test(sequencerUrl)) sanitized.sequencerUrl = sequencerUrl;
-  if (title) sanitized.title = title.slice(0, 160);
-
-  if (!Object.keys(sanitized).length) return null;
-  return sanitized;
-}
-
-function parseVoteContextFromPath(logicalPath) {
-  if (!logicalPath.startsWith('/vote/')) {
-    return { payload: null, present: false, valid: false };
-  }
-
-  const encoded = decodeURIComponent(logicalPath.slice('/vote/'.length)).trim();
-  if (!encoded) {
-    return { payload: null, present: false, valid: false };
-  }
-
-  const decoded = decodeBase64UrlJson(encoded);
-  const payload = sanitizeVoteEnvPayload(decoded);
-  return {
-    payload,
-    present: true,
-    valid: Boolean(payload?.processId),
-  };
-}
-
 function parseRoute() {
   const logicalPath = removeBasePath(window.location.pathname);
-  const contextData = parseVoteContextFromPath(logicalPath);
 
-  if (logicalPath === '/' || logicalPath === '/create') {
+  if (logicalPath === '/') {
     return {
       name: 'create',
       processId: '',
-      contextPayload: null,
       contextPresent: false,
       contextValid: false,
     };
   }
 
-  if (logicalPath === '/vote') {
+  if (logicalPath === '/vote' || logicalPath === '/vote/') {
     return {
       name: 'vote',
       processId: '',
-      contextPayload: null,
       contextPresent: false,
       contextValid: false,
     };
   }
 
   if (logicalPath.startsWith('/vote/')) {
+    const rawSegment = decodeURIComponent(logicalPath.slice('/vote/'.length)).trim();
+    if (rawSegment.includes('/')) {
+      history.replaceState({}, '', encodeBasePath('/'));
+      return {
+        name: 'create',
+        processId: '',
+        contextPresent: false,
+        contextValid: false,
+      };
+    }
+    const normalized = normalizeProcessId(rawSegment);
+    const valid = isValidProcessId(normalized);
     return {
       name: 'vote',
-      processId: contextData.payload?.processId || '',
-      contextPayload: contextData.payload,
-      contextPresent: contextData.present,
-      contextValid: contextData.valid,
+      processId: valid ? normalized : '',
+      contextPresent: Boolean(rawSegment),
+      contextValid: valid,
     };
   }
 
+  history.replaceState({}, '', encodeBasePath('/'));
   return {
     name: 'create',
     processId: '',
-    contextPayload: null,
     contextPresent: false,
     contextValid: false,
   };
@@ -801,6 +765,8 @@ function navigate(path) {
 
 function applyRoute(route) {
   state.route = route;
+  renderHeaderTitle();
+  renderDocumentTitle();
   createView.hidden = route.name !== 'create';
   voteView.hidden = route.name !== 'vote';
 
@@ -808,8 +774,8 @@ function applyRoute(route) {
     const hasValidContext = route.contextPresent && route.contextValid;
     if (!hasValidContext) {
       const popupMessage = route.contextPresent
-        ? 'Invalid voting context in URL. Open a complete and valid voting link to use this app.'
-        : 'Missing voting context in URL. Open the complete voting link shared for this process.';
+        ? 'Invalid process ID in URL. Open a valid /vote/:processId link to use this app.'
+        : 'Missing process ID in URL. Open the complete /vote/:processId link shared for this process.';
       showVoteContextGatePopup(popupMessage);
       voteProcessIdInput.value = '';
       resetVoteResolution();
@@ -821,16 +787,16 @@ function applyRoute(route) {
     }
 
     hideVoteContextGatePopup();
-    const processId = normalizeProcessId(route.processId || route.contextPayload?.processId || '');
+    const processId = normalizeProcessId(route.processId || '');
     voteProcessIdInput.value = processId || '';
 
     if (processId) {
-      resolveVoteProcess(processId, false, route.contextPayload);
+      resolveVoteProcess(processId, false);
     } else {
       resetVoteResolution();
       bootstrapVoteManagedWallet('');
       stopVotePolling();
-      setVoteStatus('Invalid vote context in URL. Open a valid voting link.', true);
+      setVoteStatus('Invalid process ID in URL. Open a valid /vote/:processId link.', true);
     }
   }
 
@@ -1390,9 +1356,9 @@ function buildDeployData({ scopeSeed, country, minAge, configId }) {
 }
 
 function buildCensusUri(contractAddress) {
-  const base = trimTrailingSlash(CONFIG.davinciCensusUrl || CONFIG.onchainIndexerUrl);
+  const base = trimTrailingSlash(CONFIG.onchainIndexerUrl);
   if (!base) {
-    throw new Error('Missing VITE_DAVINCI_CENSUS_URL or VITE_ONCHAIN_CENSUS_INDEXER_URL.');
+    throw new Error('Missing VITE_ONCHAIN_CENSUS_INDEXER_URL.');
   }
 
   return `${base}/${ACTIVE_NETWORK.chainId}/${String(contractAddress).toLowerCase()}/graphql`;
@@ -1417,33 +1383,20 @@ function toSequencerCensusUri(censusUri) {
   return `graphql://${value.replace(/^\/+/, '')}`;
 }
 
-function buildVoteLinkPayload(processId, config = {}) {
-  const normalized = normalizeProcessId(processId);
-  if (!normalized) return '';
-
-  const payload = sanitizeVoteEnvPayload({
-    v: VOTE_LINK_ENV_VERSION,
-    processId: normalized,
-    contractAddress: config.contractAddress,
-    censusUri: config.censusUri,
-    scope: config.scope,
-    minAge: config.minAge,
-    country: config.country,
-    network: config.network || CONFIG.network,
-    sequencerUrl: config.sequencerUrl || CONFIG.davinciSequencerUrl,
-    title: config.title,
-  });
-
-  if (!payload) return '';
-  return encodeBase64UrlJson({ v: VOTE_LINK_ENV_VERSION, ...payload });
+function stringifyMetaValues(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.map((item) => stringifyMetaValues(item));
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).map(([key, nested]) => [String(key), stringifyMetaValues(nested)]);
+    return Object.fromEntries(entries);
+  }
+  return String(value);
 }
 
-function buildVoteUrl(processId, config = {}) {
+function buildVoteUrl(processId) {
   const normalized = normalizeProcessId(processId);
-  if (!normalized) return '';
-  const context = buildVoteLinkPayload(normalized, config);
-  if (!context) return `${window.location.origin}${encodeBasePath('/vote')}`;
-  return `${window.location.origin}${encodeBasePath(`/vote/${encodeURIComponent(context)}`)}`;
+  if (!normalized || !isValidProcessId(normalized)) return `${window.location.origin}${encodeBasePath('/vote')}`;
+  return `${window.location.origin}${encodeBasePath(`/vote/${encodeURIComponent(normalized)}`)}`;
 }
 
 async function waitForTransaction(provider, hash, timeoutMs = 5 * 60 * 1000) {
@@ -1789,10 +1742,44 @@ async function createDavinciProcess(ctx) {
     throw new Error('Missing census URI for sequencer process creation.');
   }
 
+  // Parse questions to multilingual metadata object.
+  const questions = ctx.values.questions.map((question) => ({
+    title: { default: question.title },
+    description: { default: question.description || '' },
+    choices: question.choices.map((choice) => ({
+      title: { default: choice.title },
+      value: choice.value,
+      meta: {},
+    })),
+  }));
+
+  // Compose process metadata.
+  const metadata = {
+    title: { default: ctx.values.title },
+    description: { default: ctx.values.description || '' },
+    questions,
+    type: {
+      name: 'single-choice-multiquestion',
+      properties: {},
+    },
+    version: '1.2',
+    meta: stringifyMetaValues({
+      selfConfig: {
+        scope: normalizeScope(ctx.values.scopeSeed),
+        minAge: ctx.values.minAge,
+        country: normalizeCountry(ctx.values.country),
+      },
+      network: CONFIG.network,
+    }),
+  };
+
+  // get the metadata hash and uri to create the process with
+  const hash = await sdk.api.sequencer.pushMetadata(metadata);
+  const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
+
   const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
-  const result = await sdk.createProcess({
-    title: ctx.values.title,
-    description: ctx.values.description,
+  const processConfig = {
+    metadataUri,
     census,
     maxVoters: ctx.values.maxVoters,
     ballot: ctx.values.ballot,
@@ -1800,8 +1787,9 @@ async function createDavinciProcess(ctx) {
       startDate: ctx.values.startDate,
       duration: ctx.values.duration,
     },
-    questions: ctx.values.questions,
-  });
+  };
+
+  const result = await sdk.createProcess(processConfig);
 
   const processId = normalizeProcessId(result.processId);
   if (!processId) throw new Error('Process creation did not return a process ID.');
@@ -1824,16 +1812,7 @@ async function waitProcessReadyInSequencer(ctx) {
     try {
       const process = await getProcessFromSequencer(ctx.sdk, ctx.processId);
       if (process && isProcessAcceptingVotes(process)) {
-        state.outputs.voteUrl = buildVoteUrl(ctx.processId, {
-          contractAddress: ctx.contractAddress,
-          censusUri: ctx.censusUri,
-          scope: ctx.values.scopeSeed,
-          minAge: ctx.values.minAge,
-          country: ctx.values.country,
-          network: CONFIG.network,
-          sequencerUrl: CONFIG.davinciSequencerUrl,
-          title: ctx.values.title,
-        });
+        state.outputs.voteUrl = buildVoteUrl(ctx.processId);
         renderOutputs();
         return 'Process is ready in sequencer';
       }
@@ -2093,9 +2072,6 @@ function updateVoteSelfCardVisibility() {
 
   const sequencerEligible = state.voteResolution.sequencerWeight > 0n;
   if (sequencerEligible) {
-    if (!voteSelfCardEl.open) {
-      voteSelfCardEl.open = true;
-    }
     if (!state.voteSelf.autoCollapsedForEligibility) {
       state.voteSelf.autoCollapsedForEligibility = true;
       setVoteSelfStatus('You are already registered in the sequencer census.');
@@ -2635,7 +2611,7 @@ async function emitVote() {
     return;
   }
 
-  const censusUrl = trimTrailingSlash(CONFIG.davinciCensusUrl || CONFIG.onchainIndexerUrl);
+  const censusUrl = trimTrailingSlash(CONFIG.onchainIndexerUrl);
   if (!censusUrl) {
     setVoteStatus('Missing census URL config for vote proof generation.', true);
     return;
@@ -3073,67 +3049,24 @@ async function fetchProcessMetadata(sdk, process) {
   }
 }
 
-function applyVoteContextPayload(processId, contextPayload) {
-  const normalizedProcessId = normalizeProcessId(processId);
-  const payload = sanitizeVoteEnvPayload(contextPayload);
-  if (!normalizedProcessId || !payload) return;
+function extractVoteContextFromMetadata(metadata) {
+  const meta = metadata?.meta && typeof metadata.meta === 'object' ? metadata.meta : {};
+  const selfConfig = meta?.selfConfig && typeof meta.selfConfig === 'object' ? meta.selfConfig : {};
 
-  const scope = normalizeScope(payload.scope || '');
-  if (scope) {
-    state.voteSelf.scopeSeed = scope;
-    persistVoteScopeSeed(normalizedProcessId, scope);
-  }
+  const scopeSeed = normalizeScope(selfConfig.scope ?? selfConfig.scopeSeed ?? '');
+  const minAge = normalizeMinAge(selfConfig.minAge);
+  const country = normalizeCountry(selfConfig.country || '');
+  const network = String(meta.network || '').trim();
 
-  if (payload.minAge) {
-    state.voteSelf.minAge = payload.minAge;
-  }
-  if (payload.country && /^[A-Z]{2,3}$/.test(payload.country)) {
-    state.voteSelf.country = payload.country;
-  }
-  if (payload.network && NETWORKS[payload.network]) {
-    state.voteResolution.network = payload.network;
-  }
-
-  const hintedTitle = String(payload.title || '').trim();
-  const hintedContract = String(payload.contractAddress || '').trim();
-  const hintedUri = String(payload.censusUri || '').trim();
-  const hintedSequencer = String(payload.sequencerUrl || '').trim() || CONFIG.davinciSequencerUrl;
-
-  if (hintedTitle) state.voteResolution.title = hintedTitle;
-  if (hintedContract) state.voteResolution.censusContract = hintedContract;
-  if (hintedUri) state.voteResolution.censusUri = hintedUri;
-  if (hintedTitle || hintedContract || hintedUri) {
-    state.voteResolution.processId = normalizedProcessId;
-    setVoteProcessDetails({
-      processId: normalizedProcessId,
-      title: state.voteResolution.title,
-      description: state.voteResolution.description,
-      censusContract: state.voteResolution.censusContract,
-      censusUri: state.voteResolution.censusUri,
-      sequencerUrl: hintedSequencer,
-      endDateMs: state.voteResolution.endDateMs,
-    });
-  }
-
-  if (scope || payload.minAge || payload.country || hintedTitle || hintedContract || hintedUri) {
-    const existing = loadProcessMeta(normalizedProcessId) || {};
-    persistProcessMeta(normalizedProcessId, {
-      ...existing,
-      title: hintedTitle || existing.title || '',
-      contractAddress: hintedContract || existing.contractAddress || '',
-      censusUri: hintedUri || existing.censusUri || '',
-      scopeSeed: scope || existing.scopeSeed || '',
-      minAge: payload.minAge || existing.minAge || null,
-      country: payload.country || existing.country || '',
-      network: state.voteResolution.network || existing.network || CONFIG.network,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  updateVoteSelfControls();
+  return {
+    scopeSeed: scopeSeed && /^[\x00-\x7F]+$/.test(scopeSeed) && scopeSeed.length <= 31 ? scopeSeed : '',
+    minAge: minAge || null,
+    country: /^[A-Z]{2,3}$/.test(country) ? country : '',
+    network: NETWORKS[network] ? network : '',
+  };
 }
 
-async function resolveVoteProcess(processId, silent = true, contextPayload = null) {
+async function resolveVoteProcess(processId, silent = true) {
   const normalizedProcessId = normalizeProcessId(processId);
   if (!normalizedProcessId) {
     resetVoteResolution();
@@ -3173,7 +3106,6 @@ async function resolveVoteProcess(processId, silent = true, contextPayload = nul
   });
   renderVoteReadiness();
 
-  applyVoteContextPayload(normalizedProcessId, contextPayload);
   maybeAutoGenerateVoteSelfQr();
 
   try {
@@ -3195,6 +3127,7 @@ async function resolveVoteProcess(processId, silent = true, contextPayload = nul
     ).trim();
     const description = extractProcessDescription(process, metadata);
     const endDateMs = extractProcessEndDateMs(process, metadata);
+    const metadataContext = extractVoteContextFromMetadata(metadata);
 
     state.voteResolution.sdk = sdk;
     state.voteResolution.process = process;
@@ -3204,6 +3137,32 @@ async function resolveVoteProcess(processId, silent = true, contextPayload = nul
     state.voteResolution.censusContract = contractAddress;
     state.voteResolution.censusUri = censusUri;
     state.voteResolution.endDateMs = endDateMs;
+    if (metadataContext.network) {
+      state.voteResolution.network = metadataContext.network;
+    }
+    if (metadataContext.scopeSeed) {
+      state.voteSelf.scopeSeed = metadataContext.scopeSeed;
+      persistVoteScopeSeed(normalizedProcessId, metadataContext.scopeSeed);
+    }
+    if (metadataContext.minAge) {
+      state.voteSelf.minAge = metadataContext.minAge;
+    }
+    if (metadataContext.country) {
+      state.voteSelf.country = metadataContext.country;
+    }
+
+    const existingMeta = loadProcessMeta(normalizedProcessId) || {};
+    persistProcessMeta(normalizedProcessId, {
+      ...existingMeta,
+      title: title !== '-' ? title : (existingMeta.title || ''),
+      contractAddress: contractAddress || existingMeta.contractAddress || '',
+      censusUri: censusUri || existingMeta.censusUri || '',
+      scopeSeed: metadataContext.scopeSeed || existingMeta.scopeSeed || '',
+      minAge: metadataContext.minAge || existingMeta.minAge || null,
+      country: metadataContext.country || existingMeta.country || '',
+      network: state.voteResolution.network || existingMeta.network || CONFIG.network,
+      updatedAt: new Date().toISOString(),
+    });
 
     setVoteProcessDetails({
       processId: normalizedProcessId,
@@ -3372,8 +3331,7 @@ function initVoteActions() {
       setVoteStatus('Process ID is required.', true);
       return;
     }
-    const context = buildVoteLinkPayload(processId, { processId });
-    navigate(context ? `/vote/${encodeURIComponent(context)}` : '/vote');
+    navigate(`/vote/${encodeURIComponent(processId)}`);
   });
 
   if (showVoteDetailsBtn) {
@@ -3429,7 +3387,7 @@ function initVoteActions() {
   importKeyBtn.addEventListener('click', () => {
     const processId = state.route.processId;
     if (!processId) {
-      setVoteStatus('Open /vote/:context before importing a key.', true);
+      setVoteStatus('Open /vote/:processId before importing a key.', true);
       return;
     }
 
@@ -3457,7 +3415,7 @@ function initVoteActions() {
   clearImportedKeyBtn.addEventListener('click', () => {
     const processId = state.route.processId;
     if (!processId) {
-      setVoteStatus('Open /vote/:context before resetting key.', true);
+      setVoteStatus('Open /vote/:processId before resetting key.', true);
       return;
     }
 
