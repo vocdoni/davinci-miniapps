@@ -190,6 +190,20 @@
               <button id="showVoteDetailsBtn" type="button" class="ghost">Details</button>
             </div>
 
+            <div class="vote-lifecycle-card" id="voteLifecycleCard" hidden>
+              <div class="vote-lifecycle-head">
+                <div class="vote-lifecycle-left">
+                  <span class="vote-lifecycle-dot" aria-hidden="true"></span>
+                  <strong id="voteLifecycleTitle">Vote Active</strong>
+                  <span id="voteLifecycleType" class="vote-lifecycle-pill" hidden>-</span>
+                </div>
+                <div class="vote-lifecycle-right">
+                  <span class="iconoir-clock" aria-hidden="true"></span>
+                  <span id="voteLifecycleLabel">Active</span>
+                </div>
+              </div>
+              <p id="voteLifecycleDescription" class="muted">Voting is open and registration is available.</p>
+            </div>
           </article>
 
           <dialog id="voteDetailsDialog" class="details-dialog">
@@ -211,6 +225,43 @@
               </table>
             </div>
           </dialog>
+
+          <article class="card vote-results-card" id="voteResultsCard" hidden>
+            <div class="card-head vote-results-head">
+              <div class="vote-results-process">
+                <p class="label">Process</p>
+                <h4 id="voteResultsProcessTitle" class="vote-results-process-title">-</h4>
+                <p id="voteResultsProcessDescription" class="muted vote-results-process-description" hidden>-</p>
+              </div>
+            </div>
+            <div class="vote-results-body">
+              <section class="panel vote-results-summary">
+                <p class="label">Vote Summary</p>
+                <div class="grid three vote-results-summary-grid">
+                  <div>
+                    <p id="voteResultsTotalVotes" class="vote-results-summary-value">0</p>
+                    <p class="muted">Total votes</p>
+                  </div>
+                  <div>
+                    <p id="voteResultsTurnout" class="vote-results-summary-value">0.0%</p>
+                    <p class="muted">Turnout</p>
+                  </div>
+                  <div>
+                    <p id="voteResultsChoicesWithVotes" class="vote-results-summary-value">0</p>
+                    <p class="muted">Choices with votes</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel vote-results-detail">
+                <div class="vote-results-detail-head">
+                  <h4>Detailed Results</h4>
+                  <p id="voteResultsTotalVotesLabel" class="muted">Total: 0 votes</p>
+                </div>
+                <div id="voteResultsContent" class="vote-results-content"></div>
+              </section>
+            </div>
+          </article>
 
           <details class="card collapsible-card" id="voteSelfCard" open>
             <summary class="collapsible-summary">
@@ -273,8 +324,8 @@
                   </ol>
                 </aside>
                 <p id="voteAlreadyRegisteredMsg" class="muted vote-registered-message" hidden>
-                  <span class="vote-registered-icon iconoir-check-circle" aria-hidden="true"></span>
-                  <span class="vote-registered-text">You are already registered.</span>
+                  <span id="voteRegistrationLockIcon" class="vote-registered-icon iconoir-check-circle" aria-hidden="true"></span>
+                  <span id="voteRegistrationLockText" class="vote-registered-text">You are already registered.</span>
                 </p>
               </div>
 

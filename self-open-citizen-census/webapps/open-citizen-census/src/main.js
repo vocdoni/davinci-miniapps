@@ -1,6 +1,6 @@
 import { AbiCoder, BrowserProvider, Interface, Wallet, keccak256, randomBytes, sha256 } from 'ethers';
 import EthereumProvider from '@walletconnect/ethereum-provider';
-import { DavinciSDK, OnchainCensus } from '@vocdoni/davinci-sdk';
+import { DavinciSDK, OnchainCensus, ProcessStatus } from '@vocdoni/davinci-sdk';
 import QRCode from 'qrcode';
 
 import artifact from './artifacts/OpenCitizenCensus.json';
@@ -42,6 +42,7 @@ const WEIGHT_OF_SELECTOR = '0xdd4bc101';
 const MASTER_SECRET_KEY = 'occ.masterSecret.v1';
 const VOTE_POLL_MS = 10_000;
 const LAST_SCOPE_SEED_KEY = 'occ.lastScopeSeed.v1';
+const MAX_QUESTIONS = 8;
 const VOTE_SUBMISSION_STORAGE_PREFIX = 'occ.voteSubmission.v1';
 const VOTE_STATUS_FLOW = ['pending', 'verified', 'aggregated', 'processed', 'settled'];
 const VOTE_STATUS_INFO = {
@@ -68,6 +69,43 @@ const VOTE_STATUS_INFO = {
   error: {
     label: 'Error',
     description: 'Vote processing failed. Check the emit status message.',
+  },
+};
+const PROCESS_STATUS_INFO = {
+  [ProcessStatus.READY]: {
+    key: 'ready',
+    label: 'Active',
+    title: 'Vote Active',
+    description: 'Voting is open while this process remains active.',
+    closed: false,
+  },
+  [ProcessStatus.ENDED]: {
+    key: 'ended',
+    label: 'Ended',
+    title: 'Vote Ended',
+    description: 'Voting is closed. Results are not available yet.',
+    closed: true,
+  },
+  [ProcessStatus.CANCELED]: {
+    key: 'canceled',
+    label: 'Canceled',
+    title: 'Vote Canceled',
+    description: 'This process was canceled. Registration and voting are disabled.',
+    closed: true,
+  },
+  [ProcessStatus.PAUSED]: {
+    key: 'paused',
+    label: 'Paused',
+    title: 'Vote Paused',
+    description: 'This process is paused. Registration and voting are disabled.',
+    closed: true,
+  },
+  [ProcessStatus.RESULTS]: {
+    key: 'results',
+    label: 'Results',
+    title: 'Vote Results',
+    description: 'Results are available. Registration and voting are closed.',
+    closed: true,
   },
 };
 const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
@@ -150,6 +188,12 @@ const state = {
     sdk: null,
     process: null,
     processId: '',
+    statusCode: null,
+    isAcceptingVotes: false,
+    rawResult: null,
+    votersCount: 0,
+    maxVoters: 0,
+    processTypeName: '',
     network: CONFIG.network,
     title: '',
     description: '',
@@ -169,6 +213,7 @@ const state = {
     generating: false,
     autoTriggerKey: '',
     autoCollapsedForEligibility: false,
+    autoCollapsedForClosedStatus: false,
   },
   voteBallot: {
     questions: [],
@@ -233,6 +278,11 @@ const voteStatusEl = document.getElementById('voteStatus');
 const voteContextGatePopup = document.getElementById('voteContextGatePopup');
 const voteContextGatePopupMessage = document.getElementById('voteContextGatePopupMessage');
 const voteProcessIdInput = document.getElementById('voteProcessIdInput');
+const voteLifecycleCardEl = document.getElementById('voteLifecycleCard');
+const voteLifecycleTitleEl = document.getElementById('voteLifecycleTitle');
+const voteLifecycleTypeEl = document.getElementById('voteLifecycleType');
+const voteLifecycleLabelEl = document.getElementById('voteLifecycleLabel');
+const voteLifecycleDescriptionEl = document.getElementById('voteLifecycleDescription');
 const showVoteDetailsBtn = document.getElementById('showVoteDetailsBtn');
 const closeVoteDetailsBtn = document.getElementById('closeVoteDetailsBtn');
 const voteDetailsDialog = document.getElementById('voteDetailsDialog');
@@ -259,11 +309,22 @@ const voteSelfQrImageEl = document.getElementById('voteSelfQrImage');
 const voteSelfRegistrationLayoutEl = document.getElementById('voteSelfRegistrationLayout');
 const voteSelfQrActionsEl = document.getElementById('voteSelfQrActions');
 const voteAlreadyRegisteredMsgEl = document.getElementById('voteAlreadyRegisteredMsg');
+const voteRegistrationLockIconEl = document.getElementById('voteRegistrationLockIcon');
+const voteRegistrationLockTextEl = document.getElementById('voteRegistrationLockText');
 const voteSelfStatusEl = document.getElementById('voteSelfStatus');
 const registrationStatusTimelineEl = document.getElementById('registrationStatusTimeline');
 const registrationHintEl = document.getElementById('registrationHint');
 const voteQuestionsEl = document.getElementById('voteQuestions');
 const emitVoteBtn = document.getElementById('emitVoteBtn');
+const voteBallotCardEl = document.getElementById('voteBallotCard');
+const voteResultsCardEl = document.getElementById('voteResultsCard');
+const voteResultsProcessTitleEl = document.getElementById('voteResultsProcessTitle');
+const voteResultsProcessDescriptionEl = document.getElementById('voteResultsProcessDescription');
+const voteResultsTotalVotesEl = document.getElementById('voteResultsTotalVotes');
+const voteResultsTurnoutEl = document.getElementById('voteResultsTurnout');
+const voteResultsChoicesWithVotesEl = document.getElementById('voteResultsChoicesWithVotes');
+const voteResultsTotalVotesLabelEl = document.getElementById('voteResultsTotalVotesLabel');
+const voteResultsContentEl = document.getElementById('voteResultsContent');
 const voteStatusGuideEl = document.getElementById('voteStatusGuide');
 const voteStatusFlowIdLineEl = document.getElementById('voteStatusFlowIdLine');
 const voteStatusFlowVoteIdEl = document.getElementById('voteStatusFlowVoteId');
@@ -437,6 +498,231 @@ function refreshVoteRemainingTimeDisplay() {
     censusUri: state.voteResolution.censusUri,
     sequencerUrl: CONFIG.davinciSequencerUrl || '',
     endDateMs: state.voteResolution.endDateMs,
+  });
+}
+
+function formatProcessTypeLabel(typeName) {
+  const raw = String(typeName || '').trim();
+  if (!raw) return '';
+  if (/single[-_\s]?choice/i.test(raw)) return 'Single Choice';
+  if (/quadratic/i.test(raw)) return 'Quadratic';
+  if (/approval/i.test(raw)) return 'Approval';
+  return raw
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+}
+
+function formatVotePercent(numerator, denominator) {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return '0.0%';
+  const value = (numerator / denominator) * 100;
+  return `${value.toFixed(1)}%`;
+}
+
+function normalizeProcessResultValues(rawResult) {
+  if (!Array.isArray(rawResult)) return [];
+  return rawResult.map((item) => {
+    try {
+      const parsed = BigInt(String(item ?? '0').trim() || '0');
+      return parsed > 0n ? parsed : 0n;
+    } catch {
+      return 0n;
+    }
+  });
+}
+
+function buildVoteResultsModel() {
+  const totalVotes = toSafeInteger(state.voteResolution.votersCount);
+  const maxVoters = toSafeInteger(state.voteResolution.maxVoters);
+  const rawValues = normalizeProcessResultValues(state.voteResolution.rawResult);
+  const hasComputedResults = rawValues.length > 0;
+  let cursor = 0;
+
+  const questions = state.voteBallot.questions.map((question, questionIndex) => {
+    const orderedChoices = [...question.choices].sort((a, b) => Number(a.value) - Number(b.value));
+    const rankedChoices = orderedChoices.map((choice, order) => {
+      const rawVotes = rawValues[cursor];
+      cursor += 1;
+      const votes = rawVotes !== undefined ? toSafeInteger(rawVotes) : 0;
+      const percentage = totalVotes > 0 ? Math.min(100, Math.max(0, (votes / totalVotes) * 100)) : 0;
+      return {
+        order,
+        title: String(choice.title || `Choice ${order + 1}`),
+        votes,
+        percentage,
+      };
+    }).sort((left, right) => right.votes - left.votes || left.order - right.order).map((choice, rank) => ({
+      ...choice,
+      rank: rank + 1,
+    }));
+
+    return {
+      title: String(question.title || `Question ${questionIndex + 1}`),
+      choices: rankedChoices,
+    };
+  });
+
+  const choicesWithVotes = questions.reduce((sum, question) => (
+    sum + question.choices.filter((choice) => choice.votes > 0).length
+  ), 0);
+
+  return {
+    totalVotes,
+    turnoutLabel: formatVotePercent(totalVotes, maxVoters),
+    choicesWithVotes,
+    questions,
+    hasComputedResults,
+  };
+}
+
+function renderVoteLifecycle() {
+  if (!voteLifecycleCardEl) return;
+
+  if (!state.voteResolution.processId) {
+    voteLifecycleCardEl.hidden = true;
+    return;
+  }
+
+  const statusCode = normalizeProcessStatus(state.voteResolution.statusCode);
+  const statusInfo = getProcessStatusInfo(statusCode);
+  const endedByTime = hasProcessEndedByTime();
+
+  let stateKey = statusInfo?.key || 'ready';
+  let title = statusInfo?.title || 'Vote Active';
+  let label = statusInfo?.label || 'Active';
+  let description = statusInfo?.description || 'Voting is open while this process remains active.';
+
+  if (!statusInfo && !state.voteResolution.isAcceptingVotes) {
+    stateKey = 'paused';
+    title = 'Vote Pending';
+    label = 'Not started';
+    description = 'This process is not accepting votes yet.';
+  }
+
+  if (endedByTime && stateKey === 'ready') {
+    stateKey = 'ended';
+    title = 'Vote Ended';
+    label = 'Ended';
+    description = 'Voting time has ended. Registration and voting are closed.';
+  }
+
+  const processTypeLabel = formatProcessTypeLabel(state.voteResolution.processTypeName);
+
+  voteLifecycleCardEl.hidden = false;
+  voteLifecycleCardEl.dataset.state = stateKey;
+  if (voteLifecycleTitleEl) voteLifecycleTitleEl.textContent = title;
+  if (voteLifecycleLabelEl) voteLifecycleLabelEl.textContent = label;
+  if (voteLifecycleDescriptionEl) voteLifecycleDescriptionEl.textContent = description;
+  if (voteLifecycleTypeEl) {
+    voteLifecycleTypeEl.textContent = processTypeLabel;
+    voteLifecycleTypeEl.hidden = !processTypeLabel;
+  }
+}
+
+function renderVoteResults() {
+  if (!voteResultsCardEl || !voteResultsContentEl) return;
+
+  const visible = Boolean(state.voteResolution.processId) && shouldShowVoteResults();
+  if (voteBallotCardEl) voteBallotCardEl.hidden = visible;
+  if (voteSelfCardEl) voteSelfCardEl.hidden = visible;
+  voteResultsCardEl.hidden = !visible;
+  if (!visible) return;
+
+  const processTitle = String(state.voteResolution.title || '').trim();
+  const processDescription = String(state.voteResolution.description || '').trim();
+  const hasProcessDescription = Boolean(processDescription && processDescription !== '-');
+  if (voteResultsProcessTitleEl) {
+    voteResultsProcessTitleEl.textContent = processTitle && processTitle !== '-' ? processTitle : 'Untitled process';
+  }
+  if (voteResultsProcessDescriptionEl) {
+    voteResultsProcessDescriptionEl.textContent = processDescription;
+    voteResultsProcessDescriptionEl.hidden = !hasProcessDescription;
+  }
+
+  const model = buildVoteResultsModel();
+  if (voteResultsTotalVotesEl) voteResultsTotalVotesEl.textContent = String(model.totalVotes);
+  if (voteResultsTurnoutEl) voteResultsTurnoutEl.textContent = model.turnoutLabel;
+  if (voteResultsChoicesWithVotesEl) voteResultsChoicesWithVotesEl.textContent = String(model.choicesWithVotes);
+  if (voteResultsTotalVotesLabelEl) {
+    voteResultsTotalVotesLabelEl.textContent = `Total: ${model.totalVotes} vote${model.totalVotes === 1 ? '' : 's'}`;
+  }
+
+  voteResultsContentEl.innerHTML = '';
+
+  if (!model.hasComputedResults) {
+    const empty = document.createElement('div');
+    empty.className = 'vote-results-empty';
+    const spinner = document.createElement('span');
+    spinner.className = 'timeline-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.textContent = 'Computing results';
+    empty.append(spinner, text);
+    voteResultsContentEl.append(empty);
+    return;
+  }
+
+  if (!model.questions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'vote-results-empty';
+    empty.textContent = 'No question metadata available for this process.';
+    voteResultsContentEl.append(empty);
+    return;
+  }
+
+  model.questions.forEach((question) => {
+    const questionCard = document.createElement('section');
+    questionCard.className = 'vote-results-question';
+
+    const title = document.createElement('h5');
+    title.className = 'vote-results-question-title';
+    title.textContent = question.title;
+    questionCard.append(title);
+
+    question.choices.forEach((choice) => {
+      const row = document.createElement('div');
+      row.className = 'vote-results-choice';
+
+      const rowHead = document.createElement('div');
+      rowHead.className = 'vote-results-choice-head';
+
+      const choiceTitle = document.createElement('p');
+      choiceTitle.className = 'vote-results-choice-title';
+      choiceTitle.textContent = choice.title;
+
+      const choiceVotes = document.createElement('p');
+      choiceVotes.className = 'vote-results-choice-votes';
+      choiceVotes.textContent = String(choice.votes);
+
+      rowHead.append(choiceTitle, choiceVotes);
+      row.append(rowHead);
+
+      const rowMeta = document.createElement('div');
+      rowMeta.className = 'vote-results-choice-meta';
+
+      const percentage = document.createElement('p');
+      percentage.className = 'muted';
+      percentage.textContent = `${formatVotePercent(choice.votes, model.totalVotes)} of total votes`;
+
+      const rank = document.createElement('p');
+      rank.className = 'muted';
+      rank.textContent = `Rank #${choice.rank}`;
+
+      rowMeta.append(percentage, rank);
+      row.append(rowMeta);
+
+      const progress = document.createElement('div');
+      progress.className = 'vote-results-bar';
+      const fill = document.createElement('span');
+      fill.style.width = `${choice.percentage.toFixed(1)}%`;
+      progress.append(fill);
+      row.append(progress);
+
+      questionCard.append(row);
+    });
+
+    voteResultsContentEl.append(questionCard);
   });
 }
 
@@ -1174,7 +1460,7 @@ function refreshQuestionIndices() {
     removeButton.disabled = createFormLocked || cards.length <= 1;
     updateChoiceControls(card);
   });
-  addQuestionButton.disabled = createFormLocked || cards.length >= 8;
+  addQuestionButton.disabled = createFormLocked || cards.length >= MAX_QUESTIONS;
 }
 
 function initQuestions() {
@@ -1183,6 +1469,8 @@ function initQuestions() {
   refreshQuestionIndices();
 
   addQuestionButton.addEventListener('click', () => {
+    const cards = questionList.querySelectorAll('.question-card');
+    if (cards.length >= MAX_QUESTIONS) return;
     questionList.append(createQuestionCard());
     refreshQuestionIndices();
   });
@@ -1219,6 +1507,9 @@ function parseQuestions() {
   const cards = Array.from(questionList.querySelectorAll('.question-card'));
   if (!cards.length) {
     throw new Error('Add at least one question.');
+  }
+  if (cards.length > MAX_QUESTIONS) {
+    throw new Error(`Maximum ${MAX_QUESTIONS} questions are allowed per process.`);
   }
 
   return cards.map((card, questionIndex) => {
@@ -1726,6 +2017,69 @@ function isProcessAcceptingVotes(process) {
   return Boolean(process && typeof process === 'object' && process.isAcceptingVotes === true);
 }
 
+function normalizeProcessStatus(status) {
+  if (status === null || status === undefined || status === '') return null;
+  const parsed = typeof status === 'bigint' ? Number(status) : Number(status);
+  if (!Number.isFinite(parsed)) return null;
+  const normalized = Math.trunc(parsed);
+  return Object.prototype.hasOwnProperty.call(PROCESS_STATUS_INFO, normalized) ? normalized : null;
+}
+
+function getProcessStatusInfo(statusCode) {
+  const normalized = normalizeProcessStatus(statusCode);
+  if (normalized === null) return null;
+  return PROCESS_STATUS_INFO[normalized] || null;
+}
+
+function toSafeInteger(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const parsed = typeof value === 'bigint' ? Number(value) : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.trunc(parsed);
+}
+
+function hasProcessEndedByTime(endDateMs = state.voteResolution.endDateMs) {
+  if (!Number.isFinite(Number(endDateMs))) return false;
+  return Number(endDateMs) <= Date.now();
+}
+
+function isVoteProcessClosed() {
+  const statusInfo = getProcessStatusInfo(state.voteResolution.statusCode);
+  if (statusInfo?.closed) return true;
+  if (state.voteResolution.isAcceptingVotes === false) return true;
+  return hasProcessEndedByTime();
+}
+
+function shouldShowVoteResults() {
+  const statusCode = normalizeProcessStatus(state.voteResolution.statusCode);
+  return statusCode === ProcessStatus.RESULTS;
+}
+
+function shouldDefaultCollapseVoteSelfCard() {
+  const statusCode = normalizeProcessStatus(state.voteResolution.statusCode);
+  return statusCode === ProcessStatus.ENDED || statusCode === ProcessStatus.RESULTS;
+}
+
+function getClosedProcessMessage() {
+  const statusCode = normalizeProcessStatus(state.voteResolution.statusCode);
+  if (statusCode === ProcessStatus.RESULTS) {
+    return 'This process is in results stage. Registration and voting are closed.';
+  }
+  if (statusCode === ProcessStatus.ENDED || hasProcessEndedByTime()) {
+    return 'This process has ended. Registration and voting are closed.';
+  }
+  if (statusCode === ProcessStatus.PAUSED) {
+    return 'This process is paused. Registration and voting are closed.';
+  }
+  if (statusCode === ProcessStatus.CANCELED) {
+    return 'This process was canceled. Registration and voting are closed.';
+  }
+  if (!state.voteResolution.isAcceptingVotes) {
+    return 'This process is not accepting votes yet.';
+  }
+  return '';
+}
+
 async function createDavinciProcess(ctx) {
   if (!CONFIG.davinciSequencerUrl) {
     throw new Error('Missing VITE_DAVINCI_SEQUENCER_URL.');
@@ -2030,6 +2384,7 @@ function getVoteSelfAutoTriggerKey() {
 }
 
 function maybeAutoGenerateVoteSelfQr() {
+  if (isVoteProcessClosed()) return;
   if (state.voteResolution.sequencerWeight > 0n) return;
   const key = getVoteSelfAutoTriggerKey();
   if (!key) return;
@@ -2045,8 +2400,14 @@ function updateVoteSelfControls() {
   const hasManagedWallet = Boolean(state.voteManaged.wallet?.address);
   const hasScopeSeed = Boolean(normalizeScope(state.voteSelf.scopeSeed || ''));
   const sequencerEligible = state.voteResolution.sequencerWeight > 0n;
-  const canGenerate = hasResolvedProcess && hasManagedWallet && hasScopeSeed && !state.voteSelf.generating && !sequencerEligible;
-  const hasLink = Boolean(state.voteSelf.link) && !sequencerEligible;
+  const processClosed = isVoteProcessClosed();
+  const canGenerate = hasResolvedProcess
+    && hasManagedWallet
+    && hasScopeSeed
+    && !state.voteSelf.generating
+    && !sequencerEligible
+    && !processClosed;
+  const hasLink = Boolean(state.voteSelf.link) && !sequencerEligible && !processClosed;
 
   if (voteScopeSeedInfoEl) voteScopeSeedInfoEl.textContent = state.voteSelf.scopeSeed || '-';
   if (voteSelfMinAgeInfoEl) voteSelfMinAgeInfoEl.textContent = state.voteSelf.minAge ? String(state.voteSelf.minAge) : '-';
@@ -2071,6 +2432,7 @@ function updateVoteSelfCardVisibility() {
   if (!voteSelfCardEl) return;
 
   const sequencerEligible = state.voteResolution.sequencerWeight > 0n;
+  const processClosed = isVoteProcessClosed();
   if (sequencerEligible) {
     if (!state.voteSelf.autoCollapsedForEligibility) {
       state.voteSelf.autoCollapsedForEligibility = true;
@@ -2080,12 +2442,26 @@ function updateVoteSelfCardVisibility() {
     return;
   }
 
+  if (processClosed) {
+    state.voteSelf.autoCollapsedForEligibility = false;
+    if (shouldDefaultCollapseVoteSelfCard() && !state.voteSelf.autoCollapsedForClosedStatus) {
+      voteSelfCardEl.open = false;
+      state.voteSelf.autoCollapsedForClosedStatus = true;
+    }
+    setVoteSelfStatus(getClosedProcessMessage());
+    renderVoteSelfRegistrationLockState();
+    return;
+  }
+
   state.voteSelf.autoCollapsedForEligibility = false;
+  state.voteSelf.autoCollapsedForClosedStatus = false;
   renderVoteSelfRegistrationLockState();
 }
 
 function renderVoteSelfRegistrationLockState() {
-  const locked = state.voteResolution.sequencerWeight > 0n;
+  const sequencerEligible = state.voteResolution.sequencerWeight > 0n;
+  const processClosed = !sequencerEligible && isVoteProcessClosed();
+  const locked = sequencerEligible || processClosed;
   if (voteSelfRegistrationLayoutEl) {
     voteSelfRegistrationLayoutEl.classList.toggle('is-locked', locked);
   }
@@ -2093,7 +2469,16 @@ function renderVoteSelfRegistrationLockState() {
     voteSelfQrActionsEl.classList.toggle('is-locked', locked);
   }
   if (voteAlreadyRegisteredMsgEl) {
+    voteAlreadyRegisteredMsgEl.classList.toggle('is-closed', processClosed);
     voteAlreadyRegisteredMsgEl.hidden = !locked;
+  }
+  if (voteRegistrationLockIconEl) {
+    voteRegistrationLockIconEl.className = `vote-registered-icon ${processClosed ? 'iconoir-lock' : 'iconoir-check-circle'}`;
+  }
+  if (voteRegistrationLockTextEl) {
+    voteRegistrationLockTextEl.textContent = processClosed
+      ? 'Registration is closed for this process.'
+      : 'You are already registered.';
   }
 }
 
@@ -2249,6 +2634,7 @@ function renderRegistrationStatusTimeline() {
   const onchainReady = onchainRequired ? state.voteResolution.onchainWeight > 0n : true;
   const sequencerReady = state.voteResolution.sequencerWeight > 0n;
   const readyToVote = hasVoteReadiness();
+  const processClosed = isVoteProcessClosed();
 
   const steps = [];
 
@@ -2342,7 +2728,9 @@ function renderRegistrationStatusTimeline() {
   diagnostics.push(`Auto-check every ${pollSeconds}s.`);
 
   let summary = 'Resolve process and load managed wallet to start registration.';
-  if (hasContextReady && !qrReady) {
+  if (processClosed) {
+    summary = getClosedProcessMessage();
+  } else if (hasContextReady && !qrReady) {
     summary = state.voteSelf.generating
       ? 'Generating QR for Self...'
       : 'Scan the QR in Self after completing ID or passport verification to start registration.';
@@ -2381,6 +2769,7 @@ function clearVoteBallot(message) {
 }
 
 function hasVoteReadiness() {
+  if (isVoteProcessClosed()) return false;
   const sequencerReady = state.voteResolution.sequencerWeight > 0n;
   if (!sequencerReady) return false;
 
@@ -2462,6 +2851,7 @@ function updateVoteBallotControls() {
   const hasProcess = Boolean(state.voteResolution.processId);
   const hasManagedWallet = Boolean(state.voteManaged.wallet?.privateKey);
   const hasQuestions = state.voteBallot.questions.length > 0;
+  const processClosed = isVoteProcessClosed();
   const overwriteAllowed = canOverwriteVote();
   const hasStoredVote = hasStoredVoteId();
   const terminalStoredVote = hasStoredVote && isVoteStatusTerminal(state.voteBallot.submissionStatus);
@@ -2472,6 +2862,7 @@ function updateVoteBallotControls() {
   ));
   const canSubmit = hasProcess
     && hasManagedWallet
+    && !processClosed
     && hasVoteReadiness()
     && hasQuestions
     && hasAllChoices
@@ -2484,8 +2875,12 @@ function updateVoteBallotControls() {
       emitVoteBtn,
       state.voteBallot.submitting
         ? 'Emitting vote...'
-        : (terminalStoredVote ? 'Emit vote again' : (hasStoredVote ? 'Vote in progress' : 'Emit vote')),
-      state.voteBallot.submitting ? 'iconoir-refresh' : 'iconoir-check'
+        : (processClosed
+          ? 'Voting closed'
+          : (terminalStoredVote ? 'Emit vote again' : (hasStoredVote ? 'Vote in progress' : 'Emit vote'))),
+      state.voteBallot.submitting
+        ? 'iconoir-refresh'
+        : (processClosed ? 'iconoir-lock' : 'iconoir-check')
     );
   }
   if (voteStatusFlowVoteIdEl) {
@@ -2593,6 +2988,10 @@ async function emitVote() {
 
   if (!processId || !wallet?.privateKey) {
     setVoteStatus('Resolve process and managed wallet before emitting vote.', true);
+    return;
+  }
+  if (isVoteProcessClosed()) {
+    setVoteStatus(getClosedProcessMessage(), true);
     return;
   }
   if (!state.voteBallot.questions.length) {
@@ -2713,6 +3112,10 @@ async function generateVoteSelfQr() {
   const contractAddress = state.voteResolution.censusContract;
   const managedAddress = state.voteManaged.wallet?.address;
   const scopeSeed = normalizeScope(state.voteSelf.scopeSeed || '');
+  if (isVoteProcessClosed()) {
+    setVoteSelfStatus(getClosedProcessMessage(), true);
+    return;
+  }
   if (!processId || !contractAddress || !managedAddress) {
     setVoteSelfStatus('Resolve process and managed wallet before generating Self QR.', true);
     return;
@@ -2816,6 +3219,12 @@ function resetVoteResolution() {
     sdk: null,
     process: null,
     processId: '',
+    statusCode: null,
+    isAcceptingVotes: false,
+    rawResult: null,
+    votersCount: 0,
+    maxVoters: 0,
+    processTypeName: '',
     network: CONFIG.network,
     title: '',
     description: '',
@@ -2833,6 +3242,7 @@ function resetVoteResolution() {
   state.voteSelf.generating = false;
   state.voteSelf.autoTriggerKey = '';
   state.voteSelf.autoCollapsedForEligibility = false;
+  state.voteSelf.autoCollapsedForClosedStatus = false;
   setVoteProcessDetails({
     processId: '',
     title: '',
@@ -2848,12 +3258,16 @@ function resetVoteResolution() {
   if (generateVoteSelfQrBtn) setButtonLabel(generateVoteSelfQrBtn, 'Regenerate QR', 'iconoir-refresh');
   if (voteSelfCardEl) voteSelfCardEl.open = true;
   setVoteSelfStatus('Resolve process and managed wallet before generating Self QR.');
+  renderVoteLifecycle();
+  renderVoteResults();
   updateVoteSelfCardVisibility();
   updateVoteSelfControls();
 }
 
 function renderVoteReadiness() {
   refreshVoteRemainingTimeDisplay();
+  renderVoteLifecycle();
+  renderVoteResults();
   updateVoteSelfCardVisibility();
   updateVoteBallotControls();
   renderRegistrationStatusTimeline();
@@ -3082,6 +3496,12 @@ async function resolveVoteProcess(processId, silent = true) {
   state.voteResolution.sdk = null;
   state.voteResolution.process = null;
   state.voteResolution.processId = normalizedProcessId;
+  state.voteResolution.statusCode = null;
+  state.voteResolution.isAcceptingVotes = false;
+  state.voteResolution.rawResult = null;
+  state.voteResolution.votersCount = 0;
+  state.voteResolution.maxVoters = 0;
+  state.voteResolution.processTypeName = '';
   state.voteResolution.network = CONFIG.network;
   state.voteResolution.title = '';
   state.voteResolution.description = '';
@@ -3094,6 +3514,7 @@ async function resolveVoteProcess(processId, silent = true) {
   state.voteResolution.readinessCheckedAt = null;
   state.voteSelf.country = '';
   state.voteSelf.autoCollapsedForEligibility = false;
+  state.voteSelf.autoCollapsedForClosedStatus = false;
   clearVoteBallot('Resolving process...');
   setVoteProcessDetails({
     processId: normalizedProcessId,
@@ -3128,10 +3549,22 @@ async function resolveVoteProcess(processId, silent = true) {
     const description = extractProcessDescription(process, metadata);
     const endDateMs = extractProcessEndDateMs(process, metadata);
     const metadataContext = extractVoteContextFromMetadata(metadata);
+    const statusCode = normalizeProcessStatus(process?.status);
+    const isAcceptingVotes = isProcessAcceptingVotes(process);
+    const rawResult = Array.isArray(process?.result) ? process.result : null;
+    const votersCount = toSafeInteger(process?.votersCount);
+    const maxVoters = toSafeInteger(process?.maxVoters);
+    const processTypeName = String(metadata?.type?.name || process?.metadata?.type?.name || '').trim();
 
     state.voteResolution.sdk = sdk;
     state.voteResolution.process = process;
     state.voteResolution.processId = normalizedProcessId;
+    state.voteResolution.statusCode = statusCode;
+    state.voteResolution.isAcceptingVotes = isAcceptingVotes;
+    state.voteResolution.rawResult = rawResult;
+    state.voteResolution.votersCount = votersCount;
+    state.voteResolution.maxVoters = maxVoters;
+    state.voteResolution.processTypeName = processTypeName;
     state.voteResolution.title = title;
     state.voteResolution.description = description;
     state.voteResolution.censusContract = contractAddress;
@@ -3272,8 +3705,31 @@ async function refreshVoteReadiness() {
   const processId = state.voteResolution.processId;
   const contractAddress = state.voteResolution.censusContract;
   const managedAddress = state.voteManaged.wallet?.address;
+  const sdk = state.voteResolution.sdk;
 
-  if (!processId || !managedAddress) {
+  if (!processId) {
+    state.voteResolution.readinessCheckedAt = null;
+    renderVoteReadiness();
+    return;
+  }
+
+  if (sdk) {
+    try {
+      const latestProcess = await getProcessFromSequencer(sdk, processId);
+      if (latestProcess && typeof latestProcess === 'object') {
+        state.voteResolution.process = latestProcess;
+        state.voteResolution.statusCode = normalizeProcessStatus(latestProcess.status);
+        state.voteResolution.isAcceptingVotes = isProcessAcceptingVotes(latestProcess);
+        state.voteResolution.rawResult = Array.isArray(latestProcess.result) ? latestProcess.result : null;
+        state.voteResolution.votersCount = toSafeInteger(latestProcess.votersCount);
+        state.voteResolution.maxVoters = toSafeInteger(latestProcess.maxVoters);
+      }
+    } catch {
+      // Keep previous process status values if polling fetch fails.
+    }
+  }
+
+  if (!managedAddress) {
     state.voteResolution.readinessCheckedAt = null;
     renderVoteReadiness();
     return;
