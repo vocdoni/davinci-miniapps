@@ -109,6 +109,20 @@ body.app-blocked {
   color: var(--ink);
 }
 
+.create-intro {
+  margin: 8px 0 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 620px;
+  font-weight: 400;
+}
+
+.create-intro strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
 button {
   border: 1px solid rgba(31, 42, 58, 0.2);
   padding: 12px 20px;
@@ -324,6 +338,7 @@ select:focus-visible {
   width: 60px;
   font-family: inherit;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .setting-value-input::-webkit-outer-spin-button,
@@ -393,6 +408,7 @@ select:focus-visible {
   width: 100%;
   font-family: inherit;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .advanced-field-input::-webkit-outer-spin-button,
@@ -423,6 +439,80 @@ select:focus-visible {
   font-size: 16px;
   font-weight: 600;
   color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: help;
+  transition: color 0.2s;
+  position: relative;
+}
+
+.tooltip-icon:hover,
+.tooltip-icon:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+.tooltip-icon::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px) scale(0.95);
+  background: #1f2a3a; /* Dark sleek background */
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 400; /* Regular weight for readability */
+  line-height: 1.4;
+  white-space: normal; /* Allow text wrapping */
+  width: max-content;
+  max-width: 280px; /* Constrain width for readability */
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); /* Smooth standard easing */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1); /* Subtle depth */
+  z-index: 100;
+}
+
+.tooltip-icon:hover::before,
+.tooltip-icon:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-8px) scale(1);
+}
+
+/* Optional small arrow */
+.tooltip-icon::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px) scale(0.95);
+  border: 6px solid transparent;
+  border-top-color: #1f2a3a;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+}
+
+.tooltip-icon:hover::after,
+.tooltip-icon:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-2px) scale(1);
 }
 
 .options-list {

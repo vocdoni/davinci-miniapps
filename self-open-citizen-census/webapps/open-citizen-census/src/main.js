@@ -5,7 +5,7 @@ import QRCode from 'qrcode';
 
 import artifact from './artifacts/OpenCitizenCensus.json';
 import { buildSelfApp, getUniversalLink } from './selfApp.js';
-import './style.css';
+
 
 const env = import.meta.env;
 const BASE_URL = env.BASE_URL || '/';
@@ -111,7 +111,7 @@ const PROCESS_STATUS_INFO = {
 const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
 const INTERNAL_RPC_RETRY_DELAY_MS = 1_500;
 const DEFAULT_DOCUMENT_TITLE = 'Ask the World';
-const CREATE_HEADER_TITLE = 'What do you want to decide?';
+const CREATE_HEADER_TITLE = 'What do you want to ask?';
 const VOTE_HEADER_TITLE = 'Official-ID Voting Process';
 
 const HUB_INTERFACE = new Interface([

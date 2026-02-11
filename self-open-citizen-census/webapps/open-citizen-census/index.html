@@ -15,6 +15,7 @@
     <meta name="twitter:title" content="Ask the World" />
     <meta name="twitter:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
     <meta name="twitter:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <nav class="app-navbar" id="appNavbar">
@@ -32,11 +33,15 @@
 
     <div class="app-shell">
       <header class="app-header" id="appHeader">
-        <h1 id="appHeaderTitle">What do you want to decide?</h1>
+        <h1 id="appHeaderTitle">What do you want to ask?</h1>
       </header>
 
       <main id="mainContent">
         <section id="createView" class="view" hidden>
+          <p class="create-intro">
+            Ask a question to an entire country. Citizens who match your criteria can authenticate with their ID or passport and vote immediately, without any prior census setup.
+            The <strong>DAVINCI Protocol</strong> makes every vote anonymous, verifiable from end to end, and protected against censorship, coercion, and bribery.
+          </p>
           <form id="createForm" class="create-form">
 
             <input
@@ -55,7 +60,18 @@
               <button id="addQuestion" type="button" class="add-option-btn">+ Add a new option</button>
             </section>
 
-            <h2 class="options-title">Who can vote?</h2>
+            <h2 class="options-title">
+              Who can vote?
+              <span 
+                class="tooltip-icon" 
+                data-tooltip="You set the eligibility rules here. Anyone with a modern ID or Passport from most countries can securely vote, as long as they meet your criteria (Country & Age) and participate during the process duration."
+                aria-label="Eligibility information"
+                tabindex="0"
+                role="button"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.09445 9.17647C9.28014 8.48398 9.91036 8 10.6272 8H12.9863C13.8149 8 14.4866 8.67175 14.4866 9.50035C14.4866 10.2796 13.5677 10.8752 12.8727 11.2359L12.0003 11.6888V13.0118M12.0003 15.6588V15.8794" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              </span>
+            </h2>
 
             <div class="setting-cards">
               <div class="setting-card" title="Select the country where voters must be citizens">
@@ -115,7 +131,6 @@
                 <span class="setting-label">Minimum age to vote</span>
                 <div class="setting-value-row">
                   <input id="minAge" name="min_age" class="setting-value-input" autocomplete="off" type="number" min="1" max="99" value="18" required />
-                  <span class="setting-value-suffix">+</span>
                 </div>
               </div>
               <div class="setting-card" title="How long the voting process will remain open">
