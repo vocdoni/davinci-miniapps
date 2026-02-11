@@ -223,6 +223,7 @@ const state = {
     hasVoted: false,
     submissionId: '',
     submissionStatus: '',
+    statusPanelVoteId: '',
     statusWatcherToken: 0,
   },
   votePollId: null,
@@ -326,8 +327,15 @@ const voteResultsChoicesWithVotesEl = document.getElementById('voteResultsChoice
 const voteResultsTotalVotesLabelEl = document.getElementById('voteResultsTotalVotesLabel');
 const voteResultsContentEl = document.getElementById('voteResultsContent');
 const voteStatusGuideEl = document.getElementById('voteStatusGuide');
+const voteSubmitResultEl = document.getElementById('voteSubmitResult');
+const voteSubmitResultIconEl = document.getElementById('voteSubmitResultIcon');
+const voteSubmitResultTitleEl = document.getElementById('voteSubmitResultTitle');
+const voteSubmitResultTextEl = document.getElementById('voteSubmitResultText');
+const voteStatusDetailsEl = document.getElementById('voteStatusDetails');
+const voteStatusDetailsMetaEl = document.getElementById('voteStatusDetailsMeta');
 const voteStatusFlowIdLineEl = document.getElementById('voteStatusFlowIdLine');
 const voteStatusFlowVoteIdEl = document.getElementById('voteStatusFlowVoteId');
+const copyVoteStatusIdBtn = document.getElementById('copyVoteStatusIdBtn');
 const voteStatusTimelineEl = document.getElementById('voteStatusTimeline');
 
 const walletAddressEl = document.getElementById('walletAddress');
@@ -428,6 +436,7 @@ function applyStaticButtonIcons() {
   if (copyVoteSelfLinkBtn) setButtonLabel(copyVoteSelfLinkBtn, 'Copy Self link', 'iconoir-copy');
   if (openVoteSelfLinkBtn) setButtonLabel(openVoteSelfLinkBtn, 'Open Self link', 'iconoir-link');
   if (emitVoteBtn) setButtonLabel(emitVoteBtn, 'Emit vote', 'iconoir-check');
+  if (copyVoteStatusIdBtn) setButtonLabel(copyVoteStatusIdBtn, 'Copy', 'iconoir-copy');
 }
 
 function setVoteProcessDetails({
@@ -2537,10 +2546,65 @@ function canOverwriteVote() {
   return isVoteStatusTerminal(state.voteBallot.submissionStatus);
 }
 
+function renderVoteSubmitResult() {
+  if (!voteSubmitResultEl) return;
+
+  const hasVoteId = hasStoredVoteId();
+  if (!hasVoteId) {
+    voteSubmitResultEl.hidden = true;
+    return;
+  }
+
+  const normalizedStatus = normalizeVoteStatus(state.voteBallot.submissionStatus) || 'pending';
+  const isErrorStatus = normalizedStatus === 'error';
+  const isSettledStatus = normalizedStatus === 'settled';
+
+  let title = 'Vote successfully received';
+  let description = 'Your vote is secured and being finalized.';
+  let iconClass = 'iconoir-check-circle';
+
+  if (isSettledStatus) {
+    title = 'Vote finalized successfully';
+    description = 'Your vote has been fully settled.';
+  } else if (isErrorStatus) {
+    title = 'Vote processing failed';
+    description = 'Processing failed for this vote. Expand the panel for details and try again if needed.';
+    iconClass = 'iconoir-warning-circle';
+  }
+
+  voteSubmitResultEl.hidden = false;
+  voteSubmitResultEl.classList.toggle('is-error', isErrorStatus);
+  if (voteSubmitResultTitleEl) voteSubmitResultTitleEl.textContent = title;
+  if (voteSubmitResultTextEl) voteSubmitResultTextEl.textContent = description;
+  if (voteSubmitResultIconEl) {
+    voteSubmitResultIconEl.className = `vote-submit-result-icon ${iconClass}`;
+  }
+  if (voteStatusDetailsMetaEl) {
+    voteStatusDetailsMetaEl.textContent = formatVoteStatusLabel(normalizedStatus);
+  }
+}
+
 function renderVoteStatusInfoVisibility() {
   const visible = hasStoredVoteId();
   if (voteStatusGuideEl) voteStatusGuideEl.hidden = !visible;
   if (voteStatusFlowIdLineEl) voteStatusFlowIdLineEl.hidden = !visible;
+  if (copyVoteStatusIdBtn) copyVoteStatusIdBtn.disabled = !visible;
+  if (voteStatusFlowVoteIdEl) voteStatusFlowVoteIdEl.textContent = state.voteBallot.submissionId || '-';
+
+  if (voteStatusDetailsEl) {
+    if (!visible) {
+      voteStatusDetailsEl.open = false;
+      state.voteBallot.statusPanelVoteId = '';
+    } else {
+      const currentVoteId = String(state.voteBallot.submissionId || '').trim();
+      if (state.voteBallot.statusPanelVoteId !== currentVoteId) {
+        voteStatusDetailsEl.open = false;
+        state.voteBallot.statusPanelVoteId = currentVoteId;
+      }
+    }
+  }
+
+  renderVoteSubmitResult();
 }
 
 function renderVoteStatusTimeline() {
@@ -2755,6 +2819,7 @@ function clearVoteBallot(message) {
   state.voteBallot.hasVoted = false;
   state.voteBallot.submissionId = '';
   state.voteBallot.submissionStatus = '';
+  state.voteBallot.statusPanelVoteId = '';
   state.voteBallot.statusWatcherToken += 1;
 
   if (voteQuestionsEl) {
@@ -3031,6 +3096,7 @@ async function emitVote() {
     const result = await sdk.submitVote({ processId, choices });
     state.voteBallot.submissionId = String(result?.voteId || '');
     state.voteBallot.submissionStatus = String(result?.status || 'pending');
+    state.voteBallot.statusPanelVoteId = '';
     state.voteBallot.hasVoted = true;
     persistVoteSubmission(processId, wallet.address, {
       voteId: state.voteBallot.submissionId,
@@ -3815,6 +3881,24 @@ function initVoteActions() {
   }
   if (emitVoteBtn) {
     emitVoteBtn.addEventListener('click', emitVote);
+  }
+  if (copyVoteStatusIdBtn) {
+    copyVoteStatusIdBtn.addEventListener('click', async () => {
+      const voteId = String(state.voteBallot.submissionId || '').trim();
+      if (!voteId) return;
+      try {
+        await navigator.clipboard.writeText(voteId);
+        setButtonLabel(copyVoteStatusIdBtn, 'Copied', 'iconoir-check');
+        window.setTimeout(() => {
+          setButtonLabel(copyVoteStatusIdBtn, 'Copy', 'iconoir-copy');
+        }, 1200);
+      } catch {
+        setButtonLabel(copyVoteStatusIdBtn, 'Error', 'iconoir-warning-circle');
+        window.setTimeout(() => {
+          setButtonLabel(copyVoteStatusIdBtn, 'Copy', 'iconoir-copy');
+        }, 1200);
+      }
+    });
   }
 
   revealKeyBtn.addEventListener('click', () => {

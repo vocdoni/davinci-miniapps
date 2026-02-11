@@ -356,10 +356,34 @@
               <button id="emitVoteBtn" type="button" class="secondary" disabled>Emit vote</button>
             </div>
 
-            <div class="vote-status-guide" id="voteStatusGuide" hidden>
-              <p class="label">Vote status flow</p>
-              <p id="voteStatusFlowIdLine" class="muted vote-status-flow-id" hidden>Vote ID: <code id="voteStatusFlowVoteId">-</code></p>
-              <ol id="voteStatusTimeline" class="vote-status-timeline"></ol>
+            <div class="vote-status-guide vote-submit-guide" id="voteStatusGuide" hidden>
+              <div id="voteSubmitResult" class="vote-submit-result" hidden>
+                <span id="voteSubmitResultIcon" class="vote-submit-result-icon iconoir-check-circle" aria-hidden="true"></span>
+                <div class="vote-submit-result-content">
+                  <p id="voteSubmitResultTitle" class="vote-submit-result-title">Vote successfully received</p>
+                  <p id="voteSubmitResultText" class="muted">Your vote is secured and being finalized.</p>
+                </div>
+              </div>
+
+              <details id="voteStatusDetails" class="vote-status-details">
+                <summary class="vote-status-details-summary">
+                  <span class="vote-status-details-label-wrap">
+                    <span class="vote-status-details-label">Track vote status</span>
+                    <span id="voteStatusDetailsMeta" class="muted vote-status-details-meta">Pending</span>
+                  </span>
+                </summary>
+
+                <div class="vote-status-details-body">
+                  <div id="voteStatusFlowIdLine" class="vote-status-id-row" hidden>
+                    <p class="label">Vote ID</p>
+                    <div class="vote-status-id-actions">
+                      <code id="voteStatusFlowVoteId" class="output-scroll">-</code>
+                      <button id="copyVoteStatusIdBtn" type="button" class="ghost" disabled>Copy</button>
+                    </div>
+                  </div>
+                  <ol id="voteStatusTimeline" class="vote-status-timeline"></ol>
+                </div>
+              </details>
             </div>
           </article>
 

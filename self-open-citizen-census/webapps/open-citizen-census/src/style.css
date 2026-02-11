@@ -736,8 +736,134 @@ textarea {
   padding: 12px;
 }
 
-.vote-status-flow-id {
-  margin: 4px 0 0;
+.vote-submit-guide {
+  margin-top: 22px;
+  display: grid;
+  gap: 10px;
+  background: #f3f8f4;
+  border-color: rgba(33, 110, 65, 0.22);
+}
+
+.vote-submit-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(33, 110, 65, 0.24);
+  background: #eef8f1;
+}
+
+.vote-submit-result.is-error {
+  border-color: rgba(155, 34, 34, 0.3);
+  background: #fff5f5;
+}
+
+.vote-submit-result-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(33, 110, 65, 0.12);
+  color: #216e41;
+  font-size: 18px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.vote-submit-result.is-error .vote-submit-result-icon {
+  background: rgba(155, 34, 34, 0.12);
+  color: var(--err);
+}
+
+.vote-submit-result-content {
+  min-width: 0;
+}
+
+.vote-submit-result-title {
+  margin: 0;
+  font-size: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.vote-submit-result-content .muted {
+  margin-top: 4px;
+}
+
+.vote-status-details {
+  border: 1px solid rgba(29, 26, 20, 0.14);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.vote-status-details-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+}
+
+.vote-status-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.vote-status-details-summary::after {
+  content: '\25be';
+  font-size: 12px;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.vote-status-details[open] .vote-status-details-summary::after {
+  transform: rotate(180deg);
+}
+
+.vote-status-details-label-wrap {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vote-status-details-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.vote-status-details-meta {
+  text-transform: none;
+}
+
+.vote-status-details-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(29, 26, 20, 0.1);
+}
+
+.vote-status-id-row {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.vote-status-id-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.vote-status-id-actions .output-scroll {
+  margin: 0;
 }
 
 .registration-status-guide {
