@@ -32,7 +32,7 @@ const CONFIG = {
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
-  selfAppName: String(env.VITE_SELF_APP_NAME || 'Open Citizen Census').trim(),
+  selfAppName: String(env.VITE_SELF_APP_NAME || 'Ask the World').trim(),
 };
 
 const ACTIVE_NETWORK = NETWORKS[CONFIG.network] || NETWORKS.celo;
@@ -110,8 +110,8 @@ const PROCESS_STATUS_INFO = {
 };
 const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
 const INTERNAL_RPC_RETRY_DELAY_MS = 1_500;
-const DEFAULT_DOCUMENT_TITLE = 'Open Citizen Census';
-const CREATE_HEADER_TITLE = 'Official-ID Voting Process Creator';
+const DEFAULT_DOCUMENT_TITLE = 'Ask the World';
+const CREATE_HEADER_TITLE = 'What do you want to decide?';
 const VOTE_HEADER_TITLE = 'Official-ID Voting Process';
 
 const HUB_INTERFACE = new Interface([
@@ -158,7 +158,7 @@ const state = {
     contextPresent: false,
     contextValid: false,
   },
-  createStep: 1,
+
   createSubmitting: false,
   createFormDirty: false,
   pipeline: PIPELINE_STAGES.map((stage) => ({
@@ -240,16 +240,10 @@ const timelineEl = document.getElementById('timeline');
 const createTimelineCard = document.getElementById('createTimelineCard');
 const createOutputsCard = document.getElementById('createOutputsCard');
 
-const stepPanels = Array.from(document.querySelectorAll('[data-step-panel]'));
-const stepIndicators = Array.from(document.querySelectorAll('[data-step-indicator]'));
-const stepBackBtn = document.getElementById('stepBackBtn');
-const stepNextBtn = document.getElementById('stepNextBtn');
-
 const countryInput = document.getElementById('country');
 const minAgeInput = document.getElementById('minAge');
 const scopeSeedInput = document.getElementById('scopeSeed');
 const processTitleInput = document.getElementById('processTitle');
-const processDescriptionInput = document.getElementById('processDescription');
 const maxVotersInput = document.getElementById('maxVoters');
 const startDateInput = document.getElementById('startDate');
 const durationHoursInput = document.getElementById('durationHours');
@@ -422,10 +416,6 @@ function renderHeaderTitle() {
 }
 
 function applyStaticButtonIcons() {
-  setButtonLabel(addQuestionButton, 'Add question', 'iconoir-plus');
-  setButtonLabel(stepBackBtn, 'Back', 'iconoir-nav-arrow-left');
-  setButtonLabel(stepNextBtn, 'Continue', 'iconoir-nav-arrow-right');
-  setButtonLabel(createButton, 'Launch Process', 'iconoir-nav-arrow-right');
   if (showVoteDetailsBtn) setButtonLabel(showVoteDetailsBtn, 'Details', 'iconoir-info-circle');
   if (closeVoteDetailsBtn) setButtonLabel(closeVoteDetailsBtn, 'Close', 'iconoir-xmark');
   setButtonLabel(copyKeyBtn, 'Copy private key', 'iconoir-copy');
@@ -762,9 +752,9 @@ function isCreatorWalletConnected() {
 function renderWalletButtons() {
   const creatorConnected = isCreatorWalletConnected();
 
-  setButtonLabel(connectCreatorWalletBtn, creatorConnected ? 'Disconnect wallet' : 'Connect wallet', creatorConnected ? 'iconoir-log-out' : 'iconoir-wallet');
+  setButtonLabel(connectCreatorWalletBtn, creatorConnected ? 'Disconnect' : 'Connect', creatorConnected ? 'iconoir-log-out' : 'iconoir-wallet');
   connectCreatorWalletBtn.classList.toggle('disconnect', creatorConnected);
-  renderWizard();
+  renderCreateForm();
 }
 
 function normalizeProcessId(value) {
@@ -809,10 +799,8 @@ function sanitizeControlAscii(control) {
 
 function sanitizeCreateFormAsciiInputs() {
   const controls = [
-    scopeSeedInput,
     processTitleInput,
-    processDescriptionInput,
-    ...Array.from(questionList.querySelectorAll('.question-title, .question-description, .choice-input')),
+    ...Array.from(questionList.querySelectorAll('.option-input')),
   ];
   return controls.some((control) => sanitizeControlAscii(control));
 }
@@ -1318,233 +1306,134 @@ function ensureCreateDefaults() {
   }
 }
 
-function renderWizard() {
-  const walletLocked = !isCreatorWalletConnected();
-  const createFormLocked = walletLocked || state.createSubmitting;
+function generateScopeSeed(country, minAge) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = randomBytes(5);
+  let random = '';
+  for (let i = 0; i < 5; i++) {
+    random += chars[bytes[i] % chars.length];
+  }
+  return `${normalizeCountry(country)}_${minAge}_${random}`;
+}
 
-  createForm.querySelectorAll('input, textarea, select').forEach((control) => {
+function renderCreateForm() {
+  const createFormLocked = state.createSubmitting;
+
+  createForm.querySelectorAll('input:not([type=hidden]), textarea, select').forEach((control) => {
     control.disabled = createFormLocked;
   });
 
-  for (const panel of stepPanels) {
-    const step = Number(panel.dataset.stepPanel);
-    panel.hidden = step !== state.createStep;
-  }
-
-  for (const indicator of stepIndicators) {
-    const step = Number(indicator.dataset.stepIndicator);
-    indicator.dataset.active = step === state.createStep ? 'true' : 'false';
-    indicator.dataset.done = step < state.createStep ? 'true' : 'false';
-    indicator.disabled = walletLocked || step > state.createStep || state.createSubmitting;
-    if (step === state.createStep) {
-      indicator.setAttribute('aria-current', 'step');
-    } else {
-      indicator.removeAttribute('aria-current');
-    }
-  }
-
-  stepBackBtn.disabled = walletLocked || state.createStep === 1 || state.createSubmitting;
-  stepBackBtn.hidden = stepBackBtn.disabled;
-  stepNextBtn.hidden = state.createStep === 3;
-  createButton.hidden = state.createStep !== 3;
-  stepNextBtn.disabled = walletLocked || state.createSubmitting;
-  createButton.disabled = walletLocked || state.createSubmitting;
-
-  refreshQuestionIndices();
+  createButton.disabled = createFormLocked;
+  refreshOptionIndices();
 }
 
-function showStep(step) {
-  state.createStep = Math.min(3, Math.max(1, step));
-  renderWizard();
-}
-
-function validateStepOne() {
+function validateCreateForm() {
   const country = normalizeCountry(countryInput.value);
   const minAge = normalizeMinAge(minAgeInput.value);
-  const scopeSeed = normalizeScope(scopeSeedInput.value);
-
-  if (!/^[A-Z]{2,3}$/.test(country)) {
-    throw new Error('Country must be an ISO alpha-2 or alpha-3 code.');
-  }
-  if (!minAge) {
-    throw new Error('Minimum age must be between 1 and 99.');
-  }
-  if (!scopeSeed || scopeSeed.length > 31) {
-    throw new Error('Scope seed must contain between 1 and 31 characters.');
-  }
-  ensureAsciiField(scopeSeed, 'Scope seed');
-  if (!state.creatorWallet.address) {
-    throw new Error('Connect the creator browser wallet before continuing.');
-  }
-}
-
-function validateStepTwo() {
   const title = String(processTitleInput.value || '').trim();
-  const description = String(processDescriptionInput.value || '').trim();
   const maxVoters = Number(maxVotersInput.value);
   const durationHours = Number(durationHoursInput.value);
 
   if (!title) {
-    throw new Error('Process title is required.');
+    throw new Error('Please type your question above.');
   }
-  ensureAsciiField(title, 'Process title');
-  ensureAsciiField(description, 'Process description');
+  ensureAsciiField(title, 'Question');
+  if (!/^[A-Z]{2,3}$/.test(country)) {
+    throw new Error('Please select a country.');
+  }
+  if (!minAge) {
+    throw new Error('Minimum age must be between 1 and 99.');
+  }
   if (!Number.isFinite(maxVoters) || maxVoters <= 0) {
     throw new Error('Maximum voters must be a positive number.');
   }
-  if (!Number.isFinite(durationHours) || durationHours <= 0) {
-    throw new Error('Duration must be a positive number of hours.');
+  if (!Number.isFinite(durationHours) || durationHours < 1) {
+    throw new Error('Duration must be at least 1 hour.');
+  }
+
+  const options = parseOptions();
+  if (options.length < 2) {
+    throw new Error('Add at least two options.');
   }
 }
 
-function validateStepThree() {
-  const questions = parseQuestions();
-  if (!questions.length) {
-    throw new Error('Add at least one question.');
-  }
-}
-
-function validateCurrentStep() {
-  if (state.createStep === 1) validateStepOne();
-  if (state.createStep === 2) validateStepTwo();
-  if (state.createStep === 3) validateStepThree();
-}
-
-function createChoiceRow(value = '') {
+function createOptionRow(value = '', placeholder = '') {
   const row = document.createElement('div');
-  row.className = 'choice-row';
+  row.className = 'option-row';
   row.innerHTML = `
-    <input type="text" class="choice-input" autocomplete="off" placeholder="Choice label…" />
-    <button type="button" class="ghost" data-action="remove-choice">Remove</button>
+    <input type="text" class="option-input" autocomplete="off" placeholder="${placeholder}" />
+    <button type="button" class="option-remove-btn" data-action="remove-option" title="Remove">✕</button>
   `;
-  row.querySelector('.choice-input').value = value;
+  row.querySelector('.option-input').value = value;
   return row;
 }
 
-function updateChoiceControls(card) {
-  const createFormLocked = !isCreatorWalletConnected() || state.createSubmitting;
-  const rows = card.querySelectorAll('.choice-row');
-  const removeButtons = card.querySelectorAll('[data-action="remove-choice"]');
-  removeButtons.forEach((button) => {
-    button.disabled = createFormLocked || rows.length <= 2;
+function refreshOptionIndices() {
+  const createFormLocked = state.createSubmitting;
+  const rows = Array.from(questionList.querySelectorAll('.option-row'));
+  rows.forEach((row, index) => {
+    const removeButton = row.querySelector('[data-action="remove-option"]');
+    const input = row.querySelector('.option-input');
+    if (!input.placeholder || input.placeholder.startsWith('Option ')) {
+      input.placeholder = `Option ${index + 1}`;
+    }
+    removeButton.disabled = createFormLocked || rows.length <= 2;
   });
+  addQuestionButton.disabled = createFormLocked || rows.length >= MAX_QUESTIONS * 10;
 }
 
-function createQuestionCard() {
-  const card = document.createElement('article');
-  card.className = 'question-card';
-  card.innerHTML = `
-    <div class="question-head">
-      <strong class="question-index">Question</strong>
-      <button type="button" class="ghost" data-action="remove-question">Remove</button>
-    </div>
-    <label>
-      Title
-      <input type="text" class="question-title" placeholder="What should this process decide?…" autocomplete="off" required />
-    </label>
-    <label>
-      Description
-      <textarea class="question-description" rows="2" autocomplete="off" placeholder="Optional context…"></textarea>
-    </label>
-    <div class="choice-list" data-choices></div>
-    <div class="row">
-      <button type="button" class="ghost" data-action="add-choice">Add choice</button>
-    </div>
-  `;
-
-  const choices = card.querySelector('[data-choices]');
-  choices.append(createChoiceRow('Yes'));
-  choices.append(createChoiceRow('No'));
-  updateChoiceControls(card);
-  return card;
-}
-
-function refreshQuestionIndices() {
-  const createFormLocked = !isCreatorWalletConnected() || state.createSubmitting;
-  const cards = Array.from(questionList.querySelectorAll('.question-card'));
-  cards.forEach((card, index) => {
-    const title = card.querySelector('.question-index');
-    const removeButton = card.querySelector('[data-action="remove-question"]');
-    title.textContent = `Question ${index + 1}`;
-    removeButton.disabled = createFormLocked || cards.length <= 1;
-    updateChoiceControls(card);
-  });
-  addQuestionButton.disabled = createFormLocked || cards.length >= MAX_QUESTIONS;
-}
-
-function initQuestions() {
+function initOptions() {
   questionList.innerHTML = '';
-  questionList.append(createQuestionCard());
-  refreshQuestionIndices();
+  questionList.append(createOptionRow('', 'Option 1'));
+  questionList.append(createOptionRow('', 'Option 2'));
+  refreshOptionIndices();
 
   addQuestionButton.addEventListener('click', () => {
-    const cards = questionList.querySelectorAll('.question-card');
-    if (cards.length >= MAX_QUESTIONS) return;
-    questionList.append(createQuestionCard());
-    refreshQuestionIndices();
+    const rows = questionList.querySelectorAll('.option-row');
+    questionList.append(createOptionRow('', `Option ${rows.length + 1}`));
+    refreshOptionIndices();
   });
 
   questionList.addEventListener('click', (event) => {
     const actionTarget = event.target.closest('[data-action]');
     if (!actionTarget) return;
-
-    const card = actionTarget.closest('.question-card');
-    if (!card) return;
     const action = actionTarget.dataset.action;
 
-    if (action === 'add-choice') {
-      card.querySelector('[data-choices]').append(createChoiceRow(''));
-      updateChoiceControls(card);
-      return;
-    }
-
-    if (action === 'remove-choice') {
-      const row = actionTarget.closest('.choice-row');
+    if (action === 'remove-option') {
+      const row = actionTarget.closest('.option-row');
       if (row) row.remove();
-      updateChoiceControls(card);
-      return;
-    }
-
-    if (action === 'remove-question') {
-      card.remove();
-      refreshQuestionIndices();
+      refreshOptionIndices();
     }
   });
 }
 
-function parseQuestions() {
-  const cards = Array.from(questionList.querySelectorAll('.question-card'));
-  if (!cards.length) {
-    throw new Error('Add at least one question.');
-  }
-  if (cards.length > MAX_QUESTIONS) {
-    throw new Error(`Maximum ${MAX_QUESTIONS} questions are allowed per process.`);
-  }
-
-  return cards.map((card, questionIndex) => {
-    const title = String(card.querySelector('.question-title')?.value || '').trim();
+function parseOptions() {
+  const inputs = Array.from(questionList.querySelectorAll('.option-input'));
+  const options = inputs.map((input, index) => {
+    const title = String(input.value || '').trim();
     if (!title) {
-      throw new Error(`Question ${questionIndex + 1} needs a title.`);
+      throw new Error(`Option ${index + 1} is empty.`);
     }
-    ensureAsciiField(title, `Question ${questionIndex + 1} title`);
-
-    const description = String(card.querySelector('.question-description')?.value || '').trim();
-    ensureAsciiField(description, `Question ${questionIndex + 1} description`);
-    const choices = Array.from(card.querySelectorAll('.choice-input')).map((input, choiceIndex) => {
-      const choiceTitle = String(input.value || '').trim();
-      if (!choiceTitle) {
-        throw new Error(`Question ${questionIndex + 1} has an empty choice.`);
-      }
-      ensureAsciiField(choiceTitle, `Question ${questionIndex + 1} choice ${choiceIndex + 1}`);
-      return { title: choiceTitle, value: choiceIndex };
-    });
-
-    if (choices.length < 2) {
-      throw new Error(`Question ${questionIndex + 1} needs at least two choices.`);
-    }
-
-    return { title, description, choices };
+    ensureAsciiField(title, `Option ${index + 1}`);
+    return { title, value: index };
   });
+
+  if (options.length < 2) {
+    throw new Error('Add at least two options.');
+  }
+
+  return options;
+}
+
+function parseQuestions() {
+  const title = String(processTitleInput.value || '').trim();
+  if (!title) {
+    throw new Error('Please type your question.');
+  }
+  ensureAsciiField(title, 'Question');
+
+  const options = parseOptions();
+  return [{ title, description: '', choices: options }];
 }
 
 function buildBallotFromQuestions(questions) {
@@ -1567,34 +1456,30 @@ function buildBallotFromQuestions(questions) {
 function collectCreateFormValues() {
   const country = normalizeCountry(countryInput.value);
   const minAge = normalizeMinAge(minAgeInput.value);
-  const scopeSeed = normalizeScope(scopeSeedInput.value);
   const title = String(processTitleInput.value || '').trim();
-  const description = String(processDescriptionInput.value || '').trim();
+  const description = '';
   const maxVoters = Number(maxVotersInput.value);
   const durationHours = Number(durationHoursInput.value);
   const startRaw = String(startDateInput.value || '').trim();
 
+  if (!title) {
+    throw new Error('Please type your question.');
+  }
+  ensureAsciiField(title, 'Question');
   if (!/^[A-Z]{2,3}$/.test(country)) {
-    throw new Error('Country must be ISO alpha-2 or alpha-3 uppercase.');
+    throw new Error('Please select a country.');
   }
   if (!minAge) {
     throw new Error('Minimum age must be between 1 and 99.');
   }
-  if (!scopeSeed || scopeSeed.length > 31) {
-    throw new Error('Scope seed must contain 1-31 characters.');
-  }
-  ensureAsciiField(scopeSeed, 'Scope seed');
-  if (!title) {
-    throw new Error('Process title is required.');
-  }
-  ensureAsciiField(title, 'Process title');
-  ensureAsciiField(description, 'Process description');
   if (!Number.isFinite(maxVoters) || maxVoters <= 0) {
     throw new Error('Maximum voters must be a positive number.');
   }
-  if (!Number.isFinite(durationHours) || durationHours <= 0) {
-    throw new Error('Duration must be greater than 0 hours.');
+  if (!Number.isFinite(durationHours) || durationHours < 1) {
+    throw new Error('Duration must be at least 1 hour.');
   }
+
+  const scopeSeed = generateScopeSeed(country, minAge);
 
   let startDate = startRaw ? new Date(startRaw) : new Date(Date.now() + 10 * 60 * 1000);
   if (Number.isNaN(startDate.getTime()) || startDate.getTime() < Date.now()) {
@@ -1723,7 +1608,7 @@ async function createWalletConnectProvider() {
     optionalChains,
     showQrModal: true,
     metadata: {
-      name: 'Open Citizen Census',
+      name: 'Ask the World',
       description: 'Create and vote on census-based processes',
       url: window.location.origin,
       icons: [],
@@ -1788,7 +1673,7 @@ async function disconnectWalletConnection() {
   state.creatorWallet.address = '';
   creatorWalletAddressEl.textContent = 'Wallet not connected yet...';
   creatorWalletStatusEl.textContent = CREATOR_WALLET_STATUS_DEFAULT;
-  setCreateStatus('Creator wallet disconnected.');
+
 
   renderWalletButtons();
 }
@@ -1862,7 +1747,7 @@ async function connectCreatorWallet() {
   try {
     creatorWalletStatusEl.textContent = 'Connecting browser wallet...';
     await connectBrowserWallet();
-    setCreateStatus('Creator wallet connected. Continue with step 2.');
+
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect creator wallet.';
     creatorWalletStatusEl.textContent = message;
@@ -2192,25 +2077,18 @@ async function waitProcessReadyInSequencer(ctx) {
 function setCreateSubmitting(isSubmitting) {
   state.createSubmitting = isSubmitting;
   createButton.disabled = isSubmitting;
-  setButtonLabel(createButton, isSubmitting ? 'Launching...' : 'Launch Process', isSubmitting ? 'iconoir-refresh' : 'iconoir-nav-arrow-right');
-  stepNextBtn.disabled = isSubmitting;
-  stepBackBtn.disabled = isSubmitting || state.createStep === 1;
-  renderWizard();
+  renderCreateForm();
   renderCreateAuxiliaryPanels();
 }
 
 async function handleCreateSubmit(event) {
   event.preventDefault();
   if (state.createSubmitting) return;
-  if (state.createStep !== 3) {
-    setCreateStatus('Complete all steps before launching the process.', true);
-    return;
-  }
 
   try {
-    validateStepThree();
+    validateCreateForm();
   } catch (error) {
-    setCreateStatus(error instanceof Error ? error.message : 'Invalid questions.', true);
+    setCreateStatus(error instanceof Error ? error.message : 'Invalid form.', true);
     return;
   }
 
@@ -2433,7 +2311,12 @@ function updateVoteSelfControls() {
 
   renderVoteSelfRegistrationLockState();
   maybeAutoGenerateVoteSelfQr();
+  renderVoteSelfRegistrationLockState();
+  maybeAutoGenerateVoteSelfQr();
+  
+  // CRIICAL: Call updateVoteBallotControls because visibility of Self card now depends on Readiness
   updateVoteBallotControls();
+  
   renderRegistrationStatusTimeline();
 }
 
@@ -2833,6 +2716,8 @@ function clearVoteBallot(message) {
   updateVoteBallotControls();
 }
 
+
+
 function hasVoteReadiness() {
   if (isVoteProcessClosed()) return false;
   const sequencerReady = state.voteResolution.sequencerWeight > 0n;
@@ -2917,6 +2802,8 @@ function updateVoteBallotControls() {
   const hasManagedWallet = Boolean(state.voteManaged.wallet?.privateKey);
   const hasQuestions = state.voteBallot.questions.length > 0;
   const processClosed = isVoteProcessClosed();
+  const isReady = hasVoteReadiness();
+  const hasVoted = state.voteBallot.hasVoted;
   const overwriteAllowed = canOverwriteVote();
   const hasStoredVote = hasStoredVoteId();
   const terminalStoredVote = hasStoredVote && isVoteStatusTerminal(state.voteBallot.submissionStatus);
@@ -2928,11 +2815,22 @@ function updateVoteBallotControls() {
   const canSubmit = hasProcess
     && hasManagedWallet
     && !processClosed
-    && hasVoteReadiness()
+    && isReady
     && hasQuestions
     && hasAllChoices
     && !state.voteBallot.submitting
     && overwriteAllowed;
+
+  // Unified Flow Logic
+  if (voteSelfCardEl) {
+    voteSelfCardEl.hidden = isReady || hasVoted || processClosed;
+  }
+  if (voteBallotCardEl) {
+    voteBallotCardEl.hidden = !isReady && !hasVoted && !processClosed;
+  }
+  if (voteQuestionsEl) {
+    voteQuestionsEl.hidden = !hasQuestions;
+  }
 
   if (emitVoteBtn) {
     emitVoteBtn.disabled = !canSubmit;
@@ -3214,7 +3112,7 @@ async function generateVoteSelfQr() {
     };
 
     const selfApp = buildSelfApp({
-      appName: CONFIG.selfAppName || 'Open Citizen Census',
+      appName: CONFIG.selfAppName || 'Ask the World',
       scope: scopeSeed,
       endpoint: String(contractAddress).toLowerCase(),
       endpointType: toSelfEndpointType(),
@@ -3968,34 +3866,11 @@ function initVoteActions() {
 }
 
 function initWizardActions() {
-  stepIndicators.forEach((indicator) => {
-    indicator.addEventListener('click', () => {
-      const targetStep = Number(indicator.dataset.stepIndicator || '1');
-      if (targetStep < state.createStep) {
-        showStep(targetStep);
-      }
-    });
-  });
-
-  stepBackBtn.addEventListener('click', () => {
-    if (state.createStep > 1) showStep(state.createStep - 1);
-  });
-
-  stepNextBtn.addEventListener('click', () => {
-    try {
-      validateCurrentStep();
-      showStep(state.createStep + 1);
-      setCreateStatus('');
-    } catch (error) {
-      setCreateStatus(error instanceof Error ? error.message : 'Step validation failed.', true);
-    }
-  });
-
   connectCreatorWalletBtn.addEventListener('click', handleCreatorWalletButton);
 }
 
 function initQuestionActions() {
-  initQuestions();
+  initOptions();
 }
 
 function validateBootConfig() {
@@ -4008,8 +3883,6 @@ function validateBootConfig() {
 
   if (missing.length) {
     setCreateStatus(`Missing env vars: ${missing.join(', ')}`, true);
-  } else {
-    setCreateStatus('Environment looks good. Connect wallet to unlock the create form.');
   }
 }
 
@@ -4034,7 +3907,7 @@ function init() {
   if (copyVoteUrlBtn) {
     copyVoteUrlBtn.addEventListener('click', copyVoteUrlToClipboard);
   }
-  showStep(1);
+  renderCreateForm();
 
   createForm.addEventListener('submit', handleCreateSubmit);
   createForm.addEventListener('input', () => {

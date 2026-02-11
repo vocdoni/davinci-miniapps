@@ -3,146 +3,161 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Open Citizen Census</title>
+    <title>Ask the World</title>
     <meta name="description" content="Official-ID Voting Process Creator powered by DAVINCI" />
     <link href="https://framerusercontent.com/images/xMROZlh3hRAVfVNJpALYIkrg98.svg" rel="icon" media="(prefers-color-scheme: light)" />
     <link href="https://framerusercontent.com/images/juixxd0l5rADVORefaZSgWJ2s.png" rel="icon" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Open Citizen Census" />
+    <meta property="og:title" content="Ask the World" />
     <meta property="og:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
     <meta property="og:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Open Citizen Census" />
+    <meta name="twitter:title" content="Ask the World" />
     <meta name="twitter:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
     <meta name="twitter:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
   </head>
   <body>
+    <nav class="app-navbar" id="appNavbar">
+      <a href="/" class="navbar-brand" id="navbarBrand">
+        <img class="navbar-logo" src="./assets/davinci_logo.png" alt="Davinci logo" />
+        <span>Ask the World</span>
+      </a>
+      <div class="navbar-actions">
+        <button id="connectCreatorWalletBtn" type="button" class="navbar-wallet-btn">
+          <span class="iconoir-wallet btn-icon" aria-hidden="true"></span>
+          <span>Connect</span>
+        </button>
+      </div>
+    </nav>
+
     <div class="app-shell">
-      <header class="app-header">
-        <div>
-          <p class="eyebrow">Open Citizen Census</p>
-          <h1 id="appHeaderTitle">Official-ID Voting Process Creator</h1>
-        </div>
+      <header class="app-header" id="appHeader">
+        <h1 id="appHeaderTitle">What do you want to decide?</h1>
       </header>
 
       <main id="mainContent">
         <section id="createView" class="view" hidden>
-          <article class="card">
-            <div class="card-head">
-              <h2>Create Process</h2>
-              <p class="muted">
-                Three-step flow: census parameters, process information, and questions.
-              </p>
+          <form id="createForm" class="create-form">
+
+            <input
+              id="processTitle"
+              name="process_title"
+              class="hero-input"
+              autocomplete="off"
+              type="text"
+              placeholder="Type your question here..."
+              required
+            />
+
+            <section class="options-section">
+              <h2 class="options-title">The Options</h2>
+              <div id="questionList" class="options-list"></div>
+              <button id="addQuestion" type="button" class="add-option-btn">+ Add a new option</button>
+            </section>
+
+            <h2 class="options-title">Who can vote?</h2>
+
+            <div class="setting-cards">
+              <div class="setting-card" title="Select the country where voters must be citizens">
+                <span class="setting-label">Country</span>
+                <select id="country" name="country" class="setting-value" required>
+                  <option value="" disabled selected>Select a country…</option>
+                  <option value="ARG">Argentina (ARG)</option>
+                  <option value="AUS">Australia (AUS)</option>
+                  <option value="AUT">Austria (AUT)</option>
+                  <option value="BEL">Belgium (BEL)</option>
+                  <option value="BRA">Brazil (BRA)</option>
+                  <option value="CAN">Canada (CAN)</option>
+                  <option value="CHE">Switzerland (CHE)</option>
+                  <option value="CHL">Chile (CHL)</option>
+                  <option value="CHN">China (CHN)</option>
+                  <option value="COL">Colombia (COL)</option>
+                  <option value="CZE">Czech Republic (CZE)</option>
+                  <option value="DEU">Germany (DEU)</option>
+                  <option value="DNK">Denmark (DNK)</option>
+                  <option value="ESP">Spain (ESP)</option>
+                  <option value="EST">Estonia (EST)</option>
+                  <option value="FIN">Finland (FIN)</option>
+                  <option value="FRA">France (FRA)</option>
+                  <option value="GBR">United Kingdom (GBR)</option>
+                  <option value="GRC">Greece (GRC)</option>
+                  <option value="HUN">Hungary (HUN)</option>
+                  <option value="IND">India (IND)</option>
+                  <option value="IRL">Ireland (IRL)</option>
+                  <option value="ISL">Iceland (ISL)</option>
+                  <option value="ISR">Israel (ISR)</option>
+                  <option value="ITA">Italy (ITA)</option>
+                  <option value="JPN">Japan (JPN)</option>
+                  <option value="KOR">South Korea (KOR)</option>
+                  <option value="LTU">Lithuania (LTU)</option>
+                  <option value="LUX">Luxembourg (LUX)</option>
+                  <option value="LVA">Latvia (LVA)</option>
+                  <option value="MEX">Mexico (MEX)</option>
+                  <option value="NLD">Netherlands (NLD)</option>
+                  <option value="NOR">Norway (NOR)</option>
+                  <option value="NZL">New Zealand (NZL)</option>
+                  <option value="PER">Peru (PER)</option>
+                  <option value="POL">Poland (POL)</option>
+                  <option value="PRT">Portugal (PRT)</option>
+                  <option value="ROU">Romania (ROU)</option>
+                  <option value="SGP">Singapore (SGP)</option>
+                  <option value="SVK">Slovakia (SVK)</option>
+                  <option value="SVN">Slovenia (SVN)</option>
+                  <option value="SWE">Sweden (SWE)</option>
+                  <option value="THA">Thailand (THA)</option>
+                  <option value="TUR">Turkey (TUR)</option>
+                  <option value="TWN">Taiwan (TWN)</option>
+                  <option value="USA">United States (USA)</option>
+                  <option value="ZAF">South Africa (ZAF)</option>
+                </select>
+              </div>
+              <div class="setting-card" title="Minimum age required to vote">
+                <span class="setting-label">Minimum age to vote</span>
+                <div class="setting-value-row">
+                  <input id="minAge" name="min_age" class="setting-value-input" autocomplete="off" type="number" min="1" max="99" value="18" required />
+                  <span class="setting-value-suffix">+</span>
+                </div>
+              </div>
+              <div class="setting-card" title="How long the voting process will remain open">
+                <span class="setting-label">Vote duration</span>
+                <div class="setting-value-row">
+                  <input id="durationHours" name="duration_hours" class="setting-value-input" autocomplete="off" type="number" min="1" value="24" required />
+                  <span class="setting-value-suffix">Hours</span>
+                </div>
+              </div>
             </div>
 
-            <div class="wallet-box">
-              <div>
-                <p class="value" id="creatorWalletAddress">Wallet not connected yet...</p>
-                <p class="muted" id="creatorWalletStatus">Connect MetaMask or another browser wallet. WalletConnect is used when no extension wallet is detected.</p>
+            <!-- Hidden fields for auto-generated values -->
+            <input id="scopeSeed" type="hidden" name="scope_seed" />
+            <input id="startDate" type="hidden" name="start_datetime" />
+
+            <details class="advanced-details" id="advancedDetails">
+              <summary class="advanced-summary">▾ Advanced Settings</summary>
+              <div class="advanced-body">
+                <div class="advanced-field">
+                  <span class="advanced-field-label">Maximum voters</span>
+                  <input id="maxVoters" name="max_voters" class="advanced-field-input" autocomplete="off" type="number" min="1" value="1000000" required />
+                  <span class="advanced-field-helper">Limit the number of participants.</span>
+                </div>
               </div>
-              <button id="connectCreatorWalletBtn" type="button" class="secondary">Connect wallet</button>
+            </details>
+
+            <div class="create-actions">
+              <p id="createStatus" class="status" aria-live="polite"></p>
+              <button id="createBtn" type="submit" class="cta-btn">
+                <span>Create the voting process</span>
+                <span class="cta-arrow">→</span>
+              </button>
             </div>
 
-            <ol class="stepper" id="createStepper">
-              <li>
-                <button type="button" class="step-chip" data-step-indicator="1">
-                  <span class="step-icon iconoir-globe" aria-hidden="true"></span>
-                  <span>Census</span>
-                </button>
-              </li>
-              <li>
-                <button type="button" class="step-chip" data-step-indicator="2">
-                  <span class="step-icon iconoir-settings" aria-hidden="true"></span>
-                  <span>Process</span>
-                </button>
-              </li>
-              <li>
-                <button type="button" class="step-chip" data-step-indicator="3">
-                  <span class="step-icon iconoir-chat-bubble" aria-hidden="true"></span>
-                  <span>Questions</span>
-                </button>
-              </li>
-            </ol>
+            <!-- Wallet status (hidden, used by JS) -->
+            <p id="creatorWalletAddress" hidden></p>
+            <p id="creatorWalletStatus" hidden></p>
 
-            <form id="createForm" class="wizard">
-              <section class="step-panel" data-step-panel="1">
-                <h3>Census Parameters</h3>
-
-                <div class="grid two">
-                  <label>
-                    Country (ISO alpha-2/3)
-                    <input id="country" name="country" autocomplete="off" type="text" maxlength="3" placeholder="ESP…" required />
-                  </label>
-                  <label>
-                    Minimum age
-                    <input id="minAge" name="min_age" autocomplete="off" type="number" min="1" max="99" value="18" required />
-                  </label>
-                </div>
-
-                <p class="field-helper">
-                  Use two or three-letter uppercase code.
-                  <a class="field-link" href="https://docs.self.xyz/use-self/self-map-countries-list" target="_blank" rel="noreferrer">
-                    View the supported country codes.
-                  </a>
-                </p>
-
-                <label>
-                  Scope seed
-                  <input id="scopeSeed" name="scope_seed" autocomplete="off" type="text" maxlength="31" placeholder="open-citizen-census…" required />
-                </label>
-
-              </section>
-
-              <section class="step-panel" data-step-panel="2" hidden>
-                <h3>Process Information</h3>
-
-                <div class="grid two">
-                  <label>
-                    Process title
-                    <input id="processTitle" name="process_title" autocomplete="off" type="text" placeholder="Community budget vote…" required />
-                  </label>
-                  <label>
-                    Maximum voters
-                    <input id="maxVoters" name="max_voters" autocomplete="off" type="number" min="1" value="10000" required />
-                  </label>
-                </div>
-
-                <label>
-                  Process description
-                  <textarea id="processDescription" name="process_description" autocomplete="off" rows="2" placeholder="Optional context for voters…"></textarea>
-                </label>
-
-                <div class="grid two">
-                  <label>
-                    Start datetime
-                    <input id="startDate" name="start_datetime" autocomplete="off" type="datetime-local" />
-                  </label>
-                  <label>
-                    Duration (hours)
-                    <input id="durationHours" name="duration_hours" autocomplete="off" type="number" min="1" value="24" required />
-                  </label>
-                </div>
-              </section>
-
-              <section class="step-panel" data-step-panel="3" hidden>
-                <div class="section-head">
-                  <h3>Questions</h3>
-                  <button id="addQuestion" type="button" class="secondary">Add question</button>
-                </div>
-                <p class="muted">Add at least one question with two or more choices.</p>
-                <div id="questionList"></div>
-              </section>
-
-              <div class="wizard-actions">
-                <button id="stepBackBtn" type="button" class="ghost">Back</button>
-                <button id="stepNextBtn" type="button" class="secondary">Continue</button>
-                <button id="createBtn" type="submit">Launch Process</button>
-              </div>
-            </form>
-          </article>
+          </form>
 
           <article class="card" id="createTimelineCard" hidden>
-            <h3>Process Creation Status</h3>
+            <h3>Creation Progress</h3>
             <ol id="timeline" class="timeline"></ol>
             <div id="timelineVoteUrlWrap" class="timeline-vote-url" hidden>
               <div class="output-link-actions">
@@ -150,7 +165,6 @@
                 <button id="copyVoteUrlBtn" type="button" class="ghost" disabled>Copy link</button>
               </div>
             </div>
-            <p id="createStatus" class="status" aria-live="polite">Fill in the form and run the pipeline.</p>
           </article>
 
           <article class="card" id="createOutputsCard" hidden>
