@@ -55,7 +55,7 @@
             />
 
             <section class="options-section">
-              <h2 class="options-title">The Options</h2>
+              <h2 class="options-title">The options</h2>
               <div id="questionList" class="options-list"></div>
               <button id="addQuestion" type="button" class="add-option-btn">+ Add a new option</button>
             </section>
@@ -171,42 +171,65 @@
 
           </form>
 
-          <article class="card" id="createTimelineCard" hidden>
-            <h3>Creation Progress</h3>
-            <ol id="timeline" class="timeline"></ol>
-            <div id="timelineVoteUrlWrap" class="timeline-vote-url" hidden>
-              <div class="output-link-actions">
-                <a id="outVoteUrl" class="timeline-vote-link" href="#" target="_blank" rel="noopener noreferrer">-</a>
-                <button id="copyVoteUrlBtn" type="button" class="ghost" disabled>Copy link</button>
+          <div id="createOverlay" class="create-overlay" hidden>
+            <details class="card collapsible-card" id="createTimelineCard" hidden>
+              <summary class="collapsible-summary">
+                <span id="createSpinner" class="timeline-spinner" aria-hidden="true" hidden></span>
+                Creation Progress
+              </summary>
+              <div class="collapsible-body">
+                <ol id="timeline" class="timeline"></ol>
               </div>
-            </div>
-          </article>
+            </details>
 
-          <article class="card" id="createOutputsCard" hidden>
-            <h3>Final details</h3>
-            <dl class="outputs">
-              <div id="outputContractItem" class="output-item" hidden>
-                <dt>Census contract</dt>
-                <dd id="outContract" class="output-scroll">-</dd>
+            <article class="card success-card" id="createOutputsCard" hidden>
+              <div class="success-header">
+                <span class="iconoir-check-circle success-icon"></span>
+                <h2>Your voting process is live and ready for the world.</h2>
               </div>
-              <div id="outputDeployTxItem" class="output-item" hidden>
-                <dt>Deployment tx</dt>
-                <dd id="outDeployTx" class="output-scroll">-</dd>
+
+              <div class="vote-link-wrapper">
+                <label class="vote-link-label">Share this link to start collecting votes</label>
+                <div class="vote-link-box">
+                  <a id="outVoteUrl" class="vote-link-text" href="#" target="_blank" rel="noopener noreferrer">-</a>
+                  <button id="copyVoteUrlBtn" type="button" class="icon-btn" title="Copy link">
+                    <span class="iconoir-copy"></span>
+                  </button>
+                </div>
               </div>
-              <div id="outputCensusUriItem" class="output-item" hidden>
-                <dt>Census URI</dt>
-                <dd id="outCensusUri" class="output-scroll">-</dd>
-              </div>
-              <div id="outputProcessIdItem" class="output-item" hidden>
-                <dt>Process ID</dt>
-                <dd id="outProcessId" class="output-scroll">-</dd>
-              </div>
-              <div id="outputProcessTxItem" class="output-item" hidden>
-                <dt>Process tx</dt>
-                <dd id="outProcessTx" class="output-scroll">-</dd>
-              </div>
-            </dl>
-          </article>
+
+              <details class="final-details">
+                <summary>Advanced Details</summary>
+                <dl class="outputs">
+                  <div id="outputContractItem" class="output-item" hidden>
+                    <dt>Census contract</dt>
+                    <dd id="outContract" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputDeployTxItem" class="output-item" hidden>
+                    <dt>Deployment tx</dt>
+                    <dd id="outDeployTx" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputCensusUriItem" class="output-item" hidden>
+                    <dt>Census URI</dt>
+                    <dd id="outCensusUri" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputProcessIdItem" class="output-item" hidden>
+                    <dt>Process ID</dt>
+                    <dd id="outProcessId" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputProcessTxItem" class="output-item" hidden>
+                    <dt>Process tx</dt>
+                    <dd id="outProcessTx" class="output-scroll">-</dd>
+                  </div>
+                </dl>
+              </details>
+
+              <button id="resetCreationBtn" type="button" class="cta-btn secondary" hidden>
+                <span class="iconoir-refresh-double"></span>
+                Create another voting process
+              </button>
+            </article>
+          </div>
         </section>
 
         <section id="voteView" class="view" hidden>

@@ -238,7 +238,9 @@ const createButton = document.getElementById('createBtn');
 const createStatusEl = document.getElementById('createStatus');
 const timelineEl = document.getElementById('timeline');
 const createTimelineCard = document.getElementById('createTimelineCard');
+const createSpinner = document.getElementById('createSpinner');
 const createOutputsCard = document.getElementById('createOutputsCard');
+const createOverlay = document.getElementById('createOverlay');
 
 const countryInput = document.getElementById('country');
 const minAgeInput = document.getElementById('minAge');
@@ -247,6 +249,7 @@ const processTitleInput = document.getElementById('processTitle');
 const maxVotersInput = document.getElementById('maxVoters');
 const startDateInput = document.getElementById('startDate');
 const durationHoursInput = document.getElementById('durationHours');
+const resetCreationBtn = document.getElementById('resetCreationBtn');
 
 const creatorWalletAddressEl = document.getElementById('creatorWalletAddress');
 const creatorWalletStatusEl = document.getElementById('creatorWalletStatus');
@@ -384,15 +387,17 @@ function setButtonLabel(button, label, iconClass) {
 
   if (iconClass) {
     const icon = document.createElement('span');
-    icon.className = `btn-icon ${iconClass}`;
+    icon.className = `btn-icon ${iconClass}`; // or simply iconClass if that was intended, but preserving original logic
     icon.setAttribute('aria-hidden', 'true');
     button.append(icon);
   }
 
-  const text = document.createElement('span');
-  text.className = 'btn-text';
-  text.textContent = label;
-  button.append(text);
+  if (label) {
+    const text = document.createElement('span');
+    text.className = 'btn-text';
+    text.textContent = label;
+    button.append(text);
+  }
 }
 
 function getVoteProcessTitleForDocument() {
@@ -421,7 +426,7 @@ function applyStaticButtonIcons() {
   setButtonLabel(copyKeyBtn, 'Copy private key', 'iconoir-copy');
   setButtonLabel(importKeyBtn, 'Import key', 'iconoir-key');
   setButtonLabel(clearImportedKeyBtn, 'Use derived key', 'iconoir-refresh');
-  if (copyVoteUrlBtn) setButtonLabel(copyVoteUrlBtn, 'Copy link', 'iconoir-copy');
+  if (copyVoteUrlBtn) setButtonLabel(copyVoteUrlBtn, null, 'iconoir-copy');
   if (generateVoteSelfQrBtn) setButtonLabel(generateVoteSelfQrBtn, 'Regenerate QR', 'iconoir-refresh');
   if (copyVoteSelfLinkBtn) setButtonLabel(copyVoteSelfLinkBtn, 'Copy Self link', 'iconoir-copy');
   if (openVoteSelfLinkBtn) setButtonLabel(openVoteSelfLinkBtn, 'Open Self link', 'iconoir-link');
@@ -1161,10 +1166,63 @@ function hasPipelineActivity() {
 }
 
 function renderCreateAuxiliaryPanels() {
-  const showTimeline = state.createSubmitting || hasPipelineActivity() || hasOutputValue(state.outputs.voteUrl);
   const showOutputs = hasAnyOutputs();
-  if (createTimelineCard) createTimelineCard.hidden = !showTimeline;
-  if (createOutputsCard) createOutputsCard.hidden = !showOutputs;
+  const showTimeline = state.createSubmitting || hasPipelineActivity() || hasOutputValue(state.outputs.voteUrl);
+  
+  if (createTimelineCard) {
+    createTimelineCard.hidden = !showTimeline;
+
+    // Spinner logic: Show spinner if we are submitting or have activity, but NOT if finished.
+    const isSpinnerActive = !state.outputs.voteUrl && (state.createSubmitting || hasPipelineActivity());
+    if (createSpinner) createSpinner.hidden = !isSpinnerActive;
+
+    // Auto-collapse timeline when finished (voteUrl present) to focus on success
+    if (state.outputs.voteUrl) {
+      createTimelineCard.removeAttribute('open');
+    }
+  }
+  
+
+  if (createOutputsCard) createOutputsCard.hidden = !state.outputs.voteUrl;
+
+  // Determine if overlay should be visible
+  const isOverlayVisible = showTimeline || state.outputs.voteUrl;
+  if (createOverlay) createOverlay.hidden = !isOverlayVisible;
+
+  // Blur form and show reset button when overlay is active (creation OR success)
+  // User wanted blur immediately after clicking create.
+  if (isOverlayVisible) {
+    if (createForm) createForm.classList.add('form-blurred');
+    if (resetCreationBtn) resetCreationBtn.hidden = !state.outputs.voteUrl; // Only show reset when finished
+  } else {
+    if (createForm) createForm.classList.remove('form-blurred');
+    if (resetCreationBtn) resetCreationBtn.hidden = true;
+  }
+}
+
+function resetCreationProcess() {
+  if (!confirm('This will clear the current process details. Are you sure?')) return;
+  
+  // Reset fields
+  processTitleInput.value = '';
+  // Keep country and age settings as they might be reused, or reset? Let's reset for fresh start.
+  // actually simpler to just reload page? No, let's keep it SPA.
+  // Resetting critical fields:
+  processTitleInput.value = '';
+  minAgeInput.value = '';
+  scopeSeedInput.value = '';
+  initOptions(); // Reset options to default 2
+  
+  // Reset state
+  resetOutputs();
+  resetPipeline();
+  state.createFormDirty = false;
+  
+  // Reset UI
+  renderCreateAuxiliaryPanels();
+  
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderTimeline() {
@@ -2095,7 +2153,7 @@ async function handleCreateSubmit(event) {
   resetOutputs();
   resetPipeline();
   setCreateSubmitting(true);
-  setCreateStatus('Running launch pipeline...');
+
 
   const ctx = {
     values: null,
@@ -2139,7 +2197,7 @@ async function handleCreateSubmit(event) {
     persistVoteScopeSeed(ctx.processId, ctx.values.scopeSeed);
 
     state.createFormDirty = false;
-    setCreateStatus('Process launched successfully. You can open the generated vote URL.');
+
   } catch (error) {
     console.error('[OpenCitizenCensus] Create pipeline failed', error);
     setCreateStatus('Pipeline failed. Check the failed stage and browser console for details.', true);
@@ -2826,7 +2884,7 @@ function updateVoteBallotControls() {
     voteSelfCardEl.hidden = isReady || hasVoted || processClosed;
   }
   if (voteBallotCardEl) {
-    voteBallotCardEl.hidden = !isReady && !hasVoted && !processClosed;
+    voteBallotCardEl.hidden = !hasQuestions && !isReady && !hasVoted && !processClosed;
   }
   if (voteQuestionsEl) {
     voteQuestionsEl.hidden = !hasQuestions;
@@ -3906,6 +3964,9 @@ function init() {
   sanitizeCreateFormAsciiInputs();
   if (copyVoteUrlBtn) {
     copyVoteUrlBtn.addEventListener('click', copyVoteUrlToClipboard);
+  }
+  if (resetCreationBtn) {
+    resetCreationBtn.addEventListener('click', resetCreationProcess);
   }
   renderCreateForm();
 

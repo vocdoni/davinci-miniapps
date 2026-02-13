@@ -60,7 +60,7 @@ body.app-blocked {
 }
 
 .navbar-logo {
-  height: 28px;
+  height: 48px;
   width: auto;
 }
 
@@ -193,8 +193,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #2359c4;
-  outline-offset: 2px;
+  outline: none;
 }
 
 .view {
@@ -325,7 +324,7 @@ select:focus-visible {
 .setting-value-row {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 4px;
 }
 
 .setting-value-input {
@@ -335,10 +334,11 @@ select:focus-visible {
   background: transparent;
   border: none;
   padding: 0;
-  width: 60px;
+  width: 3ch;
   font-family: inherit;
   -moz-appearance: textfield;
   appearance: textfield;
+
 }
 
 .setting-value-input::-webkit-outer-spin-button,
@@ -2054,8 +2054,207 @@ button.qr-regen-btn:focus-visible {
     font-size: 14px;
   }
 
+
+
   .cta-btn {
     width: 100%;
     justify-content: center;
   }
 }
+
+/* Support for Success Card Redesign */
+.success-card {
+  text-align: center;
+  padding-bottom: 30px !important;
+}
+
+.success-header {
+  margin-bottom: 32px;
+}
+
+.success-icon {
+  font-size: 48px;
+  color: #216e41; /* --ok color basically */
+  display: inline-block;
+  margin-bottom: 16px;
+  background: rgba(33, 110, 65, 0.1);
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.success-card h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px;
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.success-subtitle {
+  color: var(--muted);
+  font-size: 16px;
+  margin: 0;
+}
+
+.vote-link-wrapper {
+  margin: 0 auto 40px;
+  max-width: 480px;
+  text-align: left;
+}
+
+.vote-link-label {
+  display: block;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.vote-link-box {
+  display: flex;
+  align-items: center;
+  background: #fbfaf7;
+  border: 1px solid rgba(29, 26, 20, 0.12);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 8px;
+}
+
+.vote-link-text {
+  flex: 1;
+  padding: 12px 16px;
+  font-family: 'IBM Plex Sans', monospace;
+  font-size: 15px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vote-link-box .icon-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid rgba(29, 26, 20, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: all 0.2s ease;
+}
+
+.vote-link-box .icon-btn:hover {
+  background: #f0f0f0;
+  border-color: rgba(29, 26, 20, 0.2);
+}
+
+.final-details {
+  border-top: 1px solid rgba(29, 26, 20, 0.08);
+  margin-top: 20px;
+  text-align: left;
+}
+
+.final-details summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 24px 0 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.final-details summary::after {
+  content: '\25be';
+  transition: transform 0.2s;
+}
+
+.final-details[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.final-details summary::-webkit-details-marker {
+  display: none;
+}
+
+
+.create-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  pointer-events: auto;
+  padding: 24px;
+}
+
+/* Ensure cards inside overlay have max-width */
+.create-overlay .card {
+  width: 100%;
+  max-width: 500px;
+  margin: 0;
+  box-shadow: 0 24px 60px rgba(22, 18, 12, 0.12); /* Stronger shadow for lift */
+}
+
+.form-blurred {
+  filter: blur(6px);
+  opacity: 0.4;
+  pointer-events: none;
+  transition: all 0.5s ease;
+  user-select: none;
+}
+
+#resetCreationBtn {
+  margin-top: 24px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  background: white; /* Needs background if overlaying blurred content */
+  color: var(--muted);
+  border: 1px solid rgba(29, 26, 20, 0.2);
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: none; /* Ensure no shadow either if present */
+}
+
+/* ... existing styles ... */
+
+#resetCreationBtn:hover {
+  background: #fbfaf7;
+  color: var(--ink);
+  border-color: var(--ink);
+  transform: none; /* Prevent moving up */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Keep original shadow or none? User said "moves up", implying transform. Let's keep shadow consistent or remove if they want excess movement gone. I will just kill transform. */
+}
+
