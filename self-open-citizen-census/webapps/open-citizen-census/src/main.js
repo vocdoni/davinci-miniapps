@@ -161,6 +161,7 @@ const state = {
 
   createSubmitting: false,
   createFormDirty: false,
+  createOverlayDismissed: false,
   pipeline: PIPELINE_STAGES.map((stage) => ({
     id: stage.id,
     status: 'pending',
@@ -239,6 +240,8 @@ const createStatusEl = document.getElementById('createStatus');
 const timelineEl = document.getElementById('timeline');
 const createTimelineCard = document.getElementById('createTimelineCard');
 const createSpinner = document.getElementById('createSpinner');
+const createTimelineCloseBtn = document.getElementById('createTimelineCloseBtn');
+const createTimelineSummaryText = document.getElementById('createTimelineSummaryText');
 const createOutputsCard = document.getElementById('createOutputsCard');
 const createOverlay = document.getElementById('createOverlay');
 
@@ -254,6 +257,7 @@ const resetCreationBtn = document.getElementById('resetCreationBtn');
 const creatorWalletAddressEl = document.getElementById('creatorWalletAddress');
 const creatorWalletStatusEl = document.getElementById('creatorWalletStatus');
 const connectCreatorWalletBtn = document.getElementById('connectCreatorWalletBtn');
+const creatorWalletNavbarAddressEl = document.getElementById('creatorWalletNavbarAddress');
 
 const addQuestionButton = document.getElementById('addQuestion');
 const questionList = document.getElementById('questionList');
@@ -754,11 +758,29 @@ function isCreatorWalletConnected() {
   return Boolean(state.creatorWallet?.address);
 }
 
+function formatAddressShort(address) {
+  const normalized = String(address || '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) return normalized;
+  return `${normalized.slice(0, 6)}...${normalized.slice(-4)}`;
+}
+
 function renderWalletButtons() {
   const creatorConnected = isCreatorWalletConnected();
 
   setButtonLabel(connectCreatorWalletBtn, creatorConnected ? 'Disconnect' : 'Connect', creatorConnected ? 'iconoir-log-out' : 'iconoir-wallet');
   connectCreatorWalletBtn.classList.toggle('disconnect', creatorConnected);
+  if (creatorWalletNavbarAddressEl) {
+    if (creatorConnected) {
+      const connectedAddress = String(state.creatorWallet.address || '').trim();
+      creatorWalletNavbarAddressEl.textContent = formatAddressShort(connectedAddress);
+      creatorWalletNavbarAddressEl.title = connectedAddress;
+      creatorWalletNavbarAddressEl.hidden = false;
+    } else {
+      creatorWalletNavbarAddressEl.textContent = '';
+      creatorWalletNavbarAddressEl.hidden = true;
+      creatorWalletNavbarAddressEl.removeAttribute('title');
+    }
+  }
   renderCreateForm();
 }
 
@@ -1151,49 +1173,61 @@ function resetOutputs() {
   renderOutputs();
 }
 
-function hasAnyOutputs() {
-  return [
-    state.outputs.censusContract,
-    state.outputs.deploymentTxHash,
-    state.outputs.censusUri,
-    state.outputs.processId,
-    state.outputs.processTxHash,
-  ].some((value) => hasOutputValue(value));
-}
-
 function hasPipelineActivity() {
   return state.pipeline.some((stage) => stage.status !== 'pending' || stage.message !== 'Pending');
 }
 
+function hasPipelineError() {
+  return state.pipeline.some((stage) => stage.status === 'error');
+}
+
+function closeCreateOverlay() {
+  if (state.createSubmitting || hasOutputValue(state.outputs.voteUrl)) return;
+  state.createOverlayDismissed = true;
+  renderCreateAuxiliaryPanels();
+}
+
 function renderCreateAuxiliaryPanels() {
-  const showOutputs = hasAnyOutputs();
-  const showTimeline = state.createSubmitting || hasPipelineActivity() || hasOutputValue(state.outputs.voteUrl);
+  const hasSuccessOutput = hasOutputValue(state.outputs.voteUrl);
+  const hasError = hasPipelineError();
+  const showTimeline = state.createSubmitting || hasPipelineActivity() || hasSuccessOutput;
+  const canDismissOverlay = !state.createSubmitting && !hasSuccessOutput;
   
   if (createTimelineCard) {
     createTimelineCard.hidden = !showTimeline;
 
-    // Spinner logic: Show spinner if we are submitting or have activity, but NOT if finished.
-    const isSpinnerActive = !state.outputs.voteUrl && (state.createSubmitting || hasPipelineActivity());
+    // Spinner logic: show while running; when failed, replace spinner with close marker.
+    const isSpinnerActive = !hasSuccessOutput && !hasError && (state.createSubmitting || hasPipelineActivity());
     if (createSpinner) createSpinner.hidden = !isSpinnerActive;
+    if (createTimelineCloseBtn) {
+      createTimelineCloseBtn.hidden = !(showTimeline && canDismissOverlay && hasError);
+    }
+    if (createTimelineSummaryText) {
+      createTimelineSummaryText.textContent = isSpinnerActive ? 'Creating process...' : 'Process creation status';
+    }
 
     // Auto-collapse timeline when finished (voteUrl present) to focus on success
-    if (state.outputs.voteUrl) {
+    if (hasSuccessOutput) {
       createTimelineCard.removeAttribute('open');
     }
   }
   
 
-  if (createOutputsCard) createOutputsCard.hidden = !state.outputs.voteUrl;
+  if (createOutputsCard) createOutputsCard.hidden = !hasSuccessOutput;
 
-  // Determine if overlay should be visible
-  const isOverlayVisible = showTimeline || state.outputs.voteUrl;
+  // Determine if overlay should be visible unless user dismissed a failed/canceled run.
+  const overlayVisibleByState = showTimeline;
+  const isOverlayVisible = overlayVisibleByState && !(canDismissOverlay && state.createOverlayDismissed);
   if (createOverlay) createOverlay.hidden = !isOverlayVisible;
+  if (createTimelineCloseBtn) {
+    createTimelineCloseBtn.hidden = !(isOverlayVisible && canDismissOverlay && hasError);
+  }
 
   // Blur form and show reset button when overlay is active (creation OR success)
   // User wanted blur immediately after clicking create.
   if (isOverlayVisible) {
     if (createForm) createForm.classList.add('form-blurred');
-    if (resetCreationBtn) resetCreationBtn.hidden = !state.outputs.voteUrl; // Only show reset when finished
+    if (resetCreationBtn) resetCreationBtn.hidden = !hasSuccessOutput; // Only show reset when finished
   } else {
     if (createForm) createForm.classList.remove('form-blurred');
     if (resetCreationBtn) resetCreationBtn.hidden = true;
@@ -1214,6 +1248,7 @@ function resetCreationProcess() {
   initOptions(); // Reset options to default 2
   
   // Reset state
+  state.createOverlayDismissed = false;
   resetOutputs();
   resetPipeline();
   state.createFormDirty = false;
@@ -2150,6 +2185,7 @@ async function handleCreateSubmit(event) {
     return;
   }
 
+  state.createOverlayDismissed = false;
   resetOutputs();
   resetPipeline();
   setCreateSubmitting(true);
@@ -2200,6 +2236,9 @@ async function handleCreateSubmit(event) {
 
   } catch (error) {
     console.error('[OpenCitizenCensus] Create pipeline failed', error);
+    state.createOverlayDismissed = false;
+    if (createTimelineCard) createTimelineCard.open = true;
+    renderCreateAuxiliaryPanels();
     setCreateStatus('Pipeline failed. Check the failed stage and browser console for details.', true);
   } finally {
     setCreateSubmitting(false);
@@ -3964,6 +4003,13 @@ function init() {
   sanitizeCreateFormAsciiInputs();
   if (copyVoteUrlBtn) {
     copyVoteUrlBtn.addEventListener('click', copyVoteUrlToClipboard);
+  }
+  if (createTimelineCloseBtn) {
+    createTimelineCloseBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCreateOverlay();
+    });
   }
   if (resetCreationBtn) {
     resetCreationBtn.addEventListener('click', resetCreationProcess);

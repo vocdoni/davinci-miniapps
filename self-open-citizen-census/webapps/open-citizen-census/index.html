@@ -24,6 +24,7 @@
         <span>Ask the World</span>
       </a>
       <div class="navbar-actions">
+        <p id="creatorWalletNavbarAddress" class="navbar-wallet-address" hidden></p>
         <button id="connectCreatorWalletBtn" type="button" class="navbar-wallet-btn">
           <span class="iconoir-wallet btn-icon" aria-hidden="true"></span>
           <span>Connect</span>
@@ -175,7 +176,8 @@
             <details class="card collapsible-card" id="createTimelineCard" hidden>
               <summary class="collapsible-summary">
                 <span id="createSpinner" class="timeline-spinner" aria-hidden="true" hidden></span>
-                Creation Progress
+                <span id="createTimelineCloseBtn" class="timeline-close-marker" type="button" hidden aria-label="Close creation popup">&#x2715;</span>
+                <span id="createTimelineSummaryText">Creation process</span>
               </summary>
               <div class="collapsible-body">
                 <ol id="timeline" class="timeline"></ol>

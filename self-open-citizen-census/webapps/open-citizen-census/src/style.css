@@ -1,5 +1,6 @@
 @import url('https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css');
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
 
 :root {
   --paper: #f7f4ee;
@@ -66,7 +67,9 @@ body.app-blocked {
 
 .navbar-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .navbar-wallet-btn {
@@ -84,6 +87,16 @@ body.app-blocked {
   color: var(--ink);
   transform: none;
   box-shadow: none;
+}
+
+.navbar-wallet-address {
+  margin: 5px 0;
+  text-align: center;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 /* ── Shell & header ────────────────── */
@@ -765,7 +778,6 @@ textarea {
 
 .vote-focus-title {
   margin: 0 0 8px;
-  font-family: 'Cormorant Garamond', serif;
   font-size: clamp(30px, 4vw, 40px);
   font-weight: 600;
   line-height: 1;
@@ -894,7 +906,6 @@ textarea {
 
 .vote-results-process-title {
   margin: 4px 0 0;
-  font-family: 'Cormorant Garamond', serif;
   font-size: clamp(24px, 3.4vw, 34px);
   font-weight: 600;
   line-height: 1.05;
@@ -1194,7 +1205,6 @@ textarea {
 .vote-submit-result-title {
   margin: 0;
   font-size: 20px;
-  font-family: 'Cormorant Garamond', serif;
   font-weight: 600;
   line-height: 1;
   color: var(--accent);
@@ -1541,6 +1551,35 @@ textarea {
   border: 2px solid rgba(29, 26, 20, 0.2);
   border-top-color: #1a1a1a;
   animation: timeline-spin 0.8s linear infinite;
+}
+
+.timeline-close-marker {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  gap: 0;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.timeline-close-marker:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
 @keyframes timeline-spin {
@@ -2012,6 +2051,10 @@ button.qr-regen-btn:focus-visible {
     padding: 24px;
   }
 
+  #createTimelineCard {
+    padding: 0;
+  }
+
   .setting-cards {
     grid-template-columns: 1fr;
   }
@@ -2088,7 +2131,6 @@ button.qr-regen-btn:focus-visible {
 }
 
 .success-card h2 {
-  font-family: 'Cormorant Garamond', serif;
   font-size: 32px;
   margin: 0 0 8px;
   color: var(--accent);
@@ -2257,4 +2299,3 @@ select:focus-visible {
   transform: none; /* Prevent moving up */
   box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Keep original shadow or none? User said "moves up", implying transform. Let's keep shadow consistent or remove if they want excess movement gone. I will just kill transform. */
 }
-
