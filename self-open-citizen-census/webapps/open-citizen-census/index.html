@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ask the World</title>
+    <meta name="description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <link href="https://framerusercontent.com/images/xMROZlh3hRAVfVNJpALYIkrg98.svg" rel="icon" media="(prefers-color-scheme: light)" />
+    <link href="https://framerusercontent.com/images/juixxd0l5rADVORefaZSgWJ2s.png" rel="icon" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ask the World" />
+    <meta property="og:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <meta property="og:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ask the World" />
+    <meta name="twitter:description" content="Official-ID Voting Process Creator powered by DAVINCI" />
+    <meta name="twitter:image" content="https://framerusercontent.com/images/ELZpdVIWvjBULby7YDyXVhJWvM.png" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <nav class="app-navbar" id="appNavbar">
+      <a href="/" class="navbar-brand" id="navbarBrand">
+        <img class="navbar-logo" src="./assets/davinci_logo.png" alt="Davinci logo" />
+        <span>Ask the World</span>
+      </a>
+      <div class="navbar-actions">
+        <p id="creatorWalletNavbarAddress" class="navbar-wallet-address" hidden></p>
+        <button id="connectCreatorWalletBtn" type="button" class="navbar-wallet-btn">
+          <span class="iconoir-wallet btn-icon" aria-hidden="true"></span>
+          <span>Connect</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="app-shell">
+      <header class="app-header" id="appHeader">
+        <h1 id="appHeaderTitle">What do you want to ask?</h1>
+      </header>
+
+      <main id="mainContent">
+        <section id="createView" class="view" hidden>
+          <p class="create-intro">
+            Ask a question to an entire country. Citizens who match your criteria can authenticate with their ID or passport and vote immediately, without any prior census setup.
+            The <strong>DAVINCI Protocol</strong> makes every vote anonymous, verifiable from end to end, and protected against censorship, coercion, and bribery.
+          </p>
+          <form id="createForm" class="create-form">
+
+            <input
+              id="processTitle"
+              name="process_title"
+              class="hero-input"
+              autocomplete="off"
+              type="text"
+              placeholder="Type your question here..."
+              required
+            />
+
+            <section class="options-section">
+              <h2 class="options-title">The options</h2>
+              <div id="questionList" class="options-list"></div>
+              <button id="addQuestion" type="button" class="add-option-btn">+ Add a new option</button>
+            </section>
+
+            <h2 class="options-title">
+              Who can vote?
+              <span 
+                class="tooltip-icon" 
+                data-tooltip="You set the eligibility rules here. Anyone with a modern ID or Passport from most countries can securely vote, as long as they meet your criteria (Country & Age) and participate during the process duration."
+                aria-label="Eligibility information"
+                tabindex="0"
+                role="button"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" stroke-width="2" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M9.09445 9.17647C9.28014 8.48398 9.91036 8 10.6272 8H12.9863C13.8149 8 14.4866 8.67175 14.4866 9.50035C14.4866 10.2796 13.5677 10.8752 12.8727 11.2359L12.0003 11.6888V13.0118M12.0003 15.6588V15.8794" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              </span>
+            </h2>
+
+            <div class="setting-cards">
+              <div class="setting-card" title="Select the country where voters must be citizens">
+                <span class="setting-label">Country</span>
+                <select id="country" name="country" class="setting-value" required>
+                  <option value="" disabled selected>Select a country…</option>
+                  <option value="ARG">Argentina (ARG)</option>
+                  <option value="AUS">Australia (AUS)</option>
+                  <option value="AUT">Austria (AUT)</option>
+                  <option value="BEL">Belgium (BEL)</option>
+                  <option value="BRA">Brazil (BRA)</option>
+                  <option value="CAN">Canada (CAN)</option>
+                  <option value="CHE">Switzerland (CHE)</option>
+                  <option value="CHL">Chile (CHL)</option>
+                  <option value="CHN">China (CHN)</option>
+                  <option value="COL">Colombia (COL)</option>
+                  <option value="CZE">Czech Republic (CZE)</option>
+                  <option value="DEU">Germany (DEU)</option>
+                  <option value="DNK">Denmark (DNK)</option>
+                  <option value="ESP">Spain (ESP)</option>
+                  <option value="EST">Estonia (EST)</option>
+                  <option value="FIN">Finland (FIN)</option>
+                  <option value="FRA">France (FRA)</option>
+                  <option value="GBR">United Kingdom (GBR)</option>
+                  <option value="GRC">Greece (GRC)</option>
+                  <option value="HUN">Hungary (HUN)</option>
+                  <option value="IND">India (IND)</option>
+                  <option value="IRL">Ireland (IRL)</option>
+                  <option value="ISL">Iceland (ISL)</option>
+                  <option value="ISR">Israel (ISR)</option>
+                  <option value="ITA">Italy (ITA)</option>
+                  <option value="JPN">Japan (JPN)</option>
+                  <option value="KOR">South Korea (KOR)</option>
+                  <option value="LTU">Lithuania (LTU)</option>
+                  <option value="LUX">Luxembourg (LUX)</option>
+                  <option value="LVA">Latvia (LVA)</option>
+                  <option value="MEX">Mexico (MEX)</option>
+                  <option value="NLD">Netherlands (NLD)</option>
+                  <option value="NOR">Norway (NOR)</option>
+                  <option value="NZL">New Zealand (NZL)</option>
+                  <option value="PER">Peru (PER)</option>
+                  <option value="POL">Poland (POL)</option>
+                  <option value="PRT">Portugal (PRT)</option>
+                  <option value="ROU">Romania (ROU)</option>
+                  <option value="SGP">Singapore (SGP)</option>
+                  <option value="SVK">Slovakia (SVK)</option>
+                  <option value="SVN">Slovenia (SVN)</option>
+                  <option value="SWE">Sweden (SWE)</option>
+                  <option value="THA">Thailand (THA)</option>
+                  <option value="TUR">Turkey (TUR)</option>
+                  <option value="TWN">Taiwan (TWN)</option>
+                  <option value="USA">United States (USA)</option>
+                  <option value="ZAF">South Africa (ZAF)</option>
+                </select>
+              </div>
+              <div class="setting-card" title="Minimum age required to vote">
+                <span class="setting-label">Minimum age to vote</span>
+                <div class="setting-value-row">
+                  <input id="minAge" name="min_age" class="setting-value-input" autocomplete="off" type="number" min="1" max="99" value="18" required />
+                </div>
+              </div>
+              <div class="setting-card" title="How long the voting process will remain open">
+                <span class="setting-label">Vote duration</span>
+                <div class="setting-value-row">
+                  <input id="durationHours" name="duration_hours" class="setting-value-input" autocomplete="off" type="number" min="1" value="24" required />
+                  <span class="setting-value-suffix">Hours</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden fields for auto-generated values -->
+            <input id="scopeSeed" type="hidden" name="scope_seed" />
+            <input id="startDate" type="hidden" name="start_datetime" />
+
+            <details class="advanced-details" id="advancedDetails">
+              <summary class="advanced-summary">▾ Advanced Settings</summary>
+              <div class="advanced-body">
+                <div class="advanced-field">
+                  <span class="advanced-field-label">Maximum voters</span>
+                  <input id="maxVoters" name="max_voters" class="advanced-field-input" autocomplete="off" type="number" min="1" value="1000000" required />
+                  <span class="advanced-field-helper">Limit the number of participants.</span>
+                </div>
+              </div>
+            </details>
+
+            <div class="create-actions">
+              <p id="createStatus" class="status" aria-live="polite"></p>
+              <button id="createBtn" type="submit" class="cta-btn">
+                <span>Create the voting process</span>
+                <span class="cta-arrow">→</span>
+              </button>
+            </div>
+
+            <!-- Wallet status (hidden, used by JS) -->
+            <p id="creatorWalletAddress" hidden></p>
+            <p id="creatorWalletStatus" hidden></p>
+
+          </form>
+
+          <div id="createOverlay" class="create-overlay" hidden>
+            <details class="card collapsible-card" id="createTimelineCard" hidden>
+              <summary class="collapsible-summary">
+                <span id="createSpinner" class="timeline-spinner" aria-hidden="true" hidden></span>
+                <span id="createTimelineCloseBtn" class="timeline-close-marker" type="button" hidden aria-label="Close creation popup">&#x2715;</span>
+                <span id="createTimelineSummaryText">Creation process</span>
+              </summary>
+              <div class="collapsible-body">
+                <ol id="timeline" class="timeline"></ol>
+              </div>
+            </details>
+
+            <article class="card success-card" id="createOutputsCard" hidden>
+              <div class="success-header">
+                <span class="iconoir-check-circle success-icon"></span>
+                <h2>Your voting process is live and ready for the world.</h2>
+              </div>
+
+              <div class="vote-link-wrapper">
+                <label class="vote-link-label">Share this link to start collecting votes</label>
+                <div class="vote-link-box">
+                  <a id="outVoteUrl" class="vote-link-text" href="#" target="_blank" rel="noopener noreferrer">-</a>
+                  <button id="copyVoteUrlBtn" type="button" class="icon-btn" title="Copy link">
+                    <span class="iconoir-copy"></span>
+                  </button>
+                </div>
+              </div>
+
+              <details class="final-details">
+                <summary>Advanced Details</summary>
+                <dl class="outputs">
+                  <div id="outputContractItem" class="output-item" hidden>
+                    <dt>Census contract</dt>
+                    <dd id="outContract" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputDeployTxItem" class="output-item" hidden>
+                    <dt>Deployment tx</dt>
+                    <dd id="outDeployTx" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputCensusUriItem" class="output-item" hidden>
+                    <dt>Census URI</dt>
+                    <dd id="outCensusUri" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputProcessIdItem" class="output-item" hidden>
+                    <dt>Process ID</dt>
+                    <dd id="outProcessId" class="output-scroll">-</dd>
+                  </div>
+                  <div id="outputProcessTxItem" class="output-item" hidden>
+                    <dt>Process tx</dt>
+                    <dd id="outProcessTx" class="output-scroll">-</dd>
+                  </div>
+                </dl>
+              </details>
+
+              <button id="resetCreationBtn" type="button" class="cta-btn secondary" hidden>
+                <span class="iconoir-refresh-double"></span>
+                Create another voting process
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section id="voteView" class="view" hidden>
+          <article class="card">
+            <div class="inline-form">
+              <label class="inline-grow">
+                Process ID
+                <input id="voteProcessIdInput" name="vote_process_id" spellcheck="false" autocomplete="off" type="text" placeholder="0xabc…" />
+              </label>
+              <button id="showVoteDetailsBtn" type="button" class="ghost">Details</button>
+            </div>
+
+            <div class="vote-lifecycle-card" id="voteLifecycleCard" hidden>
+              <div class="vote-lifecycle-head">
+                <div class="vote-lifecycle-left">
+                  <span class="vote-lifecycle-dot" aria-hidden="true"></span>
+                  <strong id="voteLifecycleTitle">Vote Active</strong>
+                  <span id="voteLifecycleType" class="vote-lifecycle-pill" hidden>-</span>
+                </div>
+                <div class="vote-lifecycle-right">
+                  <span class="iconoir-clock" aria-hidden="true"></span>
+                  <span id="voteLifecycleLabel">Active</span>
+                </div>
+              </div>
+              <p id="voteLifecycleDescription" class="muted">Voting is open and registration is available.</p>
+            </div>
+          </article>
+
+          <dialog id="voteDetailsDialog" class="details-dialog">
+            <div class="details-dialog-head">
+              <h3>Process Details</h3>
+              <button id="closeVoteDetailsBtn" type="button" class="ghost">Close</button>
+            </div>
+            <div class="details-dialog-body">
+              <table class="details-table">
+                <tbody>
+                  <tr><th>Process ID</th><td><code id="voteProcessId" class="output-scroll details-url-scroll">-</code></td></tr>
+                  <tr><th>Title</th><td><span id="voteProcessTitle">-</span></td></tr>
+                  <tr><th>Description</th><td><span id="voteProcessDescription">-</span></td></tr>
+                  <tr><th>Remaining time</th><td><strong id="voteProcessRemainingTime">-</strong></td></tr>
+                  <tr><th>Census contract</th><td><code id="voteCensusContract" class="output-scroll details-url-scroll">-</code></td></tr>
+                  <tr><th>Census URI</th><td><span id="voteCensusUri" class="output-scroll details-url-scroll">-</span></td></tr>
+                  <tr><th>Sequencer</th><td><span id="voteSequencerUrl" class="output-scroll details-url-scroll">-</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </dialog>
+
+          <article class="card vote-results-card" id="voteResultsCard" hidden>
+            <div class="card-head vote-results-head">
+              <div class="vote-results-process">
+                <p class="label">Process</p>
+                <h4 id="voteResultsProcessTitle" class="vote-results-process-title">-</h4>
+                <p id="voteResultsProcessDescription" class="muted vote-results-process-description" hidden>-</p>
+              </div>
+            </div>
+            <div class="vote-results-body">
+              <section class="panel vote-results-summary">
+                <p class="label">Vote Summary</p>
+                <div class="grid three vote-results-summary-grid">
+                  <div>
+                    <p id="voteResultsTotalVotes" class="vote-results-summary-value">0</p>
+                    <p class="muted">Total votes</p>
+                  </div>
+                  <div>
+                    <p id="voteResultsTurnout" class="vote-results-summary-value">0.0%</p>
+                    <p class="muted">Turnout</p>
+                  </div>
+                  <div>
+                    <p id="voteResultsChoicesWithVotes" class="vote-results-summary-value">0</p>
+                    <p class="muted">Choices with votes</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel vote-results-detail">
+                <div class="vote-results-detail-head">
+                  <h4>Detailed Results</h4>
+                  <p id="voteResultsTotalVotesLabel" class="muted">Total: 0 votes</p>
+                </div>
+                <div id="voteResultsContent" class="vote-results-content"></div>
+              </section>
+            </div>
+          </article>
+
+          <details class="card collapsible-card" id="voteSelfCard" open>
+            <summary class="collapsible-summary">
+              <span class="collapsible-title-group">
+                <span class="collapsible-title-main">Process Registration</span>
+                <span class="collapsible-title-meta">Powered by Self.xyz</span>
+              </span>
+            </summary>
+            <div class="collapsible-body">
+              <p class="muted">Generate a Self QR using your managed identity wallet to register in this census.</p>
+
+              <div class="grid three info-widgets">
+                <div class="panel info-widget">
+                  <p class="label">Scope seed</p>
+                  <p class="value" id="voteScopeSeedInfo">-</p>
+                </div>
+                <div class="panel info-widget">
+                  <p class="label">Minimum age</p>
+                  <p class="value" id="voteSelfMinAgeInfo">-</p>
+                </div>
+                <div class="panel info-widget">
+                  <p class="label">Country</p>
+                  <p class="value" id="voteCountryInfo">-</p>
+                </div>
+              </div>
+
+              <div id="voteSelfRegistrationLayout" class="self-registration-layout">
+                <div id="voteSelfQrWrap" class="self-qr-wrap" hidden>
+                  <img id="voteSelfQrImage" alt="Self registration QR code" />
+                  <button
+                    id="generateVoteSelfQrBtn"
+                    type="button"
+                    class="ghost qr-regen-btn"
+                    aria-label="Regenerate Self QR"
+                    title="Regenerate QR"
+                  >
+                    Regenerate QR
+                  </button>
+                </div>
+                <aside class="panel self-steps-panel">
+                  <p class="label">How to use Self</p>
+                  <ol class="self-steps-list">
+                    <li>
+                      <strong>Download the app</strong>
+                      <p class="self-step-helper">
+                        Install Self on
+                        <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">iOS</a>
+                        or
+                        <a href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1" target="_blank" rel="noreferrer">Android</a>.
+                      </p>
+                    </li>
+                    <li>
+                      <strong>Register your identity</strong>
+                      <p class="self-step-helper">Open Self and complete the verification using your ID card or passport.</p>
+                    </li>
+                    <li>
+                      <strong>Scan the QR</strong>
+                      <p class="self-step-helper">Use Self to scan this QR, join the census, and wait until voting is enabled.</p>
+                    </li>
+                  </ol>
+                </aside>
+                <p id="voteAlreadyRegisteredMsg" class="muted vote-registered-message" hidden>
+                  <span id="voteRegistrationLockIcon" class="vote-registered-icon iconoir-check-circle" aria-hidden="true"></span>
+                  <span id="voteRegistrationLockText" class="vote-registered-text">You are already registered.</span>
+                </p>
+              </div>
+
+              <div id="voteSelfQrActions" class="row self-qr-actions">
+                <button id="copyVoteSelfLinkBtn" type="button" class="ghost" disabled>Copy Self link</button>
+                <button id="openVoteSelfLinkBtn" type="button" class="ghost" disabled>Open Self link</button>
+              </div>
+
+              <p id="voteSelfStatus" class="status" aria-live="polite">Resolve process and managed wallet before generating Self QR.</p>
+
+              <div class="vote-status-guide registration-status-guide" id="registrationStatusGuide">
+                <p class="label">Registration progress</p>
+                <ol id="registrationStatusTimeline" class="vote-status-timeline"></ol>
+                <p id="registrationHint" class="muted registration-hint">Resolve process and managed wallet to start registration.</p>
+              </div>
+            </div>
+          </details>
+
+          <article class="card vote-focus-card" id="voteBallotCard">
+            <h2 id="voteFocusProcessTitle" class="vote-focus-title">Questions</h2>
+            <p id="voteFocusProcessDescription" class="vote-focus-description" hidden>-</p>
+            <p id="voteFocusRemainingTime" class="vote-focus-meta" hidden>-</p>
+            <p class="muted vote-focus-note">Choose one option per question and emit your vote.</p>
+
+            <div id="voteQuestions" class="vote-questions"></div>
+
+            <div class="row">
+              <button id="emitVoteBtn" type="button" class="secondary" disabled>Emit vote</button>
+            </div>
+
+            <div class="vote-status-guide vote-submit-guide" id="voteStatusGuide" hidden>
+              <div id="voteSubmitResult" class="vote-submit-result" hidden>
+                <span id="voteSubmitResultIcon" class="vote-submit-result-icon iconoir-check-circle" aria-hidden="true"></span>
+                <div class="vote-submit-result-content">
+                  <p id="voteSubmitResultTitle" class="vote-submit-result-title">Vote successfully received</p>
+                  <p id="voteSubmitResultText" class="muted">Your vote is secured and being finalized.</p>
+                </div>
+              </div>
+
+              <details id="voteStatusDetails" class="vote-status-details">
+                <summary class="vote-status-details-summary">
+                  <span class="vote-status-details-label-wrap">
+                    <span class="vote-status-details-label">Track vote status</span>
+                    <span id="voteStatusDetailsMeta" class="muted vote-status-details-meta">Pending</span>
+                  </span>
+                </summary>
+
+                <div class="vote-status-details-body">
+                  <div id="voteStatusFlowIdLine" class="vote-status-id-row" hidden>
+                    <p class="label">Vote ID</p>
+                    <div class="vote-status-id-actions">
+                      <code id="voteStatusFlowVoteId" class="output-scroll">-</code>
+                      <button id="copyVoteStatusIdBtn" type="button" class="ghost" disabled>Copy</button>
+                    </div>
+                  </div>
+                  <ol id="voteStatusTimeline" class="vote-status-timeline"></ol>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <details class="card collapsible-card" id="managedWalletCard">
+            <summary class="collapsible-summary">
+              <span>Managed Identity Wallet</span>
+            </summary>
+            <div class="collapsible-body">
+              <p>Address: <code id="walletAddress">-</code></p>
+              <p>Source: <span id="walletSource">-</span></p>
+
+              <div class="row">
+                <button id="revealKeyBtn" type="button" class="secondary">Reveal private key</button>
+                <button id="copyKeyBtn" type="button" class="secondary" disabled>Copy private key</button>
+              </div>
+
+              <div id="walletSecretBox" hidden>
+                <code id="walletPrivateKey">hidden</code>
+              </div>
+
+              <label>
+                Import private key
+                <input id="importKeyInput" name="import_private_key" spellcheck="false" autocomplete="off" type="password" placeholder="0xabc…" />
+              </label>
+
+              <div class="row">
+                <button id="importKeyBtn" type="button" class="secondary">Import key</button>
+                <button id="clearImportedKeyBtn" type="button" class="ghost">Use derived key</button>
+              </div>
+
+              <p class="muted danger">
+                Warning: revealing or importing keys exposes signing authority for this process context.
+              </p>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
+
+    <div
+      id="voteContextGatePopup"
+      class="blocking-popup"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="voteContextGatePopupTitle"
+      aria-describedby="voteContextGatePopupMessage"
+      hidden
+    >
+      <div class="blocking-popup-backdrop"></div>
+      <div class="blocking-popup-card">
+        <p class="eyebrow">Process ID required</p>
+        <h2 id="voteContextGatePopupTitle">This voting link is incomplete</h2>
+        <p id="voteContextGatePopupMessage">
+          A valid process ID is required to use this app. Please request the complete /vote/:processId link from the person or team that shared this app.
+        </p>
+      </div>
+    </div>
+
+    <footer class="app-footer">
+      <div class="footer-row">
+        <span>Powered by</span>
+        <img class="logo-davinci" src="./assets/davinci_logo.png" alt="Davinci logo" />
+        <span>and</span>
+        <img src="./assets/self_logo.png" alt="Self logo" />
+      </div>
+      <div class="footer-row">
+        <span>Made with</span>
+        <span class="heart">❤️</span>
+        <span>by</span>
+        <img src="./assets/vocdoni_logo.png" alt="Vocdoni logo" />
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
