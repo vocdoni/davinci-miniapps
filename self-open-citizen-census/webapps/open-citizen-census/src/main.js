@@ -1946,11 +1946,32 @@ async function deployCensusContract(ctx) {
   return receipt.contractAddress;
 }
 
+function toRfc3339Timestamp(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    throw new Error('Invalid date provided for RFC3339 conversion.');
+  }
+  // Keep UTC format and trim milliseconds to match strict RFC3339 consumers.
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function computeIndexerExpiresAt(values) {
+  const startDate = values?.startDate instanceof Date ? values.startDate : new Date(values?.startDate);
+  const durationSeconds = Number(values?.duration);
+
+  if (Number.isNaN(startDate.getTime()) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error('Cannot compute indexer expiration timestamp from process timing.');
+  }
+
+  const expiresAt = new Date(startDate.getTime() + Math.round(durationSeconds * 1000));
+  return toRfc3339Timestamp(expiresAt);
+}
+
 async function startIndexer(ctx) {
   if (!CONFIG.onchainIndexerUrl) {
     throw new Error('Missing VITE_ONCHAIN_CENSUS_INDEXER_URL.');
   }
 
+  const expiresAt = computeIndexerExpiresAt(ctx.values);
   const url = `${trimTrailingSlash(CONFIG.onchainIndexerUrl)}/contracts`;
   const response = await fetch(url, {
     method: 'POST',
@@ -1959,6 +1980,7 @@ async function startIndexer(ctx) {
       chainId: ACTIVE_NETWORK.chainId,
       address: ctx.contractAddress,
       startBlock: ctx.deploymentBlock,
+      expiresAt,
     }),
   });
 
