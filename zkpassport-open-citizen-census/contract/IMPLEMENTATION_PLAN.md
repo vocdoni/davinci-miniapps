@@ -9,6 +9,7 @@ Integrate zkPassport proof verification in the census contract with sponsored re
 - Registration only succeeds if all policy checks pass: scope, bound data, minimum age, and nationality.
 - One-person uniqueness is enforced on-chain by `uniqueIdentifier` (primary identity key).
 - Backend can verify final registration state on-chain after tx submission.
+- Chain selection is deployment-parameterized (Sepolia now; Base/Mainnet later) with no chain hardcoding in contract logic.
 
 ## Public API and Interface Changes
 
@@ -23,6 +24,17 @@ Add constructor configuration for:
 5. `string[] nationalityAliases`
 6. `uint256 minAge`
 7. `bytes32 requiredCustomData`
+
+### Chain parameterization
+
+Contract behavior must be chain-agnostic and rely on runtime chain checks:
+
+1. Never hardcode a target chain constant inside the contract.
+2. Keep bound chain validation as:
+   - `destinationChainID == bytes32(block.chainid)`
+3. Compute `requiredCustomData` off-chain from deployment chain profile:
+   - `keccak256(abi.encode("davinci-zkpassport-v1", chainId, scopeDomain, scope))`
+4. Deploy the same bytecode to each supported chain with chain-specific constructor values.
 
 ### Registration entrypoint
 
@@ -168,3 +180,11 @@ Required tests:
 4. Canonical person key is `uniqueIdentifier`, and on-chain `uniqueIdentifierUsed` is authoritative for one-person uniqueness.
 5. Nationality policy is exact hash match with configured aliases.
 6. Replay protection at backend nonce layer is intentionally not required; duplicates are blocked by on-chain registration invariants.
+7. Initial deployment profile targets Sepolia (`11155111`), with Base/Mainnet enabled by adding deployment profiles, not by changing contract code.
+
+## References
+
+1. zkPassport on-chain overview: [https://docs.zkpassport.id/getting-started/onchain](https://docs.zkpassport.id/getting-started/onchain)
+2. zkPassport on-chain integration steps: [https://docs.zkpassport.id/getting-started/onchain#integration-steps](https://docs.zkpassport.id/getting-started/onchain#integration-steps)
+3. zkPassport EVM contracts/interfaces repository: [https://github.com/zkpassport/zkpassport-packages/tree/main/packages/evm-contracts](https://github.com/zkpassport/zkpassport-packages/tree/main/packages/evm-contracts)
+4. DaVinci ICensusValidator context: [https://github.com/vocdoni/davinci-contracts](https://github.com/vocdoni/davinci-contracts)

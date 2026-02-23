@@ -15,6 +15,7 @@ The backend must:
 3. Check on-chain uniqueness by `uniqueIdentifier` (primary), not only by address.
 4. Send sponsored `registerVoter(...)` tx.
 5. Return `txHash` directly to frontend (frontend tracks tx lifecycle).
+6. Resolve target chain from backend chain profiles (Sepolia first; Base/Mainnet later) with the same API surface.
 
 Hard reject rules:
 
@@ -41,8 +42,9 @@ Request body:
 2. `proofHash`
 3. `chainId`
 4. `censusAddress`
-5. `issuedAt`
-6. `expiresAt`
+5. `requiredCustomData`
+6. `issuedAt`
+7. `expiresAt`
 
 Success response:
 
@@ -65,23 +67,41 @@ Error codes:
 6. `TX_SUBMISSION_FAILED`
 7. `INVALID_REQUEST`
 
+## Chain parameterization
+
+Backend must support chain profiles selected by `signedPayload.chainId`:
+
+1. Configure a map of chain profiles keyed by chainId:
+   - `11155111` (Sepolia) enabled first
+   - `8453` (Base Mainnet) optional later
+   - `1` (Ethereum Mainnet) optional later
+2. Each profile includes:
+   - `rpcUrl`
+   - `censusAddress`
+   - `requiredCustomData`
+   - `sponsorPrivateKey`
+   - `confirmations` (optional)
+3. Reject unknown chain IDs with `UNSUPPORTED_CHAIN`.
+4. Always verify `signedPayload.chainId` and `signedPayload.censusAddress` against the selected profile.
+
 ## Verification and Submission Flow
 
 For each `POST /v1/register` request:
 
 1. Validate request schema and checksum addresses.
-2. Validate `chainId` and `censusAddress` against backend config.
+2. Resolve chain profile by `signedPayload.chainId`; validate `censusAddress` against that profile.
 3. Validate signature timestamp window (`issuedAt` / `expiresAt`).
 4. Recompute `proofHash` from canonical proof bundle and compare with signed payload.
-5. Recover signer from signature (EIP-712 typed data) and require `recovered == voterAddress`.
-6. Verify proof off-chain using zkPassport verifier call and helper checks.
-7. Extract `uniqueIdentifier` from proof verification output.
-8. Check on-chain:
+5. Validate `signedPayload.requiredCustomData` equals chain-profile `requiredCustomData`.
+6. Recover signer from signature (EIP-712 typed data) and require `recovered == voterAddress`.
+7. Verify proof off-chain using zkPassport verifier call and helper checks.
+8. Extract `uniqueIdentifier` from proof verification output.
+9. Check on-chain:
    - `isUniqueIdentifierRegistered(uniqueIdentifier) == false` (primary gate).
-9. Send sponsored tx:
+10. Send sponsored tx via chain-profile signer/provider:
    - `registerVoter(voterAddress, proofVerificationParams, isIDCard)`.
-10. Return `txHash` immediately.
-11. Optionally run background post-mine audit log:
+11. Return `txHash` immediately.
+12. Optionally run background post-mine audit log:
    - receipt success
    - `Registered` event includes expected voter + uniqueIdentifier
    - `isUniqueIdentifierRegistered(uniqueIdentifier) == true`
@@ -139,5 +159,13 @@ Because nonce endpoint is intentionally removed:
 
 1. Frontend derives wallet deterministically from `uniqueIdentifier + password`.
 2. Backend validates ownership of `voterAddress` via signature, not derivation formula internals.
-3. Single chain deployment per backend instance.
+3. Backend supports a chain profile map; Sepolia profile is enabled first.
 4. Frontend tracks the returned tx hash and handles UX for confirmations/failures.
+5. Base/Mainnet rollout only requires adding chain profiles and deployed addresses, not changing endpoint contracts.
+
+## References
+
+1. zkPassport on-chain overview: [https://docs.zkpassport.id/getting-started/onchain](https://docs.zkpassport.id/getting-started/onchain)
+2. zkPassport on-chain integration steps: [https://docs.zkpassport.id/getting-started/onchain#integration-steps](https://docs.zkpassport.id/getting-started/onchain#integration-steps)
+3. zkPassport docs repository: [https://github.com/zkpassport/zkpassport-docs](https://github.com/zkpassport/zkpassport-docs)
+4. DaVinci SDK/context repository: [https://github.com/vocdoni/davinci-sdk](https://github.com/vocdoni/davinci-sdk)

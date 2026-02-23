@@ -2,7 +2,7 @@
 
 ## Summary
 
-Build a Sepolia-only webapp, following the structure and UX flow of `/Users/lucasmenendez/Workspace/vocdoni/davinci-miniapps/self-open-citizen-census/webapps/open-citizen-census`, to support:
+Build a chain-parameterized webapp (Sepolia first, Base/Mainnet later), following the structure and UX flow of `/Users/lucasmenendez/Workspace/vocdoni/davinci-miniapps/self-open-citizen-census/webapps/open-citizen-census`, to support:
 
 1. Census contract deployment with zkPassport restrictions.
 2. Davinci process creation referencing the deployed census.
@@ -18,68 +18,81 @@ In scope:
 2. Vote flow (register + readiness checks + vote submission + results).
 3. zkPassport frontend integration.
 4. Onchain census indexer integration for ICensusValidator contract tracking.
-5. Sepolia network support only.
+5. Multi-chain support through runtime chain profiles.
 
 Out of scope:
 
 1. Smart contract code implementation.
 2. Backend implementation details beyond integration contract.
-3. Multi-network UI in MVP.
+3. Dynamic chain discovery from unknown networks (only configured profiles are supported).
 
 ## Public Interfaces and Types
 
 ### Environment variables
 
-1. `VITE_NETWORK=sepolia`
-2. `VITE_ONCHAIN_CENSUS_INDEXER_URL`
-3. `VITE_DAVINCI_SEQUENCER_URL`
-4. `VITE_DAVINCI_CENSUS_URL` (optional; fallback to indexer URL)
-5. `VITE_BACKEND_URL`
-6. `VITE_ZKPASSPORT_DOMAIN` (single source for both proof request domain/app identity and on-chain `scopeDomain` in `verifyScopes`)
-7. `VITE_ZKPASSPORT_APP_NAME`
-8. `VITE_ZKPASSPORT_VERIFIER_ADDRESS` (for frontend proof precheck if needed)
+1. `VITE_DEFAULT_CHAIN_KEY=sepolia`
+2. `VITE_SUPPORTED_CHAINS_JSON` (chain profile map with at least Sepolia enabled now; Base/Mainnet can be added later)
+3. `VITE_BACKEND_URL`
+4. `VITE_ZKPASSPORT_DOMAIN` (single source for both proof request domain/app identity and on-chain `scopeDomain` in `verifyScopes`)
+5. `VITE_ZKPASSPORT_APP_NAME`
+6. `VITE_ZKPASSPORT_VERIFIER_ADDRESS` (for frontend proof precheck if needed)
+
+Each chain profile in `VITE_SUPPORTED_CHAINS_JSON` includes:
+
+1. `key` (`sepolia`, `base`, `mainnet`, etc.)
+2. `chainId` (e.g. `11155111`, `8453`, `1`)
+3. `label`
+4. `network`
+5. `onchainCensusIndexerUrl`
+6. `davinciSequencerUrl`
+7. `davinciCensusUrl` (optional)
 
 ### Process metadata schema
 
-1. `meta.network: "sepolia"`
-2. `meta.zkPassportConfig.scopeDomain` (set from `VITE_ZKPASSPORT_DOMAIN`)
-3. `meta.zkPassportConfig.scope`
-4. `meta.zkPassportConfig.minAge`
-5. `meta.zkPassportConfig.targetNationality`
-6. `meta.zkPassportConfig.nationalityAliases`
-7. `meta.zkPassportConfig.censusAddress`
-8. `meta.zkPassportConfig.censusURI`
-9. `meta.zkPassportConfig.backendRegisterUrl`
+1. `meta.network.key` (e.g. `sepolia`, `base`, `mainnet`)
+2. `meta.network.chainId`
+3. `meta.zkPassportConfig.scopeDomain` (set from `VITE_ZKPASSPORT_DOMAIN`)
+4. `meta.zkPassportConfig.scope`
+5. `meta.zkPassportConfig.minAge`
+6. `meta.zkPassportConfig.targetNationality`
+7. `meta.zkPassportConfig.nationalityAliases`
+8. `meta.zkPassportConfig.requiredCustomData`
+9. `meta.zkPassportConfig.censusAddress`
+10. `meta.zkPassportConfig.censusURI`
+11. `meta.zkPassportConfig.backendRegisterUrl`
 
 ### Backend API contract used by webapp
 
 1. `POST /v1/register`
 2. Request fields: `voterAddress`, `proofVerificationParams`, `isIDCard`, `signature`, `signedPayload`
 3. Success fields: `txHash`, `chainId`, `censusAddress`
-4. Reject flow on `INVALID_PROOF`, `INVALID_SIGNATURE`, `EXPIRED_SIGNATURE`, `ALREADY_REGISTERED_UNIQUE_IDENTIFIER`, `TX_SUBMISSION_FAILED`, `INVALID_REQUEST`
+4. Reject flow on `INVALID_PROOF`, `INVALID_SIGNATURE`, `EXPIRED_SIGNATURE`, `UNSUPPORTED_CHAIN`, `ALREADY_REGISTERED_UNIQUE_IDENTIFIER`, `TX_SUBMISSION_FAILED`, `INVALID_REQUEST`
 
 ## Functional Plan
 
 ### Create flow
 
 1. Connect creator wallet.
-2. Fill census restrictions form: minimum age, nationality target, aliases, scope seed.
-3. Build deterministic scope from app rules (auto-generated, no manual raw scope editing).
-4. Deploy zkPassport census contract on Sepolia with constructor restrictions.
-5. Register the deployed validator in onchain-census-indexer and obtain `censusURI`.
-6. Create Davinci process with census reference and metadata including `meta.zkPassportConfig`.
-7. Wait for sequencer process availability and show vote URL.
+2. Select target chain from configured chain profiles (default: Sepolia).
+3. Fill census restrictions form: minimum age, nationality target, aliases, scope seed.
+4. Build deterministic scope from app rules (auto-generated, no manual raw scope editing).
+5. Compute `requiredCustomData` from selected chain profile (`chainId`, `scopeDomain`, `scope`).
+6. Deploy zkPassport census contract on selected chain with constructor restrictions.
+7. Register the deployed validator in onchain-census-indexer and obtain `censusURI`.
+8. Create Davinci process with census reference and metadata including `meta.zkPassportConfig`.
+9. Wait for sequencer process availability and show vote URL.
 
 ### Voter registration flow
 
 1. Resolve process by `processId` route.
-2. Load metadata and enforce `meta.network === "sepolia"`.
-3. Generate/recover voter deterministic wallet locally from `uniqueIdentifier + password`.
-4. Generate zk proof with zkPassport SDK using process restrictions.
-5. Sign canonical payload (including `proofHash`, `chainId`, `censusAddress`, timestamps) with voter wallet.
-6. Call backend `POST /v1/register`.
-7. Receive `txHash` and show tx-tracking UI.
-8. Confirm readiness by:
+2. Load metadata and resolve the configured chain profile by `meta.network.chainId`.
+3. Enforce wallet network equals process chain profile.
+4. Generate/recover voter deterministic wallet locally from `uniqueIdentifier + password`.
+5. Generate zk proof with zkPassport SDK using process restrictions.
+6. Sign canonical payload (including `proofHash`, `chainId`, `censusAddress`, `requiredCustomData`, timestamps) with voter wallet.
+7. Call backend `POST /v1/register`.
+8. Receive `txHash` and show tx-tracking UI.
+9. Confirm readiness by:
    - tx mined success
    - census indexer reflects registration in census URI
    - sequencer census inclusion is ready for voting
@@ -118,7 +131,7 @@ Out of scope:
 3. Store password verifier hash for re-unlock UX.
 4. Never log full proofs or secrets.
 5. Reject flow immediately on proof/signature/backend failure.
-6. Force chain checks (Sepolia, chainId `11155111`) before actions.
+6. Force chain checks against selected chain profile before any action.
 
 ## Test Cases and Scenarios
 
@@ -136,7 +149,7 @@ Out of scope:
 ## Acceptance Criteria
 
 1. Webapp reproduces the same end-to-end UX quality as the reference app while using zkPassport flow.
-2. Network is strictly Sepolia in create and vote flows.
+2. Network is parameterized by configured chain profiles (Sepolia enabled first; Base/Mainnet ready via config).
 3. Registration relies on sponsored backend and contract/indexer readiness checks.
 4. Voting is impossible before registration readiness.
 5. Results are visible from the same app without external tools.
@@ -149,3 +162,11 @@ Out of scope:
 4. Onchain-census-indexer supports the new validator because it follows `ICensusValidator`.
 5. Frontend tracks tx by hash and does not require backend job pattern.
 6. `VITE_ZKPASSPORT_DOMAIN` is reused as the single domain configuration for both SDK request domain and contract `scopeDomain`.
+7. Default chain profile is Sepolia; Base/Mainnet profiles are added by configuration.
+
+## References
+
+1. zkPassport on-chain overview: [https://docs.zkpassport.id/getting-started/onchain](https://docs.zkpassport.id/getting-started/onchain)
+2. zkPassport on-chain integration steps: [https://docs.zkpassport.id/getting-started/onchain#integration-steps](https://docs.zkpassport.id/getting-started/onchain#integration-steps)
+3. zkPassport docs repository: [https://github.com/zkpassport/zkpassport-docs](https://github.com/zkpassport/zkpassport-docs)
+4. onchain-census-indexer repository: [https://github.com/vocdoni/onchain-census-indexer](https://github.com/vocdoni/onchain-census-indexer)
