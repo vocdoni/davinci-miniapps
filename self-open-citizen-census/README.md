@@ -1,6 +1,6 @@
 # OpenCitizenCensus
 
-Smart contract registry that implements `ICensusValidator` by building an on-chain Lean-IMT census of Self.xyz-verified humans. The `OpenCitizenCensus` contract verifies Self.xyz V2 proofs for a specific nationality and minimum age, enforces one-person-one-entry via nullifiers, and exposes the current and historical census roots for on-chain validation.
+Smart contract registry that implements `ICensusValidator` by building an on-chain Lean-IMT census of Self.xyz-verified humans. The `OpenCitizenCensus` contract verifies Self.xyz V2 proofs for a selected country set (1-5 entries) and minimum age, enforces one-person-one-entry via nullifiers, and exposes the current and historical census roots for on-chain validation.
 
 ## Contracts
 
@@ -19,7 +19,7 @@ Smart contract registry that implements `ICensusValidator` by building an on-cha
      - `identityVerificationHubAddress`: Self.xyz IdentityVerificationHub V2 proxy address
      - `scopeSeed`: short string used to derive the on-chain scope
      - `configId`: verification configuration id known by the hub
-     - `targetNationalityAlpha3`: ISO-3166-1 alpha-2 or alpha-3 string (must match Self output)
+     - `targetNationalitiesAlpha3`: ISO-3166-1 alpha-2/alpha-3 string array (must match Self output)
      - `minAge`: minimum age required to register
 2. **Proof submission**
    - The parent `SelfVerificationRoot` contract validates a Self.xyz V2 proof.
@@ -27,7 +27,7 @@ Smart contract registry that implements `ICensusValidator` by building an on-cha
 3. **Eligibility checks**
    - Address bound in the proof must be non-zero.
    - Age must be at least the configured `minAge` (constructor arg).
-   - Nationality must match `targetNationalityAlpha3`.
+   - Country must match one value from `targetNationalitiesAlpha3`.
    - Address must not be registered already.
    - Nullifier must not be used already.
 4. **Census update**
@@ -111,7 +111,7 @@ If you plan to support removals or weight changes in the Self registry, you’ll
 - A valid Self.xyz V2 verification config and `configId`.
 - Frontend or client that generates and submits Self.xyz proofs for:
   - `olderThan >= minAge`
-  - `nationality == targetNationalityAlpha3` (alpha-2 or alpha-3, must match Self output)
+  - `country` is included in `targetNationalitiesAlpha3` (alpha-2 or alpha-3, must match Self output)
   - `userIdentifier` bound to the registering address
 - Operational understanding of the scope seed and nullifier behavior for uniqueness.
 
@@ -213,7 +213,7 @@ export POSEIDON_T3="0xF134707a4C4a3a76b8410fC0294d620A7c341581"
 export CHAIN_ID="42220"
 export SCOPE_SEED="open-citizen-census"
 export CONFIG_ID="0x..."
-export NATIONALITY="ESP"
+export NATIONALITIES="ESP,FRA" # CSV list, max 5 entries
 export MIN_AGE="18"
 export SELF_REGISTER_CONFIG="0" # set to 1 to register config on-chain
 export SELF_MIN_AGE="18" # defaults to MIN_AGE when empty
@@ -239,7 +239,7 @@ Constructor args recap (read from env by the deploy script):
 1. `identityVerificationHubAddress`
 2. `scopeSeed` (ASCII, <=31 chars) — must match the web app `VITE_SCOPE`
 3. `configId` (bytes32) — provided by Self.xyz
-4. `targetNationalityAlpha3` (string)
+4. `targetNationalitiesAlpha3` (string[])
 5. `minAge` (uint256)
 
 Optional: use the provided env template for deployments:
@@ -299,7 +299,7 @@ export POSEIDON_T3="0x0a782f7F9f8Aac6E0bacAF3cD4aA292C3275C6f2"
 export CHAIN_ID="11142220"
 export SCOPE_SEED="open-citizen-census-test"
 export CONFIG_ID="0x..."
-export NATIONALITY="ESP"
+export NATIONALITIES="ESP,FRA" # CSV list, max 5 entries
 export MIN_AGE="18"
 export SELF_REGISTER_CONFIG="0"
 export SELF_MIN_AGE="18"

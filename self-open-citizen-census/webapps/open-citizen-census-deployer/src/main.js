@@ -326,22 +326,72 @@ function getCurrentCensusConfig() {
   };
 }
 
+function normalizeHexAddress(value, label) {
+  const normalized = String(value || '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
+    throw new Error(`${label} must be a 20-byte hex address.`);
+  }
+  return normalized.toLowerCase();
+}
+
+function linkBytecodeLibraries(bytecode, linkReferences, libraries) {
+  if (!linkReferences || Object.keys(linkReferences).length === 0) {
+    return bytecode;
+  }
+
+  const hasPrefix = String(bytecode).startsWith('0x');
+  let hexData = hasPrefix ? String(bytecode).slice(2) : String(bytecode);
+
+  for (const [sourceName, refsByLibrary] of Object.entries(linkReferences)) {
+    for (const [libraryName, refs] of Object.entries(refsByLibrary || {})) {
+      const libraryKey = `${sourceName}:${libraryName}`;
+      const linkedAddress = libraries[libraryKey] || libraries[libraryName];
+      if (!linkedAddress) {
+        throw new Error(`Missing linked address for library "${libraryName}".`);
+      }
+
+      const addressHex = normalizeHexAddress(linkedAddress, `Library ${libraryName}`).slice(2);
+      for (const ref of refs || []) {
+        const offset = Number(ref.start) * 2;
+        const length = Number(ref.length) * 2;
+        const replacement = addressHex.padStart(length, '0').slice(-length);
+        hexData = `${hexData.slice(0, offset)}${replacement}${hexData.slice(offset + length)}`;
+      }
+    }
+  }
+
+  return hasPrefix ? `0x${hexData}` : hexData;
+}
+
 function buildDeployData(config) {
-  const bytecode = artifact.bytecode?.object ?? artifact.bytecode;
+  const artifactBytecode = artifact.bytecode?.object ? artifact.bytecode : { object: artifact.bytecode };
+  const bytecode = artifactBytecode?.object;
+  const linkedBytecode = linkBytecodeLibraries(bytecode, artifactBytecode?.linkReferences, {
+    PoseidonT3: POSEIDON_T3,
+    'lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3': POSEIDON_T3,
+  });
+
+  if (/__\$[a-fA-F0-9]{34}\$__/.test(linkedBytecode)) {
+    throw new Error('Contract bytecode still contains unresolved library placeholders.');
+  }
+  if (!/^0x[0-9a-fA-F]+$/.test(linkedBytecode)) {
+    throw new Error('Contract bytecode is not valid hex.');
+  }
+
   const coder = AbiCoder.defaultAbiCoder();
   const configId = computedConfigId;
   const encodedArgs = coder.encode(
-    ['address', 'string', 'bytes32', 'string', 'uint256'],
-    [HUB_ADDRESS, config.scopeSeed, configId, config.nationality, BigInt(config.minAge)]
+    ['address', 'string', 'bytes32', 'string[]', 'uint256'],
+    [HUB_ADDRESS, config.scopeSeed, configId, [config.nationality], BigInt(config.minAge)]
   );
-  return `${bytecode}${encodedArgs.slice(2)}`;
+  return `${linkedBytecode}${encodedArgs.slice(2)}`;
 }
 
 function buildVerificationConfig() {
   const nationality = normalizeNationality(nationalityInput.value);
   const minAge = normalizeMinAge(minAgeInput.value);
   if (!isNationalityCode(nationality)) {
-    throw new Error('Invalid nationality format');
+    throw new Error('Invalid country code format');
   }
   if (!minAge) {
     throw new Error('Minimum age is required');
@@ -438,7 +488,7 @@ async function deployContract() {
   try {
     const censusConfig = getCurrentCensusConfig();
     if (!isNationalityCode(censusConfig.nationality)) {
-      throw new Error('Invalid nationality format');
+      throw new Error('Invalid country code format');
     }
     if (!censusConfig.minAge) {
       throw new Error('Minimum age is required');

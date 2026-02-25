@@ -104,6 +104,7 @@ interface VoteResolutionState {
 interface VoteSelfState {
   scopeSeed: string;
   minAge: number | null;
+  countries: string[];
   country: string;
   link: string;
   generating: boolean;
@@ -147,6 +148,7 @@ const EMPTY_RESOLUTION: VoteResolutionState = {
 const EMPTY_VOTE_SELF: VoteSelfState = {
   scopeSeed: '',
   minAge: null,
+  countries: [],
   country: '',
   link: '',
   generating: false,
@@ -220,6 +222,18 @@ function hasVoteReadiness(resolution: VoteResolutionState): boolean {
 function canOverwriteVote(ballot: VoteBallotState): boolean {
   if (!ballot.submissionId) return true;
   return isVoteStatusTerminal(ballot.submissionStatus);
+}
+
+function normalizeCountries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: string[] = [];
+  for (const rawCountry of value) {
+    const country = normalizeCountry(rawCountry);
+    if (!/^[A-Z]{2,3}$/.test(country)) continue;
+    if (normalized.includes(country)) continue;
+    normalized.push(country);
+  }
+  return normalized;
 }
 
 function areVoteChoicesEnabled(resolution: VoteResolutionState, ballot: VoteBallotState): boolean {
@@ -623,14 +637,18 @@ export default function VoteRoute() {
         String(meta.contractAddress).toLowerCase() === String(contractAddress).toLowerCase();
       const scopeSeed = normalizeScope(storedScope || (contractMatches ? metaScope : ''));
 
+      const metaCountries = normalizeCountries(meta?.countries);
       const metaCountry = normalizeCountry(meta?.country || '');
+      const fallbackMetaCountries = /^[A-Z]{2,3}$/.test(metaCountry) ? [metaCountry] : [];
+      const resolvedMetaCountries = contractMatches ? (metaCountries.length ? metaCountries : fallbackMetaCountries) : [];
       const metaMinAge = Number(meta?.minAge);
       const resolvedMetaMinAge = contractMatches && Number.isFinite(metaMinAge) && metaMinAge > 0 ? Math.trunc(metaMinAge) : null;
 
       setVoteSelf((previous) => ({
         ...previous,
         scopeSeed,
-        country: /^[A-Z]{2,3}$/.test(metaCountry) ? metaCountry : previous.country,
+        countries: resolvedMetaCountries.length ? resolvedMetaCountries : previous.countries,
+        country: resolvedMetaCountries[0] || previous.country,
         minAge: resolvedMetaMinAge || previous.minAge,
       }));
 
@@ -663,6 +681,7 @@ export default function VoteRoute() {
       }));
       setVoteSelf((previous) => ({
         ...previous,
+        countries: [],
         country: '',
       }));
       clearVoteBallot('Resolving process...');
@@ -718,8 +737,19 @@ export default function VoteRoute() {
         if (metadataContext.minAge) {
           setVoteSelf((previous) => ({ ...previous, minAge: metadataContext.minAge }));
         }
+        if (metadataContext.countries.length) {
+          setVoteSelf((previous) => ({
+            ...previous,
+            countries: metadataContext.countries,
+            country: metadataContext.countries[0] || previous.country,
+          }));
+        }
         if (metadataContext.country) {
-          setVoteSelf((previous) => ({ ...previous, country: metadataContext.country }));
+          setVoteSelf((previous) => ({
+            ...previous,
+            countries: previous.countries.length ? previous.countries : [metadataContext.country],
+            country: metadataContext.country,
+          }));
         }
 
         const existingMeta = loadProcessMeta(normalizedProcessId) || {};
@@ -730,6 +760,7 @@ export default function VoteRoute() {
           censusUri: censusUri || existingMeta.censusUri || '',
           scopeSeed: metadataContext.scopeSeed || existingMeta.scopeSeed || '',
           minAge: metadataContext.minAge || existingMeta.minAge || undefined,
+          countries: metadataContext.countries.length ? metadataContext.countries : existingMeta.countries || undefined,
           country: metadataContext.country || existingMeta.country || '',
           network: metadataContext.network || existingMeta.network || CONFIG.network,
           updatedAt: new Date().toISOString(),
@@ -1388,6 +1419,8 @@ export default function VoteRoute() {
   const voteHeaderHelpText = voteResultsVisible
     ? 'Results are available for this process.'
     : 'Choose an option, register with the Self.xyz app to join the census when required, and then submit your vote.';
+  const voteSelfCountriesText =
+    voteSelf.countries.length > 0 ? voteSelf.countries.join(', ') : voteSelf.country ? voteSelf.country : '-';
 
   return (
     <>
@@ -1925,9 +1958,9 @@ export default function VoteRoute() {
                     </p>
                   </div>
                   <div className="vote-registration-requirement">
-                    <p className="label">Country</p>
+                    <p className="label">Countries</p>
                     <p className="value" id="voteCountryInfo">
-                      {voteSelf.country || '-'}
+                      {voteSelfCountriesText}
                     </p>
                   </div>
                 </div>
@@ -2024,9 +2057,9 @@ export default function VoteRoute() {
                     </p>
                   </div>
                   <div className="vote-registration-requirement">
-                    <p className="label">Country</p>
+                    <p className="label">Countries</p>
                     <p className="value" id="voteCountryInfo">
-                      {voteSelf.country || '-'}
+                      {voteSelfCountriesText}
                     </p>
                   </div>
                 </div>

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_OPTIONS } from './constants';
-import { addOption, createInitialFormState, deriveCreateValuesFromForm, generateScopeSeed, removeOption } from './model';
+import { MAX_NATIONALITIES, MAX_OPTIONS } from './constants';
+import {
+  addOption,
+  createInitialFormState,
+  deriveCreateValuesFromForm,
+  generateScopeSeed,
+  parseCountries,
+  removeOption,
+} from './model';
 
 describe('create route model', () => {
   it('generates scope seed in expected format', () => {
@@ -21,7 +28,7 @@ describe('create route model', () => {
           { title: 'No', value: 1 },
           { title: 'Abstain', value: 2 },
         ],
-        country: 'USA',
+        countries: ['USA', 'FRA'],
         minAge: '18',
         durationHours: '24',
         maxVoters: '1000',
@@ -31,6 +38,8 @@ describe('create route model', () => {
     );
 
     expect(values.scopeSeed).toBe('USA_18_aaaaa');
+    expect(values.countries).toEqual(['USA', 'FRA']);
+    expect(values.country).toBe('USA');
     expect(values.startDate.toISOString()).toBe('2026-03-01T10:10:00.000Z');
     expect(values.question).toEqual({
       title: 'Should we approve this budget?',
@@ -66,5 +75,16 @@ describe('create route model', () => {
     }
 
     expect(options).toHaveLength(MAX_OPTIONS);
+  });
+
+  it('parses countries with dedupe while preserving order', () => {
+    expect(parseCountries(['usa', 'FRA', 'USA', 'gbr'])).toEqual(['USA', 'FRA', 'GBR']);
+  });
+
+  it('rejects empty or oversized country lists', () => {
+    expect(() => parseCountries([])).toThrow('Please select at least one country.');
+
+    const tooMany = ['USA', 'FRA', 'ESP', 'DEU', 'GBR', 'ITA'].slice(0, MAX_NATIONALITIES + 1);
+    expect(() => parseCountries(tooMany)).toThrow(`Select up to ${MAX_NATIONALITIES} countries.`);
   });
 });

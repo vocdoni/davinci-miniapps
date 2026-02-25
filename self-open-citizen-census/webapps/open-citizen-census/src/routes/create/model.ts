@@ -5,6 +5,7 @@ import {
   DEFAULT_DURATION_HOURS,
   DEFAULT_MAX_VOTERS,
   DEFAULT_MIN_AGE,
+  MAX_NATIONALITIES,
   MAX_OPTIONS,
   MIN_OPTIONS,
   SCOPE_CHARSET,
@@ -58,7 +59,7 @@ export function createInitialFormState(): CreateFormState {
   return {
     processTitle: '',
     options: createDefaultOptions(),
-    country: '',
+    countries: [],
     minAge: DEFAULT_MIN_AGE,
     durationHours: DEFAULT_DURATION_HOURS,
     maxVoters: DEFAULT_MAX_VOTERS,
@@ -122,12 +123,36 @@ export function parseOptions(options: CreateOption[]): Array<{ title: string; va
   return parsed;
 }
 
+export function parseCountries(countries: string[]): string[] {
+  const deduped: string[] = [];
+
+  for (const rawCountry of countries) {
+    const country = normalizeCountry(rawCountry);
+    if (!/^[A-Z]{2,3}$/.test(country)) {
+      throw new Error('Each country must use a valid country code.');
+    }
+    if (!deduped.includes(country)) {
+      deduped.push(country);
+    }
+  }
+
+  if (deduped.length === 0) {
+    throw new Error('Please select at least one country.');
+  }
+  if (deduped.length > MAX_NATIONALITIES) {
+    throw new Error(`Select up to ${MAX_NATIONALITIES} countries.`);
+  }
+
+  return deduped;
+}
+
 export function deriveCreateValuesFromForm(
   form: CreateFormState,
   nowMs = Date.now(),
   randomIndex: RandomIndexGenerator = defaultRandomIndex
 ): CreateValues {
-  const country = normalizeCountry(form.country);
+  const countries = parseCountries(form.countries);
+  const country = countries[0] || '';
   const minAge = normalizeMinAge(form.minAge);
   const title = String(form.processTitle || '').trim();
   const maxVoters = Number(form.maxVoters);
@@ -138,9 +163,6 @@ export function deriveCreateValuesFromForm(
   }
   ensureAsciiField(title, 'Question');
 
-  if (!/^[A-Z]{2,3}$/.test(country)) {
-    throw new Error('Please select a country.');
-  }
   if (!minAge) {
     throw new Error('Minimum age must be between 1 and 99.');
   }
@@ -169,6 +191,7 @@ export function deriveCreateValuesFromForm(
   }
 
   return {
+    countries,
     country,
     minAge,
     scopeSeed,

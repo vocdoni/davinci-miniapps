@@ -13,6 +13,7 @@ export interface NetworkConfig {
   chainHex: string;
   label: string;
   hubAddress: string;
+  poseidonT3Address: string;
   rpcUrl: string;
 }
 
@@ -22,6 +23,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainHex: '0xa4ec',
     label: 'Celo Mainnet',
     hubAddress: '0xe57F4773bd9c9d8b6Cd70431117d353298B9f5BF',
+    poseidonT3Address: '0xF134707a4C4a3a76b8410fC0294d620A7c341581',
     rpcUrl: 'https://forno.celo.org',
   },
   staging_celo: {
@@ -29,6 +31,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainHex: '0xaef3',
     label: 'Celo Sepolia',
     hubAddress: '0x16ECBA51e18a4a7e61fdC417f0d47AFEeDfbed74',
+    poseidonT3Address: '0x0A782f7F9f8AaC6E0BACAF3cd4Aa292C3275c6F2',
     rpcUrl: 'https://forno.celo-sepolia.celo-testnet.org',
   },
 };
@@ -202,6 +205,7 @@ export interface CreateQuestion {
 }
 
 export interface CreateValues {
+  countries: string[];
   country: string;
   minAge: number;
   scopeSeed: string;
@@ -228,6 +232,7 @@ export interface ProcessMetaSnapshot {
   censusUri?: string;
   title?: string;
   scopeSeed?: string;
+  countries?: string[];
   country?: string;
   minAge?: number;
   network?: string;
@@ -533,17 +538,107 @@ export function computeConfigId(minAge: number): string {
   return sha256(encoded);
 }
 
-export function buildDeployData(input: { scopeSeed: string; country: string; minAge: number; configId: string }): string {
-  const bytecode = (artifact as { bytecode?: { object?: string } | string }).bytecode;
-  const resolvedBytecode = typeof bytecode === 'string' ? bytecode : bytecode?.object;
-  if (!resolvedBytecode) throw new Error('Contract artifact bytecode is missing.');
+interface BytecodeLinkReference {
+  start: number;
+  length: number;
+}
+
+type BytecodeLinkReferences = Record<string, Record<string, BytecodeLinkReference[]>>;
+
+interface ArtifactBytecode {
+  object?: string;
+  linkReferences?: BytecodeLinkReferences;
+}
+
+function normalizeHexAddress(value: string, label: string): string {
+  const normalized = String(value || '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
+    throw new Error(`${label} must be a 20-byte hex address.`);
+  }
+  return normalized.toLowerCase();
+}
+
+function linkBytecodeLibraries(
+  bytecode: string,
+  linkReferences: BytecodeLinkReferences | undefined,
+  libraries: Record<string, string>
+): string {
+  if (!linkReferences || !Object.keys(linkReferences).length) {
+    return bytecode;
+  }
+
+  const hasPrefix = bytecode.startsWith('0x');
+  let hexData = hasPrefix ? bytecode.slice(2) : bytecode;
+
+  for (const [sourceName, refsByLibrary] of Object.entries(linkReferences)) {
+    for (const [libraryName, refs] of Object.entries(refsByLibrary)) {
+      const libraryKey = `${sourceName}:${libraryName}`;
+      const linkedAddress = libraries[libraryKey] || libraries[libraryName];
+      if (!linkedAddress) {
+        throw new Error(`Missing linked address for library "${libraryName}".`);
+      }
+
+      const addressHex = normalizeHexAddress(linkedAddress, `Library ${libraryName}`).slice(2);
+      for (const ref of refs) {
+        const offset = Number(ref.start) * 2;
+        const length = Number(ref.length) * 2;
+        if (!Number.isFinite(offset) || !Number.isFinite(length) || offset < 0 || length <= 0) {
+          throw new Error(`Invalid link reference for library "${libraryName}".`);
+        }
+        const replacement = addressHex.padStart(length, '0').slice(-length);
+        hexData = `${hexData.slice(0, offset)}${replacement}${hexData.slice(offset + length)}`;
+      }
+    }
+  }
+
+  return hasPrefix ? `0x${hexData}` : hexData;
+}
+
+function ensureValidHexBytecode(bytecode: string): void {
+  if (!/^0x[0-9a-fA-F]+$/.test(bytecode)) {
+    throw new Error('Contract bytecode contains unresolved placeholders. Rebuild artifacts and linked libraries.');
+  }
+  if (bytecode.length % 2 !== 0) {
+    throw new Error('Contract bytecode hex length is invalid.');
+  }
+}
+
+export function buildDeployData(input: {
+  scopeSeed: string;
+  countries: string[];
+  country: string;
+  minAge: number;
+  configId: string;
+}): string {
+  const artifactBytecode = (artifact as { bytecode?: ArtifactBytecode | string }).bytecode;
+  const rawBytecode = typeof artifactBytecode === 'string' ? artifactBytecode : artifactBytecode?.object;
+  if (!rawBytecode) throw new Error('Contract artifact bytecode is missing.');
+
+  const linkedBytecode = linkBytecodeLibraries(rawBytecode, typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences, {
+    PoseidonT3: ACTIVE_NETWORK.poseidonT3Address,
+    'lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3': ACTIVE_NETWORK.poseidonT3Address,
+  });
+
+  if (/__\$[a-fA-F0-9]{34}\$__/.test(linkedBytecode)) {
+    throw new Error('Contract bytecode still contains unresolved library placeholders.');
+  }
+  ensureValidHexBytecode(linkedBytecode);
+
+  const countries = Array.isArray(input.countries)
+    ? input.countries.map((country) => normalizeCountry(country)).filter((country) => /^[A-Z]{2,3}$/.test(country))
+    : [];
+  const fallbackCountry = normalizeCountry(input.country);
+  const targetCountries = countries.length ? countries : /^[A-Z]{2,3}$/.test(fallbackCountry) ? [fallbackCountry] : [];
+  if (!targetCountries.length) {
+    throw new Error('At least one country is required to deploy the census contract.');
+  }
 
   const encodedArgs = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'string', 'bytes32', 'string', 'uint256'],
-    [ACTIVE_NETWORK.hubAddress, input.scopeSeed, input.configId, input.country, BigInt(input.minAge)]
+    ['address', 'string', 'bytes32', 'string[]', 'uint256'],
+    [ACTIVE_NETWORK.hubAddress, input.scopeSeed, input.configId, targetCountries, BigInt(input.minAge)]
   );
 
-  return `${resolvedBytecode}${encodedArgs.slice(2)}`;
+  return `${linkedBytecode}${encodedArgs.slice(2)}`;
 }
 
 export function buildCensusUri(contractAddress: string): string {
@@ -858,6 +953,7 @@ export function extractProcessEndDateMs(
 export function extractVoteContextFromMetadata(metadata: Record<string, any> | null): {
   scopeSeed: string;
   minAge: number | null;
+  countries: string[];
   country: string;
   network: string;
 } {
@@ -866,13 +962,25 @@ export function extractVoteContextFromMetadata(metadata: Record<string, any> | n
 
   const scopeSeed = normalizeScope(selfConfig.scope ?? selfConfig.scopeSeed ?? '');
   const minAge = normalizeMinAge(selfConfig.minAge);
-  const country = normalizeCountry(selfConfig.country || '');
+  const rawCountries = Array.isArray(selfConfig.countries) ? selfConfig.countries : [];
+  const countries: string[] = [];
+  for (const rawCountry of rawCountries) {
+    const country = normalizeCountry(rawCountry);
+    if (!/^[A-Z]{2,3}$/.test(country)) continue;
+    if (countries.includes(country)) continue;
+    countries.push(country);
+  }
+  const legacyCountry = normalizeCountry(selfConfig.country || '');
+  if (!countries.length && /^[A-Z]{2,3}$/.test(legacyCountry)) {
+    countries.push(legacyCountry);
+  }
   const network = String(meta.network || '').trim();
 
   return {
     scopeSeed: scopeSeed && isAsciiText(scopeSeed) && scopeSeed.length <= 31 ? scopeSeed : '',
     minAge: minAge || null,
-    country: /^[A-Z]{2,3}$/.test(country) ? country : '',
+    countries,
+    country: countries[0] || '',
     network: NETWORKS[network] ? network : '',
   };
 }

@@ -6,6 +6,7 @@ export interface CountryOption {
 export const CREATE_START_DELAY_MS = 10 * 60 * 1000;
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
+export const MAX_NATIONALITIES = 5;
 export const SCOPE_RANDOM_LENGTH = 5;
 export const SCOPE_CHARSET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -14,7 +15,7 @@ export const DEFAULT_DURATION_HOURS = '24';
 export const DEFAULT_MAX_VOTERS = '1000000';
 
 export const ELIGIBILITY_TOOLTIP =
-  'You set the eligibility rules here. Anyone with a modern ID or Passport from most countries can securely vote, as long as they meet your criteria (Country & Age) and participate during the process duration.';
+  'You set the eligibility rules here. Anyone with a modern ID or Passport from most countries can securely vote, as long as they meet your criteria (Countries & Age) and participate during the process duration.';
 
 export const COUNTRY_OPTIONS: CountryOption[] = [
   { code: 'ARG', label: 'Argentina' },

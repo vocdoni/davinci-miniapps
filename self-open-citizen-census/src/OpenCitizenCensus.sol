@@ -25,12 +25,15 @@ import {
 contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
     using InternalLeanIMT for LeanIMTData;
 
+    uint256 private constant MAX_NATIONALITIES = 5;
+
     // ====================================================
     // Self config
     // ====================================================
     bytes32 public verificationConfigId;
 
-    bytes32 public immutable targetNationalityHash;
+    bytes32[] private _targetNationalityHashes;
+    mapping(bytes32 nationalityHash => bool allowed) private _allowedNationalityHash;
     uint256 public immutable minAge;
 
     // ====================================================
@@ -68,26 +71,43 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
 
     error NotAdult();
     error WrongNationality();
+    error InvalidNationalityList();
+    error DuplicateNationality();
     error AlreadyRegisteredAddress();
     error NullifierAlreadyUsed();
 
     /// @param identityVerificationHubAddress IdentityVerificationHub V2 (proxy) address
-    /// @param scopeSeed Short string (<=31 bytes recommended). Used to compute the on-chain scope. :contentReference[oaicite:2]{index=2}
+    /// @param scopeSeed Short string (<=31 bytes recommended). Used to compute the on-chain scope.
     /// @param configId Verification config id known by the hub
-    /// @param targetNationalityAlpha3 ISO-3166-1 alpha-3, e.g. "ESP"
+    /// @param targetNationalitiesAlpha3 ISO-3166-1 alpha-2/3 list, e.g. ["ESP", "FRA"]
     /// @param minAge_ Minimum age required for registration
     constructor(
         address identityVerificationHubAddress,
         string memory scopeSeed,
         bytes32 configId,
-        string memory targetNationalityAlpha3,
+        string[] memory targetNationalitiesAlpha3,
         uint256 minAge_
     )
         SelfVerificationRoot(identityVerificationHubAddress, scopeSeed)
         Ownable(_msgSender())
     {
+        uint256 totalNationalities = targetNationalitiesAlpha3.length;
+        if (totalNationalities == 0 || totalNationalities > MAX_NATIONALITIES) {
+            revert InvalidNationalityList();
+        }
+        for (uint256 i = 0; i < totalNationalities; i++) {
+            string memory nationality = targetNationalitiesAlpha3[i];
+            bytes memory nationalityBytes = bytes(nationality);
+            if (nationalityBytes.length == 0) revert InvalidNationalityList();
+
+            bytes32 nationalityHash = keccak256(nationalityBytes);
+            if (_allowedNationalityHash[nationalityHash]) revert DuplicateNationality();
+
+            _allowedNationalityHash[nationalityHash] = true;
+            _targetNationalityHashes.push(nationalityHash);
+        }
+
         verificationConfigId = configId;
-        targetNationalityHash = keccak256(bytes(targetNationalityAlpha3));
         minAge = minAge_;
         _currentRoot = _tree._root();
     }
@@ -138,8 +158,7 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
 
         // Hard requirements
         if (output.olderThan < minAge) revert NotAdult();
-        if (keccak256(bytes(output.nationality)) != targetNationalityHash)
-            revert WrongNationality();
+        if (!_isAllowedNationality(output.nationality)) revert WrongNationality();
 
         // One address only (optional but usually desired)
         if (weightOf[user] != 0) revert AlreadyRegisteredAddress();
@@ -196,5 +215,19 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
     }
     function leafOf(address user) external pure returns (uint256) {
         return uint256(uint160(user));
+    }
+
+    function targetNationalityHashesLength() external view returns (uint256) {
+        return _targetNationalityHashes.length;
+    }
+
+    function targetNationalityHashAt(uint256 index) external view returns (bytes32) {
+        return _targetNationalityHashes[index];
+    }
+
+    function _isAllowedNationality(
+        string memory nationality
+    ) internal view returns (bool) {
+        return _allowedNationalityHash[keccak256(bytes(nationality))];
     }
 }

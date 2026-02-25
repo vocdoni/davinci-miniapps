@@ -5,7 +5,7 @@ Unified frontend for creating and voting in census-gated voting processes using 
 ## Goal
 This app provides two production flows in a single webapp:
 
-1. **Create voting processes** backed by an onchain census contract with country + minimum-age constraints.
+1. **Create voting processes** backed by an onchain census contract with country list (1-5) + minimum-age constraints.
 2. **Vote without browser-wallet interaction** using a managed identity wallet and Self registration.
 
 The objective is to minimize user friction while preserving clear status visibility during creation, registration, and vote lifecycle.
@@ -35,7 +35,7 @@ The objective is to minimize user friction while preserving clear status visibil
 - Single-question creator UI:
   1. Question title
   2. Option list (minimum two, maximum eight)
-  3. Eligibility cards (country, minimum age, duration)
+  3. Eligibility cards (countries, minimum age, duration)
   4. Advanced max-voters control
 - `scopeSeed` and `startDate` are derived at submit time.
 - Input sanitization for ASCII-sensitive fields.
@@ -47,7 +47,7 @@ The objective is to minimize user friction while preserving clear status visibil
 
 ### Vote flow
 - Process-first navigation (`/vote/:processId`) for deterministic process resolution.
-- Additional voting context (`scope`, `minAge`, `country`, `network`) is resolved from sequencer metadata (`metadata.meta.selfConfig` + `metadata.meta.network`).
+- Additional voting context (`scope`, `minAge`, `countries`/`country`, `network`) is resolved from sequencer metadata (`metadata.meta.selfConfig` + `metadata.meta.network`).
 - Process details popup with process metadata and URLs.
 - Self-based process registration card with automatic QR generation when context is ready.
 - Registration progress timeline:

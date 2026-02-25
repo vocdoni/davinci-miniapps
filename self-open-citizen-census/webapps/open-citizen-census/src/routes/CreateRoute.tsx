@@ -44,6 +44,7 @@ import {
   DEFAULT_DURATION_HOURS,
   DEFAULT_MIN_AGE,
   ELIGIBILITY_TOOLTIP,
+  MAX_NATIONALITIES,
   MAX_OPTIONS,
   MIN_OPTIONS,
 } from './create/constants';
@@ -151,10 +152,11 @@ export default function CreateRoute() {
   const [form, setForm] = useState<CreateFormState>(createInitialFormState);
   const [pipeline, setPipeline] = useState<PipelineStageState[]>(newPipelineState);
   const [outputs, setOutputs] = useState<CreateOutputs>(EMPTY_OUTPUTS);
+  const [countriesMenuOpen, setCountriesMenuOpen] = useState(false);
 
   const walletRef = useRef(creatorWallet);
-  const countrySelectRef = useRef<HTMLSelectElement | null>(null);
   const createTimelineRef = useRef<HTMLDetailsElement | null>(null);
+  const countriesSelectRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     walletRef.current = creatorWallet;
@@ -201,6 +203,8 @@ export default function CreateRoute() {
   const spinnerActive = !hasSuccessOutput && !hasError && (createSubmitting || hasActivity);
   const outputsVisible = hasAnyOutputs(outputs);
   const formLocked = createSubmitting;
+  const selectedCountriesCount = form.countries.length;
+  const countriesLimitReached = selectedCountriesCount >= MAX_NATIONALITIES;
 
   useEffect(() => {
     if (!hasError) return;
@@ -217,6 +221,39 @@ export default function CreateRoute() {
       document.body.classList.remove('app-blocked');
     };
   }, [overlayVisible]);
+
+  useEffect(() => {
+    if (!countriesMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (!countriesSelectRef.current) return;
+      if (countriesSelectRef.current.contains(event.target)) return;
+      setCountriesMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCountriesMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('touchstart', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('touchstart', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [countriesMenuOpen]);
+
+  useEffect(() => {
+    if (formLocked && countriesMenuOpen) {
+      setCountriesMenuOpen(false);
+    }
+  }, [countriesMenuOpen, formLocked]);
 
   const updateStage = useCallback((stageId: string, updates: Partial<PipelineStageState>) => {
     setPipeline((previous) => previous.map((stage) => (stage.id === stageId ? { ...stage, ...updates } : stage)));
@@ -327,25 +364,29 @@ export default function CreateRoute() {
 
   const collectCreateFormValues = useCallback((): CreateValues => deriveCreateValuesFromForm(form), [form]);
 
-  const openCountrySelector = useCallback(
-    (target?: EventTarget | null) => {
+  const toggleCountrySelection = useCallback(
+    (countryCode: string) => {
       if (formLocked) return;
-      if (target instanceof HTMLSelectElement) return;
+      const normalizedCode = normalizeCountry(countryCode);
+      if (!/^[A-Z]{2,3}$/.test(normalizedCode)) return;
 
-      const select = countrySelectRef.current;
-      if (!select) return;
-
-      select.focus();
-      const pickerSelect = select as HTMLSelectElement & { showPicker?: () => void };
-      if (typeof pickerSelect.showPicker === 'function') {
-        try {
-          pickerSelect.showPicker();
-          return;
-        } catch {
-          // Ignore and fall back to click.
+      setForm((previous) => {
+        const exists = previous.countries.includes(normalizedCode);
+        if (exists) {
+          return {
+            ...previous,
+            countries: previous.countries.filter((country) => country !== normalizedCode),
+          };
         }
-      }
-      select.click();
+        if (previous.countries.length >= MAX_NATIONALITIES) {
+          return previous;
+        }
+        return {
+          ...previous,
+          countries: [...previous.countries, normalizedCode],
+        };
+      });
+      setCreateFormDirty(true);
     },
     [formLocked]
   );
@@ -370,6 +411,10 @@ export default function CreateRoute() {
       return { ...previous, durationHours: String(next) };
     });
     setCreateFormDirty(true);
+  }, []);
+
+  const getCountryLabel = useCallback((code: string) => {
+    return COUNTRY_OPTIONS.find((option) => option.code === code)?.label || code;
   }, []);
 
   const waitForTransaction = useCallback(
@@ -454,6 +499,7 @@ export default function CreateRoute() {
 
       const data = buildDeployData({
         scopeSeed: ctx.values.scopeSeed,
+        countries: ctx.values.countries,
         country: ctx.values.country,
         minAge: ctx.values.minAge,
         configId: ctx.configId,
@@ -590,6 +636,7 @@ export default function CreateRoute() {
       meta: stringifyMetaValues({
         selfConfig: {
           scope: normalizeScope(ctx.values.scopeSeed),
+          countries: ctx.values.countries,
           minAge: ctx.values.minAge,
           country: normalizeCountry(ctx.values.country),
         },
@@ -720,6 +767,7 @@ export default function CreateRoute() {
             censusUri: ctx.censusUri,
             title: ctx.values.title,
             scopeSeed: ctx.values.scopeSeed,
+            countries: ctx.values.countries,
             country: ctx.values.country,
             minAge: ctx.values.minAge,
             network: CONFIG.network,
@@ -796,7 +844,7 @@ export default function CreateRoute() {
           What do you want to ask?
         </h1>
         <p className="create-intro question-hero-helper">
-          Ask a question to an entire country. Citizens who match your criteria can authenticate with their ID or
+          Ask a question to one or more countries. Citizens who match your criteria can authenticate with their ID or
           passport and vote immediately, without any prior census setup. The <strong>DAVINCI Protocol</strong> makes every
           vote anonymous, verifiable from end to end, and protected against censorship, coercion, and bribery.
         </p>
@@ -885,35 +933,98 @@ export default function CreateRoute() {
         </h2>
 
         <div className="setting-cards">
-          <div
-            className="setting-card setting-card-select"
-            title="Select the country where voters must be citizens"
-            onClick={(event) => openCountrySelector(event.target)}
-          >
+          <div className="setting-card setting-card-countries" title="Select up to five countries allowed to vote">
             <span className="setting-label">Country</span>
-            <div className="setting-select-row">
-              <select
+            <p className="setting-country-helper">
+              Select up to {MAX_NATIONALITIES} countries ({selectedCountriesCount}/{MAX_NATIONALITIES})
+            </p>
+            <div
+              ref={countriesSelectRef}
+              className={`country-multiselect ${countriesMenuOpen ? 'is-open' : ''} ${formLocked ? 'is-disabled' : ''}`}
+            >
+              <div
                 id="country"
-                name="country"
-                className="setting-value"
-                required
-                disabled={formLocked}
-                ref={countrySelectRef}
-                value={form.country}
-                onChange={(event) => updateForm({ country: event.target.value })}
+                className="country-multiselect-trigger"
+                role="combobox"
+                aria-label="Choose allowed countries"
+                aria-haspopup="listbox"
+                aria-expanded={countriesMenuOpen}
+                aria-controls="countryList"
+                aria-disabled={formLocked}
+                tabIndex={formLocked ? -1 : 0}
+                onClick={() => {
+                  if (formLocked) return;
+                  setCountriesMenuOpen((previous) => !previous);
+                }}
+                onKeyDown={(event) => {
+                  if (formLocked) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setCountriesMenuOpen((previous) => !previous);
+                    return;
+                  }
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    setCountriesMenuOpen(true);
+                    return;
+                  }
+                  if (event.key === 'Escape') {
+                    setCountriesMenuOpen(false);
+                  }
+                }}
               >
-                <option value="" disabled>
-                  Select a country…
-                </option>
-                {COUNTRY_OPTIONS.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.label} ({option.code})
-                  </option>
-                ))}
-              </select>
-              <span className="setting-select-caret" aria-hidden="true">
-                ▾
-              </span>
+                <div className="country-chip-list">
+                  {form.countries.length === 0 && <span className="country-chip-placeholder">Select countries</span>}
+                  {form.countries.map((code) => (
+                    <span className="country-chip" key={code}>
+                      <span className="country-chip-text">
+                        {getCountryLabel(code)} ({code})
+                      </span>
+                      <button
+                        type="button"
+                        className="country-chip-remove"
+                        aria-label={`Remove ${getCountryLabel(code)}`}
+                        disabled={formLocked}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          toggleCountrySelection(code);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <span className="country-multiselect-caret" aria-hidden="true">
+                  ▾
+                </span>
+              </div>
+
+              <div id="countryList" className="country-dropdown" role="listbox" aria-label="Allowed countries" aria-multiselectable="true">
+                {COUNTRY_OPTIONS.map((option) => {
+                  const checked = form.countries.includes(option.code);
+                  const disabled = formLocked || (!checked && countriesLimitReached);
+                  return (
+                    <button
+                      key={option.code}
+                      type="button"
+                      role="option"
+                      aria-selected={checked}
+                      className={`country-dropdown-option ${checked ? 'is-selected' : ''}`}
+                      disabled={disabled}
+                      onClick={() => toggleCountrySelection(option.code)}
+                    >
+                      <span className="country-dropdown-check" aria-hidden="true">
+                        {checked ? '✓' : ''}
+                      </span>
+                      <span className="country-dropdown-label">
+                        {option.label} ({option.code})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

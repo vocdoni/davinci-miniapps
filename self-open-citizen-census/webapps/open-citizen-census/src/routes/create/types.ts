@@ -6,7 +6,7 @@ export interface CreateOption {
 export interface CreateFormState {
   processTitle: string;
   options: CreateOption[];
-  country: string;
+  countries: string[];
   minAge: string;
   durationHours: string;
   maxVoters: string;

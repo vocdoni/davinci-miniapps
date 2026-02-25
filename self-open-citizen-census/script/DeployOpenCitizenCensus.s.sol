@@ -10,11 +10,13 @@ import {SelfUtils} from "@selfxyz/contracts/contracts/libraries/SelfUtils.sol";
 import {OpenCitizenCensus} from "../src/OpenCitizenCensus.sol";
 
 contract DeployOpenCitizenCensus is Script {
+    uint256 private constant MAX_NATIONALITIES = 5;
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address hubAddress = vm.envAddress("HUB_ADDRESS");
         string memory scopeSeed = vm.envString("SCOPE_SEED");
-        string memory nationality = vm.envString("NATIONALITY");
+        string[] memory nationalities = _readTargetNationalities();
         uint256 minAge = vm.envUint("MIN_AGE");
         uint256 registerConfigRaw = vm.envOr("SELF_REGISTER_CONFIG", uint256(0));
         bool registerConfig = registerConfigRaw == 1;
@@ -27,7 +29,10 @@ contract DeployOpenCitizenCensus is Script {
         console2.log("Deploying OpenCitizenCensus...");
         console2.log("Hub:", hubAddress);
         console2.log("Scope seed:", scopeSeed);
-        console2.log("Nationality:", nationality);
+        console2.log("Nationalities count:", nationalities.length);
+        for (uint256 i = 0; i < nationalities.length; i++) {
+            console2.log(" -", nationalities[i]);
+        }
         console2.log("Min age:", minAge);
         console2.log("Register config:", registerConfig);
         console2.log("Config min age:", configMinAge);
@@ -53,7 +58,7 @@ contract DeployOpenCitizenCensus is Script {
             hubAddress,
             scopeSeed,
             configId,
-            nationality,
+            nationalities,
             minAge
         );
         vm.stopBroadcast();
@@ -90,6 +95,57 @@ contract DeployOpenCitizenCensus is Script {
             }
         }
         parsed[idx] = _bytesToString(buffer, bufLen);
+    }
+
+    function _readTargetNationalities() internal view returns (string[] memory normalized) {
+        string memory rawNationalities = vm.envOr("NATIONALITIES", string(""));
+        string[] memory parsed = bytes(rawNationalities).length > 0
+            ? _parseForbiddenCountries(rawNationalities)
+            : _singleItemArray(vm.envString("NATIONALITY"));
+
+        uint256 parsedLength = parsed.length;
+        if (parsedLength == 0) revert("At least one nationality is required");
+        if (parsedLength > MAX_NATIONALITIES) {
+            revert("Too many nationalities. Max 5");
+        }
+
+        normalized = new string[](parsedLength);
+        uint256 total;
+        for (uint256 i = 0; i < parsedLength; i++) {
+            string memory country = _normalizeCountryCode(parsed[i]);
+            bytes32 hash = keccak256(bytes(country));
+            for (uint256 j = 0; j < total; j++) {
+                if (keccak256(bytes(normalized[j])) == hash) {
+                    revert("Duplicate nationality");
+                }
+            }
+            normalized[total++] = country;
+        }
+
+        if (total == 0) revert("At least one nationality is required");
+        if (total > MAX_NATIONALITIES) revert("Too many nationalities. Max 5");
+    }
+
+    function _singleItemArray(string memory value) private pure returns (string[] memory values) {
+        values = new string[](1);
+        values[0] = value;
+    }
+
+    function _normalizeCountryCode(string memory value) private pure returns (string memory) {
+        bytes memory raw = bytes(value);
+        bytes memory tmp = new bytes(raw.length);
+        uint256 len;
+        for (uint256 i = 0; i < raw.length; i++) {
+            bytes1 char = raw[i];
+            if (char == " " || char == "\t" || char == "\n" || char == "\r") continue;
+            if (char >= 0x61 && char <= 0x7a) {
+                char = bytes1(uint8(char) - 32);
+            }
+            if (char < 0x41 || char > 0x5a) revert("Nationality must contain only letters");
+            tmp[len++] = char;
+        }
+        if (len < 2 || len > 3) revert("Nationality must be alpha-2 or alpha-3");
+        return _bytesToString(tmp, len);
     }
 
     function _bytesToString(bytes memory buffer, uint256 length) private pure returns (string memory) {
