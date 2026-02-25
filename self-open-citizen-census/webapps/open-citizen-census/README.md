@@ -32,14 +32,18 @@ The objective is to minimize user friction while preserving clear status visibil
 
 ## Functional requirements implemented
 ### Process creation
-- Three guided form steps:
-  1. Census parameters
-  2. Process information
-  3. Questions
-- Form locked until creator wallet is connected.
+- Single-question creator UI:
+  1. Question title
+  2. Option list (minimum two, maximum eight)
+  3. Eligibility cards (country, minimum age, duration)
+  4. Advanced max-voters control
+- `scopeSeed` and `startDate` are derived at submit time.
 - Input sanitization for ASCII-sensitive fields.
 - Internal JSON-RPC retry handling for transient wallet/provider failures.
-- Process creation status timeline with final vote URL and copy action.
+- Overlay-based process creation status timeline with final vote URL and copy action.
+- External payload compatibility preserved:
+  - Indexer payload keeps `chainId`, `address`, `startBlock`, `expiresAt`.
+  - `expiresAt` remains RFC3339 (`startDate + duration`).
 
 ### Vote flow
 - Process-first navigation (`/vote/:processId`) for deterministic process resolution.
@@ -99,6 +103,10 @@ npm run build
 npm run preview
 ```
 
+### Static assets in production
+- Runtime static files referenced by URL (for example `/assets/davinci_logo.png`) must be stored under `public/`.
+- Vite copies `public/*` into `dist/*` at build time, so deployment platforms (including DigitalOcean App Platform) can serve them correctly.
+
 ## Local persistence
 The app stores minimal local state for continuity:
 - `occ.masterSecret.v1` -> device master secret for managed identity wallet derivation.
@@ -115,6 +123,7 @@ The app stores minimal local state for continuity:
 ## Related files
 - App shell and routing: `src/App.tsx`
 - Create flow route: `src/routes/CreateRoute.tsx`
+- Create flow model/constants/types: `src/routes/create/*`
 - Vote flow route: `src/routes/VoteRoute.tsx`
 - Styling: `src/style.css`
 - Self payload adapter: `src/selfApp.ts`

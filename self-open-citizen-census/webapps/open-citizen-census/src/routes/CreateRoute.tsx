@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserProvider, type JsonRpcSigner } from 'ethers';
-import EthereumProvider from '@walletconnect/ethereum-provider';
-import { DavinciSDK, OnchainCensus } from '@vocdoni/davinci-sdk';
+import { OnchainCensus } from '@vocdoni/davinci-sdk';
 
 import {
   ACTIVE_NETWORK,
@@ -10,54 +8,59 @@ import {
   HUB_INTERFACE,
   INTERNAL_RPC_RETRY_DELAY_MS,
   INTERNAL_RPC_RETRY_MAX_ATTEMPTS,
-  MAX_QUESTIONS,
-  NETWORKS,
   PIPELINE_STAGES,
-  buildBallotFromQuestions,
   buildCensusUri,
   buildDeployData,
   buildVoteUrl,
   collectErrorMessages,
   computeConfigId,
   computeIndexerExpiresAt,
-  ensureAsciiField,
   isInternalJsonRpcError,
   newPipelineState,
   persistProcessMeta,
   persistVoteScopeSeed,
   stringifyMetaValues,
-  toDateTimeLocal,
   toHttpCensusUri,
   toSequencerCensusUri,
   trimTrailingSlash,
   wait,
-  type CreateQuestion,
   type CreateValues,
   type PipelineStageState,
 } from '../lib/occ';
+import { normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
+import { buildAssetUrl } from '../utils/assets';
+import { createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
 import {
-  isAsciiText,
-  normalizeCountry,
-  normalizeMinAge,
-  normalizeProcessId,
-  normalizeScope,
-  stripNonAscii,
-} from '../utils/normalization';
+  connectBrowserWallet,
+  disconnectWalletConnection,
+  getInjectedProvider,
+  type CreatorWalletConnection,
+  type OCCProvider,
+} from '../services/wallet';
+import AppNavbar from '../components/AppNavbar';
+import PopupModal from '../components/PopupModal';
+import {
+  COUNTRY_OPTIONS,
+  DEFAULT_DURATION_HOURS,
+  DEFAULT_MIN_AGE,
+  ELIGIBILITY_TOOLTIP,
+  MAX_OPTIONS,
+  MIN_OPTIONS,
+} from './create/constants';
+import {
+  addOption,
+  createInitialFormState,
+  createInitialOverlayState,
+  deriveCreateValuesFromForm,
+  removeOption,
+  updateOption,
+} from './create/model';
+import type { CreateFormState, CreateOverlayState } from './create/types';
 
-interface Eip1193Provider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<any>;
-  enable?: () => Promise<any>;
-  disconnect?: () => Promise<void>;
-  isMetaMask?: boolean;
-  isBraveWallet?: boolean;
-  isCoinbaseWallet?: boolean;
-  providers?: Eip1193Provider[];
-}
-
-interface CreatorWalletState {
-  provider: Eip1193Provider | null;
-  browserProvider: BrowserProvider | null;
-  signer: JsonRpcSigner | null;
+interface CreatorWalletState extends Omit<CreatorWalletConnection, 'provider' | 'browserProvider' | 'signer'> {
+  provider: OCCProvider | null;
+  browserProvider: CreatorWalletConnection['browserProvider'] | null;
+  signer: CreatorWalletConnection['signer'] | null;
   address: string;
   sourceLabel: string;
 }
@@ -71,24 +74,12 @@ interface CreateOutputs {
   voteUrl: string;
 }
 
-interface CreateFormState {
-  country: string;
-  minAge: string;
-  scopeSeed: string;
-  processTitle: string;
-  processDescription: string;
-  maxVoters: string;
-  startDate: string;
-  durationHours: string;
-  questions: CreateQuestion[];
-}
-
 interface PipelineContext {
   values: CreateValues | null;
   configId: string;
-  provider: Eip1193Provider | null;
-  browserProvider: BrowserProvider | null;
-  signer: JsonRpcSigner | null;
+  provider: OCCProvider | null;
+  browserProvider: CreatorWalletConnection['browserProvider'] | null;
+  signer: CreatorWalletConnection['signer'] | null;
   creatorAddress: string;
   contractAddress: string;
   deploymentBlock: number;
@@ -109,51 +100,6 @@ const EMPTY_OUTPUTS: CreateOutputs = {
   voteUrl: '',
 };
 
-function getDefaultQuestions(): CreateQuestion[] {
-  return [
-    {
-      title: '',
-      description: '',
-      choices: [
-        { title: 'Yes', value: 0 },
-        { title: 'No', value: 1 },
-      ],
-    },
-  ];
-}
-
-function getInitialFormState(): CreateFormState {
-  return {
-    country: '',
-    minAge: '18',
-    scopeSeed: '',
-    processTitle: '',
-    processDescription: '',
-    maxVoters: '10000',
-    startDate: toDateTimeLocal(new Date(Date.now() + 10 * 60 * 1000)),
-    durationHours: '24',
-    questions: getDefaultQuestions(),
-  };
-}
-
-function getInjectedProvider(): Eip1193Provider | null {
-  const ethereum = (window as any).ethereum as Eip1193Provider | undefined;
-  if (!ethereum) return null;
-
-  if (Array.isArray(ethereum.providers) && ethereum.providers.length) {
-    const metamaskProvider = ethereum.providers.find((provider) => provider?.isMetaMask && !provider?.isBraveWallet);
-    return metamaskProvider || ethereum.providers[0] || null;
-  }
-
-  return ethereum;
-}
-
-function getWalletSourceLabel(provider: Eip1193Provider, fallback = 'WalletConnect'): string {
-  if (provider?.isMetaMask) return 'MetaMask';
-  if (provider?.isCoinbaseWallet) return 'Coinbase Wallet';
-  return fallback;
-}
-
 function hasAnyOutputs(outputs: CreateOutputs): boolean {
   return Boolean(
     outputs.censusContract || outputs.deploymentTxHash || outputs.censusUri || outputs.processId || outputs.processTxHash
@@ -162,6 +108,10 @@ function hasAnyOutputs(outputs: CreateOutputs): boolean {
 
 function hasPipelineActivity(pipeline: PipelineStageState[]): boolean {
   return pipeline.some((stage) => stage.status !== 'pending' || stage.message !== 'Pending');
+}
+
+function hasPipelineError(pipeline: PipelineStageState[]): boolean {
+  return pipeline.some((stage) => stage.status === 'error');
 }
 
 function timelineRows(pipeline: PipelineStageState[]) {
@@ -184,27 +134,10 @@ function timelineRows(pipeline: PipelineStageState[]) {
   return stages.filter((entry) => entry.index <= visibleUntil);
 }
 
-function sanitizeQuestionAscii(questions: CreateQuestion[]): CreateQuestion[] {
-  return questions.map((question) => ({
-    ...question,
-    title: stripNonAscii(question.title),
-    description: stripNonAscii(question.description),
-    choices: question.choices.map((choice) => ({
-      ...choice,
-      title: stripNonAscii(choice.title),
-    })),
-  }));
-}
-
 export default function CreateRoute() {
-  const [createStep, setCreateStep] = useState(1);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createFormDirty, setCreateFormDirty] = useState(false);
-
-  const [createStatus, setCreateStatus] = useState<{ message: string; error: boolean }>({
-    message: '',
-    error: false,
-  });
+  const [overlayState, setOverlayState] = useState<CreateOverlayState>(createInitialOverlayState);
 
   const [creatorWalletStatus, setCreatorWalletStatus] = useState(CREATOR_WALLET_STATUS_DEFAULT);
   const [creatorWallet, setCreatorWallet] = useState<CreatorWalletState>({
@@ -215,11 +148,13 @@ export default function CreateRoute() {
     sourceLabel: '',
   });
 
-  const [form, setForm] = useState<CreateFormState>(getInitialFormState);
+  const [form, setForm] = useState<CreateFormState>(createInitialFormState);
   const [pipeline, setPipeline] = useState<PipelineStageState[]>(newPipelineState);
   const [outputs, setOutputs] = useState<CreateOutputs>(EMPTY_OUTPUTS);
 
   const walletRef = useRef(creatorWallet);
+  const countrySelectRef = useRef<HTMLSelectElement | null>(null);
+  const createTimelineRef = useRef<HTMLDetailsElement | null>(null);
 
   useEffect(() => {
     walletRef.current = creatorWallet;
@@ -234,15 +169,12 @@ export default function CreateRoute() {
     if (!CONFIG.davinciSequencerUrl) missing.push('VITE_DAVINCI_SEQUENCER_URL');
 
     if (missing.length) {
-      setCreateStatus({ message: `Missing env vars: ${missing.join(', ')}`, error: true });
-      return;
+      console.warn(`[OpenCitizenCensus] Missing env vars: ${missing.join(', ')}`);
     }
-
-    setCreateStatus({ message: 'Environment looks good. Connect wallet to unlock the create form.', error: false });
   }, []);
 
   useEffect(() => {
-    document.title = 'Open Citizen Census';
+    document.title = 'Ask the World';
   }, []);
 
   useEffect(() => {
@@ -259,13 +191,32 @@ export default function CreateRoute() {
   }, [createFormDirty, createSubmitting]);
 
   const creatorConnected = Boolean(creatorWallet.address);
-  const timelineVisible = createSubmitting || hasPipelineActivity(pipeline) || Boolean(outputs.voteUrl);
-  const outputsVisible = hasAnyOutputs(outputs);
   const timelineEntries = useMemo(() => timelineRows(pipeline), [pipeline]);
+  const hasSuccessOutput = Boolean(String(outputs.voteUrl || '').trim());
+  const hasError = useMemo(() => hasPipelineError(pipeline), [pipeline]);
+  const hasActivity = useMemo(() => hasPipelineActivity(pipeline), [pipeline]);
+  const showTimeline = createSubmitting || hasActivity || hasSuccessOutput;
+  const canDismissOverlay = !createSubmitting;
+  const overlayVisible = showTimeline && !overlayState.dismissed;
+  const spinnerActive = !hasSuccessOutput && !hasError && (createSubmitting || hasActivity);
+  const outputsVisible = hasAnyOutputs(outputs);
+  const formLocked = createSubmitting;
 
-  const setStatus = useCallback((message: string, error = false) => {
-    setCreateStatus({ message, error });
-  }, []);
+  useEffect(() => {
+    if (!hasError) return;
+    if (!createTimelineRef.current) return;
+    createTimelineRef.current.open = true;
+  }, [hasError]);
+
+  const withBase = useCallback((file: string) => buildAssetUrl(file), []);
+  const baseUrl = import.meta.env.BASE_URL || '/';
+
+  useEffect(() => {
+    document.body.classList.toggle('app-blocked', overlayVisible);
+    return () => {
+      document.body.classList.remove('app-blocked');
+    };
+  }, [overlayVisible]);
 
   const updateStage = useCallback((stageId: string, updates: Partial<PipelineStageState>) => {
     setPipeline((previous) => previous.map((stage) => (stage.id === stageId ? { ...stage, ...updates } : stage)));
@@ -307,127 +258,12 @@ export default function CreateRoute() {
     [updateStage]
   );
 
-  const ensureProviderChain = useCallback(async (provider: Eip1193Provider) => {
-    const currentChainId = await provider.request({ method: 'eth_chainId' });
-    if (String(currentChainId).toLowerCase() === ACTIVE_NETWORK.chainHex.toLowerCase()) {
-      return;
-    }
-
-    await provider.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: ACTIVE_NETWORK.chainHex }],
-    });
-  }, []);
-
-  const applyWalletConnection = useCallback((connection: CreatorWalletState) => {
+  const applyWalletConnection = useCallback((connection: CreatorWalletConnection) => {
     setCreatorWallet(connection);
     setCreatorWalletStatus(`Connected with ${connection.sourceLabel} on ${ACTIVE_NETWORK.label}.`);
   }, []);
 
-  const createWalletConnectProvider = useCallback(async () => {
-    if (!CONFIG.walletConnectProjectId) {
-      throw new Error('Missing VITE_WALLETCONNECT_PROJECT_ID.');
-    }
-
-    const requiredChains = [1];
-    const optionalChainsValues = Array.from(
-      new Set([1, ACTIVE_NETWORK.chainId, ...Object.values(NETWORKS).map((network) => network.chainId)])
-    );
-    const optionalChains = (optionalChainsValues.length ? optionalChainsValues : [1]) as [number, ...number[]];
-
-    return EthereumProvider.init({
-      projectId: CONFIG.walletConnectProjectId,
-      chains: requiredChains,
-      optionalChains,
-      showQrModal: true,
-      metadata: {
-        name: 'Open Citizen Census',
-        description: 'Create and vote on census-based processes',
-        url: window.location.origin,
-        icons: [],
-      },
-      rpcMap: ACTIVE_NETWORK.rpcUrl ? { [ACTIVE_NETWORK.chainId]: ACTIVE_NETWORK.rpcUrl } : undefined,
-      methods: [
-        'eth_sendTransaction',
-        'eth_signTransaction',
-        'eth_sign',
-        'personal_sign',
-        'eth_signTypedData',
-        'eth_estimateGas',
-        'eth_call',
-        'eth_chainId',
-        'wallet_switchEthereumChain',
-      ],
-    }) as Promise<Eip1193Provider>;
-  }, []);
-
-  const connectInjectedWallet = useCallback(
-    async (provider: Eip1193Provider): Promise<CreatorWalletState> => {
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      if (!Array.isArray(accounts) || !accounts.length) {
-        throw new Error('No wallet account selected.');
-      }
-      await ensureProviderChain(provider);
-
-      const browserProvider = new BrowserProvider(provider as any, 'any');
-      const signer = await browserProvider.getSigner(accounts[0]);
-      const address = await signer.getAddress();
-      const connection: CreatorWalletState = {
-        provider,
-        browserProvider,
-        signer,
-        address,
-        sourceLabel: getWalletSourceLabel(provider, 'Browser wallet'),
-      };
-      applyWalletConnection(connection);
-      return connection;
-    },
-    [applyWalletConnection, ensureProviderChain]
-  );
-
-  const connectWalletConnect = useCallback(async (): Promise<CreatorWalletState> => {
-    let provider = walletRef.current.provider;
-
-    if (!provider || typeof provider.enable !== 'function') {
-      provider = await createWalletConnectProvider();
-    }
-
-    await provider.enable?.();
-    await ensureProviderChain(provider);
-
-    const browserProvider = new BrowserProvider(provider as any, 'any');
-    const signer = await browserProvider.getSigner();
-    const address = await signer.getAddress();
-    const connection: CreatorWalletState = {
-      provider,
-      browserProvider,
-      signer,
-      address,
-      sourceLabel: 'WalletConnect',
-    };
-    applyWalletConnection(connection);
-    return connection;
-  }, [applyWalletConnection, createWalletConnectProvider, ensureProviderChain]);
-
-  const connectBrowserWallet = useCallback(async (): Promise<CreatorWalletState> => {
-    const injectedProvider = getInjectedProvider();
-    if (injectedProvider) {
-      return connectInjectedWallet(injectedProvider);
-    }
-    return connectWalletConnect();
-  }, [connectInjectedWallet, connectWalletConnect]);
-
-  const disconnectWalletConnection = useCallback(async () => {
-    const provider = walletRef.current.provider;
-
-    if (provider && typeof provider.disconnect === 'function' && typeof provider.enable === 'function') {
-      try {
-        await provider.disconnect();
-      } catch {
-        // Ignore provider disconnect errors and clear local app state anyway.
-      }
-    }
-
+  const resetWalletState = useCallback(() => {
     setCreatorWallet({
       provider: null,
       browserProvider: null,
@@ -436,295 +272,139 @@ export default function CreateRoute() {
       sourceLabel: '',
     });
     setCreatorWalletStatus(CREATOR_WALLET_STATUS_DEFAULT);
-    setStatus('Creator wallet disconnected.');
-  }, [setStatus]);
+  }, []);
 
   const connectCreatorWallet = useCallback(async () => {
     try {
       setCreatorWalletStatus('Connecting browser wallet...');
-      await connectBrowserWallet();
-      setStatus('Creator wallet connected. Continue with step 2.');
+      const connection = await connectBrowserWallet(walletRef.current.provider);
+      applyWalletConnection(connection);
     } catch (error) {
       const messages = collectErrorMessages(error);
       const message = messages[0] || (error instanceof Error ? error.message : 'Failed to connect creator wallet.');
       setCreatorWalletStatus(message);
-      setStatus(message, true);
     }
-  }, [connectBrowserWallet, setStatus]);
+  }, [applyWalletConnection]);
 
   const handleCreatorWalletButton = useCallback(async () => {
     if (walletRef.current.address) {
-      await disconnectWalletConnection();
+      await disconnectWalletConnection(walletRef.current.provider);
+      resetWalletState();
       return;
     }
+
     await connectCreatorWallet();
-  }, [connectCreatorWallet, disconnectWalletConnection]);
+  }, [connectCreatorWallet, resetWalletState]);
 
   const updateForm = useCallback((patch: Partial<CreateFormState>) => {
     setForm((previous) => ({ ...previous, ...patch }));
     setCreateFormDirty(true);
   }, []);
 
-  const updateQuestion = useCallback((questionIndex: number, patch: Partial<CreateQuestion>) => {
+  const addOptionRow = useCallback(() => {
     setForm((previous) => ({
       ...previous,
-      questions: previous.questions.map((question, index) =>
-        index === questionIndex
-          ? {
-              ...question,
-              ...patch,
-            }
-          : question
-      ),
+      options: addOption(previous.options),
     }));
     setCreateFormDirty(true);
   }, []);
 
-  const addQuestion = useCallback(() => {
-    setForm((previous) => {
-      if (previous.questions.length >= MAX_QUESTIONS) return previous;
-      return {
-        ...previous,
-        questions: [...previous.questions, { title: '', description: '', choices: [{ title: 'Yes', value: 0 }, { title: 'No', value: 1 }] }],
-      };
-    });
-    setCreateFormDirty(true);
-  }, []);
-
-  const removeQuestion = useCallback((questionIndex: number) => {
-    setForm((previous) => {
-      if (previous.questions.length <= 1) return previous;
-      return {
-        ...previous,
-        questions: previous.questions.filter((_, index) => index !== questionIndex),
-      };
-    });
-    setCreateFormDirty(true);
-  }, []);
-
-  const addChoice = useCallback((questionIndex: number) => {
-    setForm((previous) => {
-      const nextQuestions = previous.questions.map((question, index) => {
-        if (index !== questionIndex) return question;
-        return {
-          ...question,
-          choices: [...question.choices, { title: '', value: question.choices.length }],
-        };
-      });
-      return {
-        ...previous,
-        questions: nextQuestions,
-      };
-    });
-    setCreateFormDirty(true);
-  }, []);
-
-  const removeChoice = useCallback((questionIndex: number, choiceIndex: number) => {
-    setForm((previous) => {
-      const nextQuestions = previous.questions.map((question, index) => {
-        if (index !== questionIndex) return question;
-        if (question.choices.length <= 2) return question;
-        const reindexed = question.choices.filter((_, idx) => idx !== choiceIndex).map((choice, idx) => ({ ...choice, value: idx }));
-        return {
-          ...question,
-          choices: reindexed,
-        };
-      });
-      return {
-        ...previous,
-        questions: nextQuestions,
-      };
-    });
-    setCreateFormDirty(true);
-  }, []);
-
-  const updateChoice = useCallback((questionIndex: number, choiceIndex: number, value: string) => {
+  const removeOptionRow = useCallback((optionIndex: number) => {
     setForm((previous) => ({
       ...previous,
-      questions: previous.questions.map((question, index) => {
-        if (index !== questionIndex) return question;
-        return {
-          ...question,
-          choices: question.choices.map((choice, idx) => (idx === choiceIndex ? { ...choice, title: stripNonAscii(value) } : choice)),
-        };
-      }),
+      options: removeOption(previous.options, optionIndex),
     }));
     setCreateFormDirty(true);
   }, []);
 
-  const validateStepOne = useCallback(() => {
-    const country = normalizeCountry(form.country);
-    const minAge = normalizeMinAge(form.minAge);
-    const scopeSeed = normalizeScope(form.scopeSeed);
+  const updateOptionRow = useCallback((optionIndex: number, value: string) => {
+    setForm((previous) => ({
+      ...previous,
+      options: updateOption(previous.options, optionIndex, value),
+    }));
+    setCreateFormDirty(true);
+  }, []);
 
-    if (!/^[A-Z]{2,3}$/.test(country)) {
-      throw new Error('Country must be an ISO alpha-2 or alpha-3 code.');
-    }
-    if (!minAge) {
-      throw new Error('Minimum age must be between 1 and 99.');
-    }
-    if (!scopeSeed || scopeSeed.length > 31) {
-      throw new Error('Scope seed must contain between 1 and 31 characters.');
-    }
-    ensureAsciiField(scopeSeed, 'Scope seed');
-    if (!walletRef.current.address) {
-      throw new Error('Connect the creator browser wallet before continuing.');
-    }
-  }, [form.country, form.minAge, form.scopeSeed]);
+  const collectCreateFormValues = useCallback((): CreateValues => deriveCreateValuesFromForm(form), [form]);
 
-  const validateStepTwo = useCallback(() => {
-    const title = String(form.processTitle || '').trim();
-    const description = String(form.processDescription || '').trim();
-    const maxVoters = Number(form.maxVoters);
-    const durationHours = Number(form.durationHours);
+  const openCountrySelector = useCallback(
+    (target?: EventTarget | null) => {
+      if (formLocked) return;
+      if (target instanceof HTMLSelectElement) return;
 
-    if (!title) {
-      throw new Error('Process title is required.');
-    }
-    ensureAsciiField(title, 'Process title');
-    ensureAsciiField(description, 'Process description');
-    if (!Number.isFinite(maxVoters) || maxVoters <= 0) {
-      throw new Error('Maximum voters must be a positive number.');
-    }
-    if (!Number.isFinite(durationHours) || durationHours <= 0) {
-      throw new Error('Duration must be a positive number of hours.');
-    }
-  }, [form.durationHours, form.maxVoters, form.processDescription, form.processTitle]);
+      const select = countrySelectRef.current;
+      if (!select) return;
 
-  const validateStepThree = useCallback(() => {
-    const questions = sanitizeQuestionAscii(form.questions);
-    if (!questions.length) {
-      throw new Error('Add at least one question.');
-    }
-    for (const [questionIndex, question] of questions.entries()) {
-      const title = String(question.title || '').trim();
-      if (!title) throw new Error(`Question ${questionIndex + 1} needs a title.`);
-
-      const choices = question.choices.map((choice) => String(choice.title || '').trim()).filter(Boolean);
-      if (choices.length < 2) throw new Error(`Question ${questionIndex + 1} needs at least two choices.`);
-    }
-  }, [form.questions]);
-
-  const validateCurrentStep = useCallback(() => {
-    if (createStep === 1) validateStepOne();
-    if (createStep === 2) validateStepTwo();
-    if (createStep === 3) validateStepThree();
-  }, [createStep, validateStepOne, validateStepTwo, validateStepThree]);
-
-  const collectCreateFormValues = useCallback((): CreateValues => {
-    const country = normalizeCountry(form.country);
-    const minAge = normalizeMinAge(form.minAge);
-    const scopeSeed = normalizeScope(form.scopeSeed);
-    const title = String(form.processTitle || '').trim();
-    const description = String(form.processDescription || '').trim();
-    const maxVoters = Number(form.maxVoters);
-    const durationHours = Number(form.durationHours);
-
-    if (!/^[A-Z]{2,3}$/.test(country)) {
-      throw new Error('Country must be ISO alpha-2 or alpha-3 uppercase.');
-    }
-    if (!minAge) {
-      throw new Error('Minimum age must be between 1 and 99.');
-    }
-    if (!scopeSeed || scopeSeed.length > 31) {
-      throw new Error('Scope seed must contain 1-31 characters.');
-    }
-    if (!isAsciiText(scopeSeed)) {
-      throw new Error('Scope seed must contain ASCII characters only.');
-    }
-    if (!title) {
-      throw new Error('Process title is required.');
-    }
-    ensureAsciiField(title, 'Process title');
-    ensureAsciiField(description, 'Process description');
-    if (!Number.isFinite(maxVoters) || maxVoters <= 0) {
-      throw new Error('Maximum voters must be a positive number.');
-    }
-    if (!Number.isFinite(durationHours) || durationHours <= 0) {
-      throw new Error('Duration must be greater than 0 hours.');
-    }
-
-    let startDate = form.startDate ? new Date(form.startDate) : new Date(Date.now() + 10 * 60 * 1000);
-    if (Number.isNaN(startDate.getTime()) || startDate.getTime() < Date.now()) {
-      startDate = new Date(Date.now() + 10 * 60 * 1000);
-    }
-
-    const questions = sanitizeQuestionAscii(form.questions).map((question, questionIndex) => {
-      const qTitle = String(question.title || '').trim();
-      if (!qTitle) {
-        throw new Error(`Question ${questionIndex + 1} needs a title.`);
-      }
-      ensureAsciiField(qTitle, `Question ${questionIndex + 1} title`);
-
-      const qDescription = String(question.description || '').trim();
-      ensureAsciiField(qDescription, `Question ${questionIndex + 1} description`);
-
-      const choices = question.choices.map((choice, choiceIndex) => {
-        const choiceTitle = String(choice.title || '').trim();
-        if (!choiceTitle) {
-          throw new Error(`Question ${questionIndex + 1} has an empty choice.`);
+      select.focus();
+      const pickerSelect = select as HTMLSelectElement & { showPicker?: () => void };
+      if (typeof pickerSelect.showPicker === 'function') {
+        try {
+          pickerSelect.showPicker();
+          return;
+        } catch {
+          // Ignore and fall back to click.
         }
-        ensureAsciiField(choiceTitle, `Question ${questionIndex + 1} choice ${choiceIndex + 1}`);
-        return {
-          title: choiceTitle,
-          value: choiceIndex,
-        };
-      });
-
-      if (choices.length < 2) {
-        throw new Error(`Question ${questionIndex + 1} needs at least two choices.`);
       }
+      select.click();
+    },
+    [formLocked]
+  );
 
-      return {
-        title: qTitle,
-        description: qDescription,
-        choices,
-      };
+  const adjustMinAge = useCallback((delta: number) => {
+    setForm((previous) => {
+      const parsed = Number(previous.minAge);
+      const fallback = Number(DEFAULT_MIN_AGE);
+      const base = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+      const next = Math.min(99, Math.max(1, base + delta));
+      return { ...previous, minAge: String(next) };
     });
-
-    return {
-      country,
-      minAge,
-      scopeSeed,
-      title,
-      description,
-      maxVoters: Math.trunc(maxVoters),
-      duration: Math.round(durationHours * 3600),
-      startDate,
-      questions,
-      ballot: buildBallotFromQuestions(questions),
-    };
-  }, [form]);
-
-  const waitForTransaction = useCallback(async (provider: BrowserProvider, hash: string, timeoutMs = 5 * 60 * 1000) => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const receipt = await provider.getTransactionReceipt(hash);
-      if (receipt) return receipt;
-      await wait(2500);
-    }
-    throw new Error(`Timed out waiting for tx receipt: ${hash}`);
+    setCreateFormDirty(true);
   }, []);
 
-  const ensureCreatorWalletForPipeline = useCallback(
-    async (ctx: PipelineContext) => {
-      if (!walletRef.current.signer) {
-        const connection = await connectBrowserWallet();
-        ctx.provider = connection.provider;
-        ctx.browserProvider = connection.browserProvider;
-        ctx.signer = connection.signer;
-        ctx.creatorAddress = connection.address;
-        return `Connected ${connection.address}`;
-      }
+  const adjustDurationHours = useCallback((delta: number) => {
+    setForm((previous) => {
+      const parsed = Number(previous.durationHours);
+      const fallback = Number(DEFAULT_DURATION_HOURS);
+      const base = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+      const next = Math.max(1, base + delta);
+      return { ...previous, durationHours: String(next) };
+    });
+    setCreateFormDirty(true);
+  }, []);
 
-      ctx.provider = walletRef.current.provider;
-      ctx.browserProvider = walletRef.current.browserProvider;
-      ctx.signer = walletRef.current.signer;
-      ctx.creatorAddress = walletRef.current.address;
-      return `Using connected wallet ${ctx.creatorAddress}`;
+  const waitForTransaction = useCallback(
+    async (
+      provider: CreatorWalletConnection['browserProvider'],
+      hash: string,
+      timeoutMs = 5 * 60 * 1000
+    ) => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const receipt = await provider.getTransactionReceipt(hash);
+        if (receipt) return receipt;
+        await wait(2500);
+      }
+      throw new Error(`Timed out waiting for tx receipt: ${hash}`);
     },
-    [connectBrowserWallet]
+    []
   );
+
+  const ensureCreatorWalletForPipeline = useCallback(async (ctx: PipelineContext) => {
+    if (!walletRef.current.signer) {
+      const connection = await connectBrowserWallet(walletRef.current.provider);
+      ctx.provider = connection.provider;
+      ctx.browserProvider = connection.browserProvider;
+      ctx.signer = connection.signer;
+      ctx.creatorAddress = connection.address;
+      return `Connected ${connection.address}`;
+    }
+
+    ctx.provider = walletRef.current.provider;
+    ctx.browserProvider = walletRef.current.browserProvider;
+    ctx.signer = walletRef.current.signer;
+    ctx.creatorAddress = walletRef.current.address;
+    return `Using connected wallet ${ctx.creatorAddress}`;
+  }, []);
 
   const ensureSelfConfigRegistered = useCallback(
     async (ctx: PipelineContext) => {
@@ -866,17 +546,6 @@ export default function CreateRoute() {
     throw new Error(`Indexer readiness timeout. Last error: ${lastError}`);
   }, []);
 
-  const getProcessFromSequencer = useCallback(async (sdk: any, processId: string) => {
-    const normalized = normalizeProcessId(processId);
-    try {
-      return await sdk.api.sequencer.getProcess(normalized);
-    } catch (error) {
-      const withoutPrefix = normalized.replace(/^0x/, '');
-      if (withoutPrefix === normalized) throw error;
-      return sdk.api.sequencer.getProcess(withoutPrefix);
-    }
-  }, []);
-
   const createDavinciProcess = useCallback(async (ctx: PipelineContext) => {
     if (!CONFIG.davinciSequencerUrl) {
       throw new Error('Missing VITE_DAVINCI_SEQUENCER_URL.');
@@ -885,7 +554,7 @@ export default function CreateRoute() {
       throw new Error('Missing signer or process values for sequencer process creation.');
     }
 
-    const sdk = new DavinciSDK({
+    const sdk = createSequencerSdk({
       signer: ctx.signer,
       sequencerUrl: CONFIG.davinciSequencerUrl,
     });
@@ -896,22 +565,25 @@ export default function CreateRoute() {
       throw new Error('Missing census URI for sequencer process creation.');
     }
 
-    const questions = ctx.values.questions.map((question) => ({
-      title: { default: question.title },
-      description: { default: question.description || '' },
-      choices: question.choices.map((choice) => ({
-        title: { default: choice.title },
-        value: choice.value,
-        meta: {},
-      })),
-    }));
+    const question = ctx.values.question;
+    const questions = [
+      {
+        title: { default: question.title },
+        description: { default: question.description || '' },
+        choices: question.choices.map((choice) => ({
+          title: { default: choice.title },
+          value: choice.value,
+          meta: {},
+        })),
+      },
+    ];
 
     const metadata = {
       title: { default: ctx.values.title },
       description: { default: ctx.values.description || '' },
       questions,
       type: {
-        name: 'single-choice-multiquestion',
+        name: 'single-choice',
         properties: {},
       },
       version: '1.2',
@@ -956,76 +628,62 @@ export default function CreateRoute() {
     return `Process created (${processId})`;
   }, []);
 
-  const waitProcessReadyInSequencer = useCallback(
-    async (ctx: PipelineContext) => {
-      const timeoutMs = 90_000;
-      const start = Date.now();
-      let lastError = '';
+  const waitProcessReadyInSequencer = useCallback(async (ctx: PipelineContext) => {
+    const timeoutMs = 90_000;
+    const start = Date.now();
+    let lastError = '';
 
-      while (Date.now() - start < timeoutMs) {
-        try {
-          const process = await getProcessFromSequencer(ctx.sdk, ctx.processId);
-          if (process && process.isAcceptingVotes === true) {
-            const voteUrl = buildVoteUrl(ctx.processId);
-            setOutputs((previous) => ({ ...previous, voteUrl }));
-            return 'Process is ready in sequencer';
-          }
-          lastError = 'Process is not accepting votes yet';
-        } catch (error) {
-          lastError = error instanceof Error ? error.message : 'Sequencer lookup failed';
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const process = await getProcessFromSequencer(ctx.sdk, ctx.processId);
+        if (process && process.isAcceptingVotes === true) {
+          const voteUrl = buildVoteUrl(ctx.processId);
+          setOutputs((previous) => ({ ...previous, voteUrl }));
+          return 'Process is ready in sequencer';
         }
-        await wait(3_000);
+        lastError = 'Process is not accepting votes yet';
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Sequencer lookup failed';
       }
-
-      throw new Error(`Sequencer readiness timeout. Last error: ${lastError}`);
-    },
-    [getProcessFromSequencer]
-  );
-
-  const handleStepNext = useCallback(() => {
-    try {
-      validateCurrentStep();
-      setCreateStep((previous) => Math.min(3, previous + 1));
-      setStatus('');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Step validation failed.', true);
+      await wait(3_000);
     }
-  }, [setStatus, validateCurrentStep]);
 
-  const handleStepBack = useCallback(() => {
-    setCreateStep((previous) => Math.max(1, previous - 1));
+    throw new Error(`Sequencer readiness timeout. Last error: ${lastError}`);
   }, []);
 
   const handleCopyVoteUrl = useCallback(async () => {
     if (!outputs.voteUrl) return;
     try {
       await navigator.clipboard.writeText(outputs.voteUrl);
-      setStatus('Vote URL copied to clipboard.');
     } catch {
-      setStatus('Failed to copy vote URL.', true);
+      // No inline status in create form.
     }
-  }, [outputs.voteUrl, setStatus]);
+  }, [outputs.voteUrl]);
+
+  const closeCreateOverlay = useCallback(() => {
+    if (createSubmitting) return;
+    setOverlayState({ dismissed: true });
+  }, [createSubmitting]);
 
   const handleCreateSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (createSubmitting) return;
-      if (createStep !== 3) {
-        setStatus('Complete all steps before launching the process.', true);
+      if (!creatorConnected) {
         return;
       }
 
       try {
-        validateStepThree();
+        collectCreateFormValues();
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : 'Invalid questions.', true);
+        console.warn('[OpenCitizenCensus] Create form validation failed before submit', error);
         return;
       }
 
       setOutputs(EMPTY_OUTPUTS);
       setPipeline(newPipelineState());
+      setOverlayState(createInitialOverlayState());
       setCreateSubmitting(true);
-      setStatus('Running launch pipeline...');
 
       const ctx: PipelineContext = {
         values: null,
@@ -1070,440 +728,459 @@ export default function CreateRoute() {
           persistVoteScopeSeed(ctx.processId, ctx.values.scopeSeed);
         }
 
+        setForm(createInitialFormState());
         setCreateFormDirty(false);
-        setStatus('Process launched successfully. You can open the generated vote URL.');
       } catch (error) {
         console.error('[OpenCitizenCensus] Create pipeline failed', error);
-        setStatus('Pipeline failed. Check the failed stage and browser console for details.', true);
       } finally {
         setCreateSubmitting(false);
       }
     },
     [
       collectCreateFormValues,
-      createStep,
+      creatorConnected,
       createDavinciProcess,
       createSubmitting,
       deployCensusContract,
       ensureCreatorWalletForPipeline,
       ensureSelfConfigRegistered,
       runStage,
-      setStatus,
       startIndexer,
-      validateStepThree,
       waitIndexerReady,
       waitProcessReadyInSequencer,
     ]
   );
 
-  const processTitleSafe = stripNonAscii(form.processTitle);
-  const processDescriptionSafe = stripNonAscii(form.processDescription);
-
-  const formLocked = !creatorConnected || createSubmitting;
-
   return (
-    <section id="createView" className="view">
-      <article className="card">
-        <div className="card-head">
-          <h2>Create Process</h2>
-          <p className="muted">Three-step flow: census parameters, process information, and questions.</p>
-        </div>
-
-        <div className="wallet-box">
-          <div>
-            <p className="value" id="creatorWalletAddress">{creatorWallet.address || 'Wallet not connected yet...'}</p>
-            <p className="muted" id="creatorWalletStatus">
-              {creatorWalletStatus}
-            </p>
+    <section id="createView" className="view create-route">
+      <AppNavbar id="appNavbar" brandId="navbarBrand" baseHref={baseUrl} logoSrc={withBase('davinci_logo.png')} brandLabel="Ask the World">
+        <article
+          className="vote-lifecycle-card vote-lifecycle-header-card create-wallet-widget"
+          id="createWalletWidget"
+          data-state={creatorConnected ? 'ready' : 'paused'}
+        >
+          <div className="vote-lifecycle-head">
+            <div className="create-wallet-summary">
+              <div className="vote-lifecycle-left">
+                <span className="vote-lifecycle-dot" aria-hidden="true" />
+                <strong id="createWalletWidgetTitle">Creator Wallet</strong>
+              </div>
+              <p
+                id="creatorWalletNavbarAddress"
+                className="create-wallet-address"
+                data-connected={creatorConnected ? 'true' : 'false'}
+                title={creatorConnected ? creatorWallet.address : 'Disconnected'}
+              >
+                {creatorConnected ? creatorWallet.address : 'Disconnected'}
+              </p>
+            </div>
           </div>
-          <button
-            id="connectCreatorWalletBtn"
-            type="button"
-            className={creatorConnected ? 'disconnect' : 'secondary'}
-            onClick={() => void handleCreatorWalletButton()}
-          >
-            <span className={`btn-icon ${creatorConnected ? 'iconoir-log-out' : 'iconoir-wallet'}`} aria-hidden="true" />
-            <span className="btn-text">{creatorConnected ? 'Disconnect wallet' : 'Connect wallet'}</span>
-          </button>
-        </div>
+          {creatorConnected && (
+            <div className="vote-header-actions create-wallet-actions">
+              <button
+                id="disconnectCreatorWalletBtn"
+                type="button"
+                className="cta-btn secondary"
+                onClick={() => void handleCreatorWalletButton()}
+              >
+                <span className="btn-icon iconoir-log-out" aria-hidden="true" />
+                <span>Disconnect</span>
+              </button>
+            </div>
+          )}
+        </article>
+      </AppNavbar>
 
-        <ol className="stepper" id="createStepper">
-          {[1, 2, 3].map((step) => {
-            const labels = ['Census', 'Process', 'Questions'];
-            const icons = ['iconoir-globe', 'iconoir-settings', 'iconoir-chat-bubble'];
-            const active = step === createStep;
-            const done = step < createStep;
-            return (
-              <li key={step}>
+      <header className={`app-header create-header question-hero-header ${overlayVisible ? 'form-blurred' : ''}`} id="appHeader">
+        <h1 id="appHeaderTitle" className="question-hero-title">
+          What do you want to ask?
+        </h1>
+        <p className="create-intro question-hero-helper">
+          Ask a question to an entire country. Citizens who match your criteria can authenticate with their ID or
+          passport and vote immediately, without any prior census setup. The <strong>DAVINCI Protocol</strong> makes every
+          vote anonymous, verifiable from end to end, and protected against censorship, coercion, and bribery.
+        </p>
+      </header>
+
+      <form
+        id="createForm"
+        className={`create-form ${overlayVisible ? 'form-blurred' : ''}`}
+        onSubmit={(event) => void handleCreateSubmit(event)}
+      >
+        <input
+          id="processTitle"
+          name="process_title"
+          className="hero-input"
+          autoComplete="off"
+          type="text"
+          placeholder="Type your question here..."
+          required
+          disabled={formLocked}
+          value={form.processTitle}
+          onChange={(event) => updateForm({ processTitle: stripNonAscii(event.target.value) })}
+        />
+
+        <section className="options-section">
+          <h2 className="options-title">The options</h2>
+          <div id="questionList" className="options-list">
+            {form.options.map((option, index) => (
+              <div className="option-row" key={`option-${index}`}>
+                <input
+                  type="text"
+                  className="option-input"
+                  autoComplete="off"
+                  placeholder={`Option ${index + 1}`}
+                  disabled={formLocked}
+                  value={option.title}
+                  onChange={(event) => updateOptionRow(index, event.target.value)}
+                />
                 <button
                   type="button"
-                  className="step-chip"
-                  data-step-indicator={step}
-                  data-active={active ? 'true' : 'false'}
-                  data-done={done ? 'true' : 'false'}
-                  disabled={formLocked || step > createStep}
-                  aria-current={active ? 'step' : undefined}
-                  onClick={() => {
-                    if (step < createStep && !formLocked) setCreateStep(step);
-                  }}
+                  className="option-remove-btn"
+                  data-action="remove-option"
+                  title="Remove"
+                  disabled={formLocked || form.options.length <= MIN_OPTIONS}
+                  onClick={() => removeOptionRow(index)}
                 >
-                  <span className={`step-icon ${icons[step - 1]}`} aria-hidden="true" />
-                  <span>{labels[step - 1]}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-
-        <form id="createForm" className="wizard" onSubmit={(event) => void handleCreateSubmit(event)}>
-          {createStep === 1 && (
-            <section className="step-panel" data-step-panel="1">
-              <h3>Census Parameters</h3>
-
-              <div className="grid two">
-                <label>
-                  Country (ISO alpha-2/3)
-                  <input
-                    id="country"
-                    name="country"
-                    autoComplete="off"
-                    type="text"
-                    maxLength={3}
-                    placeholder="ESP…"
-                    required
-                    disabled={formLocked}
-                    value={form.country}
-                    onChange={(event) => updateForm({ country: stripNonAscii(event.target.value).toUpperCase() })}
-                  />
-                </label>
-                <label>
-                  Minimum age
-                  <input
-                    id="minAge"
-                    name="min_age"
-                    autoComplete="off"
-                    type="number"
-                    min={1}
-                    max={99}
-                    value={form.minAge}
-                    required
-                    disabled={formLocked}
-                    onChange={(event) => updateForm({ minAge: event.target.value })}
-                  />
-                </label>
-              </div>
-
-              <p className="field-helper">
-                Use two or three-letter uppercase code.
-                <a
-                  className="field-link"
-                  href="https://docs.self.xyz/use-self/self-map-countries-list"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View the supported country codes.
-                </a>
-              </p>
-
-              <label>
-                Scope seed
-                <input
-                  id="scopeSeed"
-                  name="scope_seed"
-                  autoComplete="off"
-                  type="text"
-                  maxLength={31}
-                  placeholder="open-citizen-census…"
-                  required
-                  disabled={formLocked}
-                  value={form.scopeSeed}
-                  onChange={(event) => updateForm({ scopeSeed: stripNonAscii(event.target.value) })}
-                />
-              </label>
-            </section>
-          )}
-
-          {createStep === 2 && (
-            <section className="step-panel" data-step-panel="2">
-              <h3>Process Information</h3>
-
-              <div className="grid two">
-                <label>
-                  Process title
-                  <input
-                    id="processTitle"
-                    name="process_title"
-                    autoComplete="off"
-                    type="text"
-                    placeholder="Community budget vote…"
-                    required
-                    disabled={formLocked}
-                    value={processTitleSafe}
-                    onChange={(event) => updateForm({ processTitle: stripNonAscii(event.target.value) })}
-                  />
-                </label>
-                <label>
-                  Maximum voters
-                  <input
-                    id="maxVoters"
-                    name="max_voters"
-                    autoComplete="off"
-                    type="number"
-                    min={1}
-                    value={form.maxVoters}
-                    required
-                    disabled={formLocked}
-                    onChange={(event) => updateForm({ maxVoters: event.target.value })}
-                  />
-                </label>
-              </div>
-
-              <label>
-                Process description
-                <textarea
-                  id="processDescription"
-                  name="process_description"
-                  autoComplete="off"
-                  rows={2}
-                  placeholder="Optional context for voters…"
-                  disabled={formLocked}
-                  value={processDescriptionSafe}
-                  onChange={(event) => updateForm({ processDescription: stripNonAscii(event.target.value) })}
-                />
-              </label>
-
-              <div className="grid two">
-                <label>
-                  Start datetime
-                  <input
-                    id="startDate"
-                    name="start_datetime"
-                    autoComplete="off"
-                    type="datetime-local"
-                    disabled={formLocked}
-                    value={form.startDate}
-                    onChange={(event) => updateForm({ startDate: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Duration (hours)
-                  <input
-                    id="durationHours"
-                    name="duration_hours"
-                    autoComplete="off"
-                    type="number"
-                    min={1}
-                    value={form.durationHours}
-                    required
-                    disabled={formLocked}
-                    onChange={(event) => updateForm({ durationHours: event.target.value })}
-                  />
-                </label>
-              </div>
-            </section>
-          )}
-
-          {createStep === 3 && (
-            <section className="step-panel" data-step-panel="3">
-              <div className="section-head">
-                <h3>Questions</h3>
-                <button id="addQuestion" type="button" className="secondary" disabled={formLocked || form.questions.length >= MAX_QUESTIONS} onClick={addQuestion}>
-                  <span className="btn-icon iconoir-plus" aria-hidden="true" />
-                  <span className="btn-text">Add question</span>
+                  ✕
                 </button>
               </div>
-
-              <p className="muted">Add at least one question with two or more choices.</p>
-
-              <div id="questionList">
-                {form.questions.map((question, questionIndex) => (
-                  <article className="question-card" key={questionIndex}>
-                    <div className="question-head">
-                      <strong className="question-index">Question {questionIndex + 1}</strong>
-                      <button
-                        type="button"
-                        className="ghost"
-                        disabled={formLocked || form.questions.length <= 1}
-                        onClick={() => removeQuestion(questionIndex)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    <label>
-                      Title
-                      <input
-                        type="text"
-                        className="question-title"
-                        placeholder="What should this process decide?…"
-                        autoComplete="off"
-                        required
-                        disabled={formLocked}
-                        value={question.title}
-                        onChange={(event) => updateQuestion(questionIndex, { title: stripNonAscii(event.target.value) })}
-                      />
-                    </label>
-
-                    <label>
-                      Description
-                      <textarea
-                        className="question-description"
-                        rows={2}
-                        autoComplete="off"
-                        placeholder="Optional context…"
-                        disabled={formLocked}
-                        value={question.description}
-                        onChange={(event) => updateQuestion(questionIndex, { description: stripNonAscii(event.target.value) })}
-                      />
-                    </label>
-
-                    <div className="choice-list" data-choices>
-                      {question.choices.map((choice, choiceIndex) => (
-                        <div className="choice-row" key={choiceIndex}>
-                          <input
-                            type="text"
-                            className="choice-input"
-                            autoComplete="off"
-                            placeholder="Choice label…"
-                            disabled={formLocked}
-                            value={choice.title}
-                            onChange={(event) => updateChoice(questionIndex, choiceIndex, event.target.value)}
-                          />
-                          <button
-                            type="button"
-                            className="ghost"
-                            data-action="remove-choice"
-                            disabled={formLocked || question.choices.length <= 2}
-                            onClick={() => removeChoice(questionIndex, choiceIndex)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="row">
-                      <button type="button" className="ghost" data-action="add-choice" disabled={formLocked} onClick={() => addChoice(questionIndex)}>
-                        Add choice
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <div className="wizard-actions">
-            <button
-              id="stepBackBtn"
-              type="button"
-              className="ghost"
-              hidden={createStep === 1}
-              disabled={formLocked || createStep === 1}
-              onClick={handleStepBack}
-            >
-              <span className="btn-icon iconoir-nav-arrow-left" aria-hidden="true" />
-              <span className="btn-text">Back</span>
-            </button>
-
-            <button
-              id="stepNextBtn"
-              type="button"
-              className="secondary"
-              hidden={createStep === 3}
-              disabled={formLocked}
-              onClick={handleStepNext}
-            >
-              <span className="btn-icon iconoir-nav-arrow-right" aria-hidden="true" />
-              <span className="btn-text">Continue</span>
-            </button>
-
-            <button id="createBtn" type="submit" hidden={createStep !== 3} disabled={formLocked}>
-              <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-nav-arrow-right'}`} aria-hidden="true" />
-              <span className="btn-text">{createSubmitting ? 'Launching...' : 'Launch Process'}</span>
-            </button>
+            ))}
           </div>
-        </form>
-      </article>
+          <button
+            id="addQuestion"
+            type="button"
+            className="add-option-btn"
+            disabled={formLocked || form.options.length >= MAX_OPTIONS}
+            onClick={addOptionRow}
+          >
+            + Add a new option
+          </button>
+        </section>
 
-      <article className="card" id="createTimelineCard" hidden={!timelineVisible}>
-        <h3>Process Creation Status</h3>
-        <ol id="timeline" className="timeline">
-          {timelineEntries.map((entry) => {
-            const isRunning = entry.status.status === 'running';
-            const isError = entry.status.status === 'error';
-            const isCompleted = entry.status.status === 'success';
-            const isDone = entry.stage.id === 'done';
-            return (
-              <li
-                key={entry.stage.id}
-                className={`timeline-item ${isRunning ? 'is-current' : ''} ${isError ? 'is-error' : ''} ${isCompleted ? 'is-completed' : ''} ${
-                  isDone && isCompleted ? 'is-done' : ''
-                }`}
+        <h2 className="options-title">
+          Who can vote and for how long?
+          <span
+            className="tooltip-icon"
+            data-tooltip={ELIGIBILITY_TOOLTIP}
+            aria-label="Eligibility information"
+            tabIndex={0}
+            role="button"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" strokeWidth="2" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M9.09445 9.17647C9.28014 8.48398 9.91036 8 10.6272 8H12.9863C13.8149 8 14.4866 8.67175 14.4866 9.50035C14.4866 10.2796 13.5677 10.8752 12.8727 11.2359L12.0003 11.6888V13.0118M12.0003 15.6588V15.8794"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        </h2>
+
+        <div className="setting-cards">
+          <div
+            className="setting-card setting-card-select"
+            title="Select the country where voters must be citizens"
+            onClick={(event) => openCountrySelector(event.target)}
+          >
+            <span className="setting-label">Country</span>
+            <div className="setting-select-row">
+              <select
+                id="country"
+                name="country"
+                className="setting-value"
+                required
+                disabled={formLocked}
+                ref={countrySelectRef}
+                value={form.country}
+                onChange={(event) => updateForm({ country: event.target.value })}
               >
-                <span className="timeline-marker" aria-hidden="true" />
-                <div className="timeline-content">
-                  <p className="timeline-label">{entry.stage.label}</p>
-                  <p className="timeline-meta">{entry.status.message || 'Running'}</p>
-                  {entry.stage.id === 'done' && entry.status.status === 'success' && Boolean(outputs.voteUrl) && (
-                    <div id="timelineVoteUrlWrap" className="timeline-vote-url">
-                      <div className="output-link-actions">
-                        <a id="outVoteUrl" className="timeline-vote-link" href={outputs.voteUrl} target="_blank" rel="noopener noreferrer">
-                          {outputs.voteUrl}
-                        </a>
-                        <button id="copyVoteUrlBtn" type="button" className="ghost" onClick={() => void handleCopyVoteUrl()}>
-                          <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                          <span className="btn-text">Copy link</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {isRunning && <span className="timeline-spinner" aria-hidden="true" />}
-              </li>
-            );
-          })}
-        </ol>
-        <p id="createStatus" className="status" data-state={createStatus.error ? 'error' : 'ok'} aria-live="polite">
-          {createStatus.message || 'Fill in the form and run the pipeline.'}
-        </p>
-      </article>
+                <option value="" disabled>
+                  Select a country…
+                </option>
+                {COUNTRY_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label} ({option.code})
+                  </option>
+                ))}
+              </select>
+              <span className="setting-select-caret" aria-hidden="true">
+                ▾
+              </span>
+            </div>
+          </div>
 
-      <article className="card" id="createOutputsCard" hidden={!outputsVisible}>
-        <h3>Final details</h3>
-        <dl className="outputs">
-          <div id="outputContractItem" className="output-item" hidden={!outputs.censusContract}>
-            <dt>Census contract</dt>
-            <dd id="outContract" className="output-scroll">
-              {outputs.censusContract || '-'}
-            </dd>
+          <div className="setting-card" title="Minimum age required to vote">
+            <span className="setting-label">Minimum age to vote</span>
+            <div className="setting-value-row">
+              <button
+                type="button"
+                className="setting-step-btn"
+                aria-label="Decrease minimum age"
+                disabled={formLocked}
+                onClick={() => adjustMinAge(-1)}
+              >
+                −
+              </button>
+              <input
+                id="minAge"
+                name="min_age"
+                className="setting-value-input"
+                autoComplete="off"
+                type="number"
+                min={1}
+                max={99}
+                required
+                disabled={formLocked}
+                value={form.minAge}
+                onChange={(event) => updateForm({ minAge: event.target.value })}
+              />
+              <button
+                type="button"
+                className="setting-step-btn"
+                aria-label="Increase minimum age"
+                disabled={formLocked}
+                onClick={() => adjustMinAge(1)}
+              >
+                +
+              </button>
+            </div>
           </div>
-          <div id="outputDeployTxItem" className="output-item" hidden={!outputs.deploymentTxHash}>
-            <dt>Deployment tx</dt>
-            <dd id="outDeployTx" className="output-scroll">
-              {outputs.deploymentTxHash || '-'}
-            </dd>
+
+          <div className="setting-card" title="How long the voting process will remain open">
+            <span className="setting-label">Vote duration</span>
+            <div className="setting-value-row">
+              <button
+                type="button"
+                className="setting-step-btn"
+                aria-label="Decrease vote duration"
+                disabled={formLocked}
+                onClick={() => adjustDurationHours(-1)}
+              >
+                −
+              </button>
+              <input
+                id="durationHours"
+                name="duration_hours"
+                className="setting-value-input"
+                autoComplete="off"
+                type="number"
+                min={1}
+                required
+                disabled={formLocked}
+                value={form.durationHours}
+                onChange={(event) => updateForm({ durationHours: event.target.value })}
+              />
+              <button
+                type="button"
+                className="setting-step-btn"
+                aria-label="Increase vote duration"
+                disabled={formLocked}
+                onClick={() => adjustDurationHours(1)}
+              >
+                +
+              </button>
+              <span className="setting-value-suffix">Hours</span>
+            </div>
           </div>
-          <div id="outputCensusUriItem" className="output-item" hidden={!outputs.censusUri}>
-            <dt>Census URI</dt>
-            <dd id="outCensusUri" className="output-scroll">
-              {outputs.censusUri || '-'}
-            </dd>
+        </div>
+
+        <input id="scopeSeed" type="hidden" name="scope_seed" value="" readOnly />
+        <input id="startDate" type="hidden" name="start_datetime" value="" readOnly />
+
+        <details className="advanced-details" id="advancedDetails">
+          <summary className="advanced-summary">▾ Advanced Settings</summary>
+          <div className="advanced-body">
+            <div className="advanced-field">
+              <span className="advanced-field-label">Maximum voters</span>
+              <input
+                id="maxVoters"
+                name="max_voters"
+                className="advanced-field-input"
+                autoComplete="off"
+                type="number"
+                min={1}
+                required
+                disabled={formLocked}
+                value={form.maxVoters}
+                onChange={(event) => updateForm({ maxVoters: event.target.value })}
+              />
+              <span className="advanced-field-helper">Limit the number of participants.</span>
+            </div>
           </div>
-          <div id="outputProcessIdItem" className="output-item" hidden={!outputs.processId}>
-            <dt>Process ID</dt>
-            <dd id="outProcessId" className="output-scroll">
-              {outputs.processId || '-'}
-            </dd>
+        </details>
+
+        <div className="create-actions">
+          {creatorConnected ? (
+            <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked}>
+              <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-check-circle'}`} aria-hidden="true" />
+              <span>{createSubmitting ? 'Creating process...' : 'Create the voting process'}</span>
+            </button>
+          ) : (
+            <button
+              id="connectCreatorWalletBtn"
+              type="button"
+              className="cta-btn cta-btn-connect"
+              disabled={formLocked}
+              onClick={() => void handleCreatorWalletButton()}
+            >
+              <span className="btn-icon iconoir-wallet" aria-hidden="true" />
+              <span>Connect wallet to create</span>
+            </button>
+          )}
+        </div>
+
+        <p id="creatorWalletAddress" hidden>
+          {creatorWallet.address}
+        </p>
+        <p id="creatorWalletStatus" hidden>
+          {creatorWalletStatus}
+        </p>
+      </form>
+
+      <PopupModal
+        id="createOverlay"
+        open={overlayVisible}
+        title={hasSuccessOutput ? 'Process created' : spinnerActive ? 'Creating process...' : 'Process creation status'}
+        titleId="createOverlayTitle"
+        className="create-overlay"
+        cardClassName={hasSuccessOutput ? 'create-overlay-card create-success-popup-card' : 'create-overlay-card create-timeline-popup-card'}
+        bodyClassName="create-overlay-body"
+        closeButtonId="createTimelineCloseBtn"
+        closeLabel="Close creation popup"
+        onClose={canDismissOverlay ? closeCreateOverlay : undefined}
+        backdropClosable={canDismissOverlay}
+      >
+        <details ref={createTimelineRef} className="create-timeline-panel" id="createTimelineCard" hidden={!showTimeline || hasSuccessOutput}>
+          <summary className="create-timeline-summary">
+            <div className="create-timeline-summary-main">
+              <p className="timeline-popup-status">
+                <span id="createSpinner" className="timeline-spinner" aria-hidden="true" hidden={!spinnerActive} />
+                <span id="createTimelineSummaryText">{spinnerActive ? 'Creating process...' : 'Process creation status'}</span>
+              </p>
+              <span className="create-timeline-chevron" aria-hidden="true">
+                ▾
+              </span>
+            </div>
+            <p className="timeline-popup-subtitle" hidden={!spinnerActive}>
+              Keep your wallet open. You will be prompted to confirm transactions and sign messages during setup.
+            </p>
+          </summary>
+          <div className="create-timeline-body">
+            <ol id="timeline" className="timeline">
+              {timelineEntries.map((entry) => {
+                const isRunning = entry.status.status === 'running';
+                const isError = entry.status.status === 'error';
+                const isCompleted = entry.status.status === 'success';
+                const isDone = entry.stage.id === 'done';
+
+                return (
+                  <li
+                    key={entry.stage.id}
+                    className={`timeline-item ${isRunning ? 'is-current' : ''} ${isError ? 'is-error' : ''} ${
+                      isCompleted ? 'is-completed' : ''
+                    } ${isDone && isCompleted ? 'is-done' : ''}`}
+                  >
+                    <span className="timeline-marker" aria-hidden="true" />
+                    <div className="timeline-content">
+                      <p className="timeline-label">{entry.stage.label}</p>
+                      <p className="timeline-meta">{entry.status.message || 'Running'}</p>
+                      {entry.stage.id === 'done' && entry.status.status === 'success' && Boolean(outputs.voteUrl) && (
+                        <div id="timelineVoteUrlWrap" className="timeline-vote-url">
+                          <div className="output-link-actions">
+                            <a
+                              id="outVoteUrl"
+                              className="timeline-vote-link"
+                              href={outputs.voteUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {outputs.voteUrl}
+                            </a>
+                            <button id="copyVoteUrlBtn" type="button" className="ghost" onClick={() => void handleCopyVoteUrl()}>
+                              <span className="btn-icon iconoir-copy" aria-hidden="true" />
+                              <span className="btn-text">Copy link</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {isRunning && <span className="timeline-spinner" aria-hidden="true" />}
+                  </li>
+                );
+              })}
+            </ol>
           </div>
-          <div id="outputProcessTxItem" className="output-item" hidden={!outputs.processTxHash}>
-            <dt>Process tx</dt>
-            <dd id="outProcessTx" className="output-scroll">
-              {outputs.processTxHash || '-'}
-            </dd>
+        </details>
+
+        <article className="success-card" id="createOutputsCard" hidden={!hasSuccessOutput}>
+          <div className="success-header">
+            <span className="iconoir-check-circle success-icon" aria-hidden="true" />
+            <h2>Your voting process is live and ready for the world.</h2>
           </div>
-        </dl>
-      </article>
+
+          <div className="vote-link-wrapper">
+            <label className="vote-link-label">Share this link to start collecting votes</label>
+            <div className="vote-link-box">
+              <a
+                id="outVoteUrlSuccess"
+                className="vote-link-text"
+                href={outputs.voteUrl || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {outputs.voteUrl || '-'}
+              </a>
+              <button id="copyVoteUrlBtnSuccess" type="button" className="icon-btn" title="Copy link" onClick={() => void handleCopyVoteUrl()}>
+                <span className="iconoir-copy" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <details className="final-details">
+            <summary>Advanced Details</summary>
+            <dl className="outputs" hidden={!outputsVisible}>
+              <div id="outputContractItem" className="output-item" hidden={!outputs.censusContract}>
+                <dt>Census contract</dt>
+                <dd id="outContract" className="output-scroll">
+                  {outputs.censusContract || '-'}
+                </dd>
+              </div>
+              <div id="outputDeployTxItem" className="output-item" hidden={!outputs.deploymentTxHash}>
+                <dt>Deployment tx</dt>
+                <dd id="outDeployTx" className="output-scroll">
+                  {outputs.deploymentTxHash || '-'}
+                </dd>
+              </div>
+              <div id="outputCensusUriItem" className="output-item" hidden={!outputs.censusUri}>
+                <dt>Census URI</dt>
+                <dd id="outCensusUri" className="output-scroll">
+                  {outputs.censusUri || '-'}
+                </dd>
+              </div>
+              <div id="outputProcessIdItem" className="output-item" hidden={!outputs.processId}>
+                <dt>Process ID</dt>
+                <dd id="outProcessId" className="output-scroll">
+                  {outputs.processId || '-'}
+                </dd>
+              </div>
+              <div id="outputProcessTxItem" className="output-item" hidden={!outputs.processTxHash}>
+                <dt>Process tx</dt>
+                <dd id="outProcessTx" className="output-scroll">
+                  {outputs.processTxHash || '-'}
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </article>
+      </PopupModal>
     </section>
   );
 }

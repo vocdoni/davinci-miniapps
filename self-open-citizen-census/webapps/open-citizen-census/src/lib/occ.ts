@@ -47,7 +47,6 @@ export const EMPTY_COUNTRIES = [0n, 0n, 0n, 0n] as const;
 export const EMPTY_OFAC = [false, false, false] as const;
 export const VOTE_POLL_MS = 10_000;
 export const WEIGHT_OF_SELECTOR = '0xdd4bc101';
-export const MAX_QUESTIONS = 8;
 export const LAST_SCOPE_SEED_KEY = 'occ.lastScopeSeed.v1';
 export const MASTER_SECRET_KEY = 'occ.masterSecret.v1';
 export const VOTE_SUBMISSION_STORAGE_PREFIX = 'occ.voteSubmission.v1';
@@ -211,7 +210,7 @@ export interface CreateValues {
   maxVoters: number;
   duration: number;
   startDate: Date;
-  questions: CreateQuestion[];
+  question: CreateQuestion;
   ballot: {
     numFields: number;
     maxValue: string;
@@ -638,11 +637,68 @@ export function toSafeInteger(value: unknown): number {
 }
 
 export function normalizeProcessStatus(status: unknown): number | null {
-  if (status === null || status === undefined || status === '') return null;
-  const parsed = typeof status === 'bigint' ? Number(status) : Number(status);
-  if (!Number.isFinite(parsed)) return null;
-  const normalized = Math.trunc(parsed);
-  return Object.prototype.hasOwnProperty.call(PROCESS_STATUS_INFO, normalized) ? normalized : null;
+  const fromNumber = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = typeof value === 'bigint' ? Number(value) : Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    const normalized = Math.trunc(parsed);
+    return Object.prototype.hasOwnProperty.call(PROCESS_STATUS_INFO, normalized) ? normalized : null;
+  };
+
+  const fromName = (value: unknown): number | null => {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^processstatus\./, '');
+
+    if (!normalized) return null;
+
+    const aliases: Record<string, number> = {
+      ready: ProcessStatus.READY,
+      active: ProcessStatus.READY,
+      ended: ProcessStatus.ENDED,
+      closed: ProcessStatus.ENDED,
+      canceled: ProcessStatus.CANCELED,
+      cancelled: ProcessStatus.CANCELED,
+      paused: ProcessStatus.PAUSED,
+      results: ProcessStatus.RESULTS,
+      result: ProcessStatus.RESULTS,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(aliases, normalized)) {
+      return aliases[normalized];
+    }
+    return null;
+  };
+
+  const numericStatus = fromNumber(status);
+  if (numericStatus !== null) return numericStatus;
+
+  const namedStatus = fromName(status);
+  if (namedStatus !== null) return namedStatus;
+
+  if (status && typeof status === 'object') {
+    const record = status as Record<string, unknown>;
+    const nestedCandidates = [
+      record.value,
+      record.status,
+      record.code,
+      record.id,
+      record.enumValue,
+      record.name,
+      record.key,
+      record.label,
+      record.state,
+    ];
+
+    for (const candidate of nestedCandidates) {
+      if (candidate === status) continue;
+      const nested = normalizeProcessStatus(candidate);
+      if (nested !== null) return nested;
+    }
+  }
+
+  return null;
 }
 
 export function getProcessStatusInfo(statusCode: number | null): ProcessStatusInfo | null {
@@ -849,64 +905,6 @@ export function buildVoteUrl(processId: string): string {
   return `${window.location.origin}${encodeBasePath(`/vote/${encodeURIComponent(normalized)}`)}`;
 }
 
-export function buildBallotFromQuestions(questions: CreateQuestion[]): CreateValues['ballot'] {
-  const maxValues = questions.map((question) => question.choices.length - 1);
-  const maxValue = Math.max(...maxValues);
-  const maxValueSum = maxValues.reduce((sum, value) => sum + value, 0);
-
-  return {
-    numFields: questions.length,
-    maxValue: String(maxValue),
-    minValue: '0',
-    uniqueValues: false,
-    costFromWeight: false,
-    costExponent: 1,
-    maxValueSum: String(maxValueSum),
-    minValueSum: '0',
-  };
-}
-
-export function sanitizeQuestionSet(questions: CreateQuestion[]): CreateQuestion[] {
-  if (!questions.length) {
-    throw new Error('Add at least one question.');
-  }
-  if (questions.length > MAX_QUESTIONS) {
-    throw new Error(`Maximum ${MAX_QUESTIONS} questions are allowed per process.`);
-  }
-
-  return questions.map((question, questionIndex) => {
-    const title = String(question.title || '').trim();
-    const description = String(question.description || '').trim();
-    if (!title) {
-      throw new Error(`Question ${questionIndex + 1} needs a title.`);
-    }
-    ensureAsciiField(title, `Question ${questionIndex + 1} title`);
-    ensureAsciiField(description, `Question ${questionIndex + 1} description`);
-
-    const choices = question.choices.map((choice, choiceIndex) => {
-      const choiceTitle = String(choice.title || '').trim();
-      if (!choiceTitle) {
-        throw new Error(`Question ${questionIndex + 1} has an empty choice.`);
-      }
-      ensureAsciiField(choiceTitle, `Question ${questionIndex + 1} choice ${choiceIndex + 1}`);
-      return {
-        title: choiceTitle,
-        value: choiceIndex,
-      };
-    });
-
-    if (choices.length < 2) {
-      throw new Error(`Question ${questionIndex + 1} needs at least two choices.`);
-    }
-
-    return {
-      title,
-      description,
-      choices,
-    };
-  });
-}
-
 export function normalizeProcessResultValues(rawResult: unknown): bigint[] {
   if (!Array.isArray(rawResult)) return [];
   return rawResult.map((item) => {
@@ -918,4 +916,3 @@ export function normalizeProcessResultValues(rawResult: unknown): bigint[] {
     }
   });
 }
-

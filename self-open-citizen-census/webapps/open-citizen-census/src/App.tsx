@@ -1,26 +1,28 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { buildAssetUrl } from './utils/assets';
 
-import { CREATE_HEADER_TITLE, VOTE_HEADER_TITLE } from './lib/occ';
-import CreateRoute from './routes/CreateRoute';
-import VoteRoute from './routes/VoteRoute';
+const CreateRoute = lazy(() => import('./routes/CreateRoute'));
+const VoteRoute = lazy(() => import('./routes/VoteRoute'));
+
+function RouteLoadingFallback() {
+  return (
+    <section className="view">
+      <article className="card">
+        <p className="muted">Loading route...</p>
+      </article>
+    </section>
+  );
+}
 
 function AppLayout() {
   const location = useLocation();
   const inVoteView = /^\/vote(?:\/|$)/.test(location.pathname);
-  const headerTitle = inVoteView ? VOTE_HEADER_TITLE : CREATE_HEADER_TITLE;
-  const base = import.meta.env.BASE_URL || '/';
-  const withBase = (file: string) => `${base.replace(/\/$/, '')}/assets/${file}`;
+  const withBase = (file: string) => buildAssetUrl(file);
 
   return (
     <>
-      <div className="app-shell">
-        <header className="app-header">
-          <div>
-            <p className="eyebrow">Open Citizen Census</p>
-            <h1>{headerTitle}</h1>
-          </div>
-        </header>
-
+      <div className={`app-shell ${inVoteView ? 'route-vote' : 'route-create'}`}>
         <main id="mainContent">
           <Outlet />
         </main>
@@ -48,11 +50,39 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<AppLayout />}>
-        <Route index element={<CreateRoute />} />
-        <Route path="create" element={<CreateRoute />} />
-        <Route path="vote" element={<VoteRoute />} />
-        <Route path="vote/:processId" element={<VoteRoute />} />
-        <Route path="*" element={<Navigate to="create" replace />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <CreateRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="create"
+          element={
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <CreateRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="vote"
+          element={
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <VoteRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="vote/:processId"
+          element={
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <VoteRoute />
+            </Suspense>
+          }
+        />
+        <Route path="*" element={<Navigate to="/create" replace />} />
       </Route>
     </Routes>
   );

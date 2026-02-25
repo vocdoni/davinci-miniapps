@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Wallet } from 'ethers';
-import { useNavigate, useParams } from 'react-router-dom';
-import { DavinciSDK, ProcessStatus } from '@vocdoni/davinci-sdk';
+import { useParams } from 'react-router-dom';
+import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import { SelfAppBuilder, SelfQRcodeWrapper } from '@selfxyz/qrcode';
 
 import {
@@ -16,14 +16,11 @@ import {
   VOTE_STATUS_INFO,
   buildCensusUri,
   clearWalletOverride,
-  encodeWeightOf,
   extractCensusContract,
   extractCensusUri,
   extractProcessDescription,
   extractProcessEndDateMs,
   extractVoteContextFromMetadata,
-  formatProcessTypeLabel,
-  formatReadinessCheckTime,
   formatRemainingTimeFromEndMs,
   formatVotePercent,
   formatVoteStatusLabel,
@@ -47,11 +44,23 @@ import {
   toSafeInteger,
   toSelfEndpointType,
   trimTrailingSlash,
-  wait,
   type VoteStatusKey,
 } from '../lib/occ';
 import { getUniversalLink } from '../selfApp';
+import { buildAssetUrl } from '../utils/assets';
 import { isValidProcessId, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
+import { ethCall, fetchOnchainWeight } from '../services/readiness';
+import {
+  createSequencerSdk,
+  fetchProcessMetadata,
+  fetchSequencerWeight,
+  getProcessFromSequencer,
+} from '../services/sequencer';
+import AppNavbar from '../components/AppNavbar';
+import PopupModal from '../components/PopupModal';
+import { detectRegistrationMobileMode } from './vote/device';
+import { createPendingVoteIntent, evaluateVoteSubmitGate, shouldAutoSubmitPendingVote } from './vote/submitFlow';
+import type { PendingVoteIntent, RegistrationModalState } from './vote/types';
 
 interface ManagedWalletSnapshot {
   address: string;
@@ -98,15 +107,12 @@ interface VoteSelfState {
   country: string;
   link: string;
   generating: boolean;
-  autoTriggerKey: string;
-  autoCollapsedForEligibility: boolean;
-  autoCollapsedForClosedStatus: boolean;
   selfApp: any | null;
 }
 
 interface VoteBallotState {
-  questions: VoteQuestion[];
-  choices: Array<number | null>;
+  question: VoteQuestion | null;
+  choice: number | null;
   loading: boolean;
   submitting: boolean;
   hasVoted: boolean;
@@ -144,15 +150,19 @@ const EMPTY_VOTE_SELF: VoteSelfState = {
   country: '',
   link: '',
   generating: false,
-  autoTriggerKey: '',
-  autoCollapsedForEligibility: false,
-  autoCollapsedForClosedStatus: false,
   selfApp: null,
 };
 
+const EMPTY_REGISTRATION_MODAL: RegistrationModalState = {
+  open: false,
+  dismissReason: '',
+  isMobile: false,
+  status: 'idle',
+};
+
 const EMPTY_BALLOT: VoteBallotState = {
-  questions: [],
-  choices: [],
+  question: null,
+  choice: null,
   loading: false,
   submitting: false,
   hasVoted: false,
@@ -164,11 +174,6 @@ const EMPTY_BALLOT: VoteBallotState = {
 
 function shouldShowVoteResults(statusCode: number | null): boolean {
   return normalizeProcessStatus(statusCode) === ProcessStatus.RESULTS;
-}
-
-function shouldDefaultCollapseVoteSelfCard(statusCode: number | null): boolean {
-  const normalized = normalizeProcessStatus(statusCode);
-  return normalized === ProcessStatus.ENDED || normalized === ProcessStatus.RESULTS;
 }
 
 function getClosedProcessMessage(resolution: VoteResolutionState): string {
@@ -218,7 +223,7 @@ function canOverwriteVote(ballot: VoteBallotState): boolean {
 }
 
 function areVoteChoicesEnabled(resolution: VoteResolutionState, ballot: VoteBallotState): boolean {
-  return hasVoteReadiness(resolution) && !ballot.submitting && canOverwriteVote(ballot);
+  return !isVoteProcessClosed(resolution) && !ballot.submitting && canOverwriteVote(ballot);
 }
 
 function formatVoteLifecycle(resolution: VoteResolutionState): {
@@ -255,61 +260,43 @@ function formatVoteLifecycle(resolution: VoteResolutionState): {
 
 function buildVoteResultsModel(resolution: VoteResolutionState, ballot: VoteBallotState) {
   const totalVotes = toSafeInteger(resolution.votersCount);
-  const maxVoters = toSafeInteger(resolution.maxVoters);
   const rawValues = normalizeProcessResultValues(resolution.rawResult);
   const hasComputedResults = rawValues.length > 0;
-  let cursor = 0;
+  const question = ballot.question;
+  const orderedChoices = question ? [...question.choices].sort((a, b) => Number(a.value) - Number(b.value)) : [];
+  const rankedChoices = orderedChoices
+    .map((choice, order) => {
+      const normalizedValue = Number(choice.value);
+      const rawVotes = Number.isInteger(normalizedValue) && normalizedValue >= 0 ? rawValues[normalizedValue] : undefined;
+      const votes = rawVotes !== undefined ? toSafeInteger(rawVotes) : 0;
+      const percentage = totalVotes > 0 ? Math.min(100, Math.max(0, (votes / totalVotes) * 100)) : 0;
+      return {
+        order,
+        title: String(choice.title || `Choice ${order + 1}`),
+        votes,
+        percentage,
+      };
+    })
+    .sort((left, right) => right.votes - left.votes || left.order - right.order)
+    .map((choice, rank) => ({
+      ...choice,
+      rank: rank + 1,
+    }));
 
-  const questions = ballot.questions.map((question, questionIndex) => {
-    const orderedChoices = [...question.choices].sort((a, b) => Number(a.value) - Number(b.value));
-    const rankedChoices = orderedChoices
-      .map((choice, order) => {
-        const rawVotes = rawValues[cursor];
-        cursor += 1;
-        const votes = rawVotes !== undefined ? toSafeInteger(rawVotes) : 0;
-        const percentage = totalVotes > 0 ? Math.min(100, Math.max(0, (votes / totalVotes) * 100)) : 0;
-        return {
-          order,
-          title: String(choice.title || `Choice ${order + 1}`),
-          votes,
-          percentage,
-        };
-      })
-      .sort((left, right) => right.votes - left.votes || left.order - right.order)
-      .map((choice, rank) => ({
-        ...choice,
-        rank: rank + 1,
-      }));
-
-    return {
-      title: String(question.title || `Question ${questionIndex + 1}`),
-      choices: rankedChoices,
-    };
-  });
-
-  const choicesWithVotes = questions.reduce((sum, question) => sum + question.choices.filter((choice) => choice.votes > 0).length, 0);
+  const choicesWithVotes = rankedChoices.filter((choice) => choice.votes > 0).length;
 
   return {
     totalVotes,
-    turnoutLabel: formatVotePercent(totalVotes, maxVoters),
     choicesWithVotes,
-    questions,
+    choices: rankedChoices,
     hasComputedResults,
   };
 }
 
 export default function VoteRoute() {
   const params = useParams();
-  const navigate = useNavigate();
-
-  const [voteStatus, setVoteStatus] = useState<{ message: string; error: boolean }>({
-    message: 'Resolve process and managed wallet before generating Self QR.',
-    error: false,
-  });
-  const [voteSelfStatus, setVoteSelfStatus] = useState<{ message: string; error: boolean }>({
-    message: 'Resolve process and managed wallet before generating Self QR.',
-    error: false,
-  });
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  const withBase = useCallback((file: string) => buildAssetUrl(file), []);
 
   const [contextBlocked, setContextBlocked] = useState(false);
   const [contextMessage, setContextMessage] = useState(
@@ -322,13 +309,16 @@ export default function VoteRoute() {
   const [voteSelf, setVoteSelf] = useState<VoteSelfState>(EMPTY_VOTE_SELF);
   const [voteBallot, setVoteBallot] = useState<VoteBallotState>(EMPTY_BALLOT);
   const [importKey, setImportKey] = useState('');
-  const [voteProcessIdInput, setVoteProcessIdInput] = useState('');
   const [voteDetailsOpen, setVoteDetailsOpen] = useState(false);
-  const [voteSelfCardOpen, setVoteSelfCardOpen] = useState(true);
+  const [voteIdentityOpen, setVoteIdentityOpen] = useState(false);
+  const [registrationModal, setRegistrationModal] = useState<RegistrationModalState>(EMPTY_REGISTRATION_MODAL);
+  const [pendingVoteIntent, setPendingVoteIntent] = useState<PendingVoteIntent | null>(null);
   const [voteStatusDetailsOpen, setVoteStatusDetailsOpen] = useState(false);
   const [copyVoteIdLabel, setCopyVoteIdLabel] = useState('Copy');
 
   const votePollRef = useRef<number | null>(null);
+  const pendingAutoSubmitRef = useRef(false);
+  const registrationQrRequestKeyRef = useRef('');
   const resolutionRef = useRef(voteResolution);
   const managedWalletRef = useRef(managedWallet);
   const voteSelfRef = useRef(voteSelf);
@@ -348,104 +338,29 @@ export default function VoteRoute() {
   }, [voteBallot]);
 
   useEffect(() => {
-    const title = String(voteResolution.title || '').trim();
-    if (voteResolution.processId && title && title !== '-') {
-      document.title = `${title} - ${DEFAULT_DOCUMENT_TITLE}`;
+    const questionTitle = String(voteBallot.question?.title || '').trim();
+    if (voteResolution.processId && questionTitle && questionTitle !== '-') {
+      document.title = `${questionTitle} - ${DEFAULT_DOCUMENT_TITLE}`;
       return;
     }
     document.title = DEFAULT_DOCUMENT_TITLE;
-  }, [voteResolution.processId, voteResolution.title]);
+  }, [voteBallot.question?.title, voteResolution.processId]);
 
   useEffect(() => {
-    document.body.classList.toggle('app-blocked', contextBlocked);
+    const hasOpenPopup = contextBlocked || voteDetailsOpen || voteIdentityOpen || registrationModal.open;
+    document.body.classList.toggle('app-blocked', hasOpenPopup);
     return () => {
       document.body.classList.remove('app-blocked');
     };
-  }, [contextBlocked]);
+  }, [contextBlocked, registrationModal.open, voteDetailsOpen, voteIdentityOpen]);
 
-  const setVoteStatusMessage = useCallback((message: string, error = false) => {
-    setVoteStatus({ message, error });
-  }, []);
-
-  const setVoteSelfStatusMessage = useCallback((message: string, error = false) => {
-    setVoteSelfStatus({ message, error });
-  }, []);
+  const setVoteStatusMessage = useCallback((_message: string, _error = false) => {}, []);
 
   const stopVotePolling = useCallback(() => {
     if (votePollRef.current) {
       window.clearInterval(votePollRef.current);
       votePollRef.current = null;
     }
-  }, []);
-
-  const getProcessFromSequencer = useCallback(async (sdk: any, processId: string) => {
-    const normalized = normalizeProcessId(processId);
-    try {
-      return await sdk.api.sequencer.getProcess(normalized);
-    } catch (error) {
-      const withoutPrefix = normalized.replace(/^0x/, '');
-      if (withoutPrefix === normalized) throw error;
-      return sdk.api.sequencer.getProcess(withoutPrefix);
-    }
-  }, []);
-
-  const ethCall = useCallback(async (to: string, data: string) => {
-    if (!ACTIVE_NETWORK.rpcUrl) {
-      throw new Error('RPC unavailable for active network.');
-    }
-
-    const response = await fetch(ACTIVE_NETWORK.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method: 'eth_call',
-        params: [{ to, data }, 'latest'],
-      }),
-    });
-
-    const json = (await response.json()) as { error?: { message?: string }; result?: string };
-    if (json.error) {
-      throw new Error(json.error.message || 'eth_call failed');
-    }
-    return json.result || '0x0';
-  }, []);
-
-  const fetchOnchainWeight = useCallback(
-    async (contractAddress: string, address: string) => {
-      if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) return 0n;
-      const result = await ethCall(contractAddress, encodeWeightOf(address));
-      return BigInt(result || '0x0');
-    },
-    [ethCall]
-  );
-
-  const fetchSequencerWeight = useCallback(async (processId: string, address: string) => {
-    const sdk = resolutionRef.current.sdk;
-    if (!sdk) return 0n;
-
-    const api = sdk.api?.sequencer;
-    const callCandidates = [
-      () => sdk.getAddressWeight?.(normalizeProcessId(processId), address),
-      () => sdk.getAddressWeight?.(normalizeProcessId(processId).replace(/^0x/, ''), address),
-      () => api?.getAddressWeight?.(normalizeProcessId(processId), address),
-      () => api?.getAddressWeight?.(normalizeProcessId(processId).replace(/^0x/, ''), address),
-      () => api?.getProcessAddressWeight?.(normalizeProcessId(processId), address),
-    ];
-
-    for (const call of callCandidates) {
-      try {
-        const value = await call();
-        if (value === undefined || value === null) continue;
-        if (typeof value === 'object' && value.weight !== undefined) return BigInt(value.weight);
-        return BigInt(value);
-      } catch {
-        // Try next candidate.
-      }
-    }
-
-    return 0n;
   }, []);
 
   const refreshVoteReadiness = useCallback(async () => {
@@ -496,14 +411,14 @@ export default function VoteRoute() {
     }
 
     try {
-      const sequencerWeight = await fetchSequencerWeight(processId, managedAddress);
+      const sequencerWeight = await fetchSequencerWeight(resolution.sdk, processId, managedAddress);
       setVoteResolution((previous) => ({ ...previous, sequencerWeight }));
     } catch {
       setVoteResolution((previous) => ({ ...previous, sequencerWeight: 0n }));
     }
 
     setVoteResolution((previous) => ({ ...previous, readinessCheckedAt: Date.now() }));
-  }, [fetchOnchainWeight, fetchSequencerWeight, getProcessFromSequencer]);
+  }, [getProcessFromSequencer]);
 
   const startVotePolling = useCallback(() => {
     stopVotePolling();
@@ -515,7 +430,7 @@ export default function VoteRoute() {
 
   const restoreVoteSubmissionFromStorage = useCallback((processId: string, address: string) => {
     const stored = loadVoteSubmission(processId, address);
-    if (!stored) return false;
+    if (!stored) return null;
 
     setVoteBallot((previous) => ({
       ...previous,
@@ -523,7 +438,7 @@ export default function VoteRoute() {
       submissionStatus: stored.status || 'pending',
       hasVoted: false,
     }));
-    return true;
+    return stored;
   }, []);
 
   const bootstrapVoteManagedWallet = useCallback(
@@ -547,7 +462,7 @@ export default function VoteRoute() {
         statusWatcherToken: previous.statusWatcherToken + 1,
       }));
 
-      void restoreVoteSubmissionFromStorage(normalizedProcessId, wallet.address);
+      restoreVoteSubmissionFromStorage(normalizedProcessId, wallet.address);
     },
     [restoreVoteSubmissionFromStorage]
   );
@@ -579,12 +494,11 @@ export default function VoteRoute() {
     [fetchVoteSelfMinAge]
   );
 
-  const clearVoteSelfArtifacts = useCallback((resetAutoTrigger = true) => {
+  const clearVoteSelfArtifacts = useCallback(() => {
     setVoteSelf((previous) => ({
       ...previous,
       link: '',
       selfApp: null,
-      autoTriggerKey: resetAutoTrigger ? '' : previous.autoTriggerKey,
     }));
   }, []);
 
@@ -601,38 +515,45 @@ export default function VoteRoute() {
     setVoteResolution(EMPTY_RESOLUTION);
     setVoteSelf(EMPTY_VOTE_SELF);
     clearVoteBallot();
-    setVoteSelfCardOpen(true);
+    setPendingVoteIntent(null);
+    setRegistrationModal(EMPTY_REGISTRATION_MODAL);
     setVoteDetailsOpen(false);
+    setVoteIdentityOpen(false);
     setVoteStatusMessage('Resolve process and managed wallet before generating Self QR.');
-    setVoteSelfStatusMessage('Resolve process and managed wallet before generating Self QR.');
-  }, [clearVoteBallot, setVoteSelfStatusMessage, setVoteStatusMessage, stopVotePolling]);
+  }, [clearVoteBallot, setVoteStatusMessage, stopVotePolling]);
 
   const loadVoteQuestions = useCallback(
     async (process: any, metadata: any) => {
-      clearVoteBallot('Loading process questions...');
+      clearVoteBallot('Loading process question...');
       setVoteBallot((previous) => ({ ...previous, loading: true }));
 
       try {
         const metadataQuestions = normalizeVoteQuestions(metadata?.questions);
         const directQuestions = normalizeVoteQuestions(process?.questions);
         const resolvedQuestions = metadataQuestions.length ? metadataQuestions : directQuestions;
+        const [singleQuestion = null] = resolvedQuestions;
 
         setVoteBallot((previous) => ({
           ...previous,
           loading: false,
-          questions: resolvedQuestions,
-          choices: resolvedQuestions.map(() => null),
+          question: singleQuestion,
+          choice: null,
           submissionId: '',
           submissionStatus: '',
           hasVoted: false,
         }));
 
-        if (!resolvedQuestions.length) {
-          setVoteStatusMessage('No vote questions were found in this process.', true);
+        if (!singleQuestion) {
+          setVoteStatusMessage('No vote question was found in this process.', true);
+          return;
+        }
+
+        if (resolvedQuestions.length > 1) {
+          setVoteStatusMessage('This app supports one question only. Showing the first question.');
         }
       } catch (error) {
-        clearVoteBallot(error instanceof Error ? error.message : 'Failed to load process questions.');
-        setVoteStatusMessage(error instanceof Error ? error.message : 'Failed to load process questions.', true);
+        clearVoteBallot(error instanceof Error ? error.message : 'Failed to load process question.');
+        setVoteStatusMessage(error instanceof Error ? error.message : 'Failed to load process question.', true);
       } finally {
         setVoteBallot((previous) => ({ ...previous, loading: false }));
       }
@@ -655,7 +576,7 @@ export default function VoteRoute() {
     try {
       const alreadyVoted = await sdk.hasAddressVoted(processId, managedAddress);
       if (alreadyVoted && canOverwriteVote(voteBallotRef.current)) {
-        setVoteStatusMessage('This identity wallet already has a vote in sequencer. You can emit again to overwrite it.');
+        setVoteStatusMessage('This identity wallet already has a vote in sequencer. You can submit again to overwrite it.');
       }
     } catch {
       // Ignore remote voted flag errors.
@@ -691,39 +612,6 @@ export default function VoteRoute() {
     [setVoteStatusMessage]
   );
 
-  const getVoteSelfAutoTriggerKey = useCallback(() => {
-    const resolution = resolutionRef.current;
-    const self = voteSelfRef.current;
-    const wallet = managedWalletRef.current;
-
-    const processId = normalizeProcessId(resolution.processId);
-    const contractAddress = String(resolution.censusContract || '').toLowerCase();
-    const managedAddress = String(wallet?.address || '').toLowerCase();
-    const scopeSeed = normalizeScope(self.scopeSeed || '');
-    const minAge = self.minAge ? String(self.minAge) : '';
-
-    if (!processId || !contractAddress || !managedAddress || !scopeSeed) {
-      return '';
-    }
-
-    return [processId.toLowerCase(), contractAddress, managedAddress, scopeSeed, minAge].join('|');
-  }, []);
-
-  const maybeAutoGenerateVoteSelfQr = useCallback(async () => {
-    const resolution = resolutionRef.current;
-    const self = voteSelfRef.current;
-    if (isVoteProcessClosed(resolution)) return;
-    if (resolution.sequencerWeight > 0n) return;
-
-    const key = getVoteSelfAutoTriggerKey();
-    if (!key) return;
-    if (self.generating || self.link) return;
-    if (self.autoTriggerKey === key) return;
-
-    setVoteSelf((previous) => ({ ...previous, autoTriggerKey: key }));
-    await generateVoteSelfQr(true);
-  }, [getVoteSelfAutoTriggerKey]);
-
   const hydrateVoteSelfScope = useCallback(
     (processId: string, contractAddress: string) => {
       const meta = loadProcessMeta(processId);
@@ -755,17 +643,6 @@ export default function VoteRoute() {
     [clearVoteSelfArtifacts]
   );
 
-  const fetchProcessMetadata = useCallback(async (sdk: any, process: any) => {
-    const metadataUri = String(process?.metadataURI || process?.metadataUri || '').trim();
-    if (!metadataUri || !sdk?.api?.sequencer?.getMetadata) return null;
-    try {
-      const metadata = await sdk.api.sequencer.getMetadata(metadataUri);
-      return metadata && typeof metadata === 'object' ? metadata : null;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const resolveVoteProcess = useCallback(
     async (processId: string, silent = true) => {
       const normalizedProcessId = normalizeProcessId(processId);
@@ -787,8 +664,6 @@ export default function VoteRoute() {
       setVoteSelf((previous) => ({
         ...previous,
         country: '',
-        autoCollapsedForEligibility: false,
-        autoCollapsedForClosedStatus: false,
       }));
       clearVoteBallot('Resolving process...');
 
@@ -797,7 +672,7 @@ export default function VoteRoute() {
       }
 
       try {
-        const sdk = new DavinciSDK({ sequencerUrl: CONFIG.davinciSequencerUrl } as any);
+        const sdk = createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
         await sdk.init();
         const process = await getProcessFromSequencer(sdk, normalizedProcessId);
         const metadata = await fetchProcessMetadata(sdk, process);
@@ -815,7 +690,7 @@ export default function VoteRoute() {
         const rawResult = Array.isArray(process?.result) ? process.result : null;
         const votersCount = toSafeInteger(process?.votersCount);
         const maxVoters = toSafeInteger(process?.maxVoters);
-        const processTypeName = String(metadata?.type?.name || process?.metadata?.type?.name || '').trim();
+        const processTypeName = String((metadata as any)?.type?.name || process?.metadata?.type?.name || '').trim();
 
         setVoteResolution((previous) => ({
           ...previous,
@@ -867,17 +742,17 @@ export default function VoteRoute() {
 
         const wallet = managedWalletRef.current;
         if (wallet) {
-          const restoredVoteId = restoreVoteSubmissionFromStorage(normalizedProcessId, wallet.address);
-          if (restoredVoteId) {
-            const normalizedStatus = normalizeVoteStatus(voteBallotRef.current.submissionStatus);
-            const shouldWatch = normalizedStatus && normalizedStatus !== 'settled' && normalizedStatus !== 'error';
+          const restoredSubmission = restoreVoteSubmissionFromStorage(normalizedProcessId, wallet.address);
+          if (restoredSubmission) {
+            const normalizedStatus = normalizeVoteStatus(restoredSubmission.status || 'pending') || 'pending';
+            const shouldWatch = normalizedStatus !== 'settled' && normalizedStatus !== 'error';
             if (shouldWatch) {
               const watcherToken = voteBallotRef.current.statusWatcherToken + 1;
               setVoteBallot((previous) => ({ ...previous, statusWatcherToken: watcherToken }));
               void trackVoteSubmissionStatus(
                 sdk,
                 normalizedProcessId,
-                voteBallotRef.current.submissionId,
+                restoredSubmission.voteId,
                 watcherToken,
                 wallet.address || ''
               );
@@ -888,7 +763,6 @@ export default function VoteRoute() {
         await refreshVoteReadiness();
         await refreshHasVotedFlag();
         startVotePolling();
-        await maybeAutoGenerateVoteSelfQr();
 
         if (!silent) {
           setVoteStatusMessage('Process resolved. Readiness checks are active.');
@@ -907,7 +781,6 @@ export default function VoteRoute() {
       getProcessFromSequencer,
       hydrateVoteSelfScope,
       loadVoteQuestions,
-      maybeAutoGenerateVoteSelfQr,
       refreshHasVotedFlag,
       refreshVoteReadiness,
       refreshVoteSelfContractData,
@@ -933,19 +806,19 @@ export default function VoteRoute() {
     const scopeSeed = normalizeScope(self.scopeSeed || '');
 
     if (isVoteProcessClosed(resolution)) {
-      setVoteSelfStatusMessage(getClosedProcessMessage(resolution), true);
+      setVoteStatusMessage(getClosedProcessMessage(resolution), true);
       return;
     }
     if (!processId || !contractAddress || !managedAddress) {
-      setVoteSelfStatusMessage('Resolve process and managed wallet before generating Self QR.', true);
+      setVoteStatusMessage('Resolve process and managed wallet before generating Self QR.', true);
       return;
     }
     if (!scopeSeed) {
-      setVoteSelfStatusMessage('Scope seed is required to generate Self QR.', true);
+      setVoteStatusMessage('Scope seed is required to generate Self QR.', true);
       return;
     }
     if (!/^[\x00-\x7F]+$/.test(scopeSeed) || scopeSeed.length > 31) {
-      setVoteSelfStatusMessage('Scope seed must be ASCII and up to 31 characters.', true);
+      setVoteStatusMessage('Scope seed must be ASCII and up to 31 characters.', true);
       return;
     }
 
@@ -954,7 +827,9 @@ export default function VoteRoute() {
     setVoteSelf((previous) => ({ ...previous, generating: true, scopeSeed }));
 
     try {
-      setVoteSelfStatusMessage('Generating Self QR...');
+      if (!auto) {
+        setVoteStatusMessage('Generating Self QR...');
+      }
 
       let minAge = self.minAge;
       if (!minAge) {
@@ -988,13 +863,11 @@ export default function VoteRoute() {
         link: universalLink,
       }));
 
-      setVoteSelfStatusMessage('QR ready. Scan it in the Self app to register this wallet.');
       if (!auto) {
         setVoteStatusMessage('Self QR ready. Complete verification in Self and wait for readiness to turn Yes.');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate Self QR.';
-      setVoteSelfStatusMessage(message, true);
       setVoteStatusMessage(message, true);
     } finally {
       setVoteSelf((previous) => ({ ...previous, generating: false }));
@@ -1006,11 +879,11 @@ export default function VoteRoute() {
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      setVoteSelfStatusMessage('Self link copied to clipboard.');
+      setVoteStatusMessage('Self link copied to clipboard.');
     } catch {
-      setVoteSelfStatusMessage('Failed to copy Self link.', true);
+      setVoteStatusMessage('Failed to copy Self link.', true);
     }
-  }, [setVoteSelfStatusMessage]);
+  }, [setVoteStatusMessage]);
 
   const openVoteSelfLink = useCallback(() => {
     const link = voteSelfRef.current.link;
@@ -1018,91 +891,183 @@ export default function VoteRoute() {
     window.open(link, '_blank', 'noopener,noreferrer');
   }, []);
 
+  const submitVoteSnapshot = useCallback(
+    async (choices: number[]): Promise<boolean> => {
+      if (voteBallotRef.current.submitting) return false;
+
+      const resolution = resolutionRef.current;
+      const ballot = voteBallotRef.current;
+      const wallet = managedWalletRef.current;
+      const processId = resolution.processId;
+
+      if (!processId || !wallet?.privateKey) {
+        setVoteStatusMessage('Resolve process and managed wallet before submitting vote.', true);
+        return false;
+      }
+      if (isVoteProcessClosed(resolution)) {
+        setVoteStatusMessage(getClosedProcessMessage(resolution), true);
+        return false;
+      }
+      if (!hasVoteReadiness(resolution)) {
+        const message = isOnchainReadinessRequired(resolution)
+          ? 'Registration still pending. Wait until Onchain and Sequencer readiness are both Yes.'
+          : 'Registration still pending. Wait until Sequencer readiness is Yes.';
+        setVoteStatusMessage(message, true);
+        return false;
+      }
+      if (!canOverwriteVote(ballot)) {
+        setVoteStatusMessage('Current vote is still processing. Wait until status becomes Settled or Error before overwriting.', true);
+        return false;
+      }
+
+      const censusUrl = trimTrailingSlash(CONFIG.onchainIndexerUrl);
+      if (!censusUrl) {
+        setVoteStatusMessage('Missing census URL config for vote proof generation.', true);
+        return false;
+      }
+
+      try {
+        setVoteBallot((previous) => ({ ...previous, submitting: true }));
+        setVoteStatusMessage('Submitting vote...');
+
+        const sdk = createSequencerSdk({
+          signer: new Wallet(wallet.privateKey),
+          sequencerUrl: CONFIG.davinciSequencerUrl,
+          censusUrl,
+        });
+        await sdk.init();
+
+        const result = await sdk.submitVote({ processId, choices });
+        const voteId = String(result?.voteId || '');
+        const voteStatus = String(result?.status || 'pending');
+
+        setVoteBallot((previous) => ({
+          ...previous,
+          submissionId: voteId,
+          submissionStatus: voteStatus,
+          statusPanelVoteId: '',
+          hasVoted: true,
+        }));
+
+        persistVoteSubmission(processId, wallet.address, {
+          voteId,
+          status: voteStatus,
+        });
+        setVoteStatusMessage('Vote submitted successfully.');
+
+        const watcherToken = voteBallotRef.current.statusWatcherToken + 1;
+        setVoteBallot((previous) => ({ ...previous, statusWatcherToken: watcherToken }));
+        void trackVoteSubmissionStatus(sdk, processId, voteId, watcherToken, wallet.address);
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to submit vote.';
+        if (voteBallotRef.current.submissionId) {
+          setVoteBallot((previous) => ({ ...previous, hasVoted: false, submissionStatus: 'error' }));
+          persistVoteSubmission(processId, wallet.address, {
+            voteId: voteBallotRef.current.submissionId,
+            status: 'error',
+          });
+        }
+        setVoteStatusMessage(message, true);
+        return false;
+      } finally {
+        setVoteBallot((previous) => ({ ...previous, submitting: false }));
+      }
+    },
+    [setVoteStatusMessage, trackVoteSubmissionStatus]
+  );
+
   const emitVote = useCallback(async () => {
-    if (voteBallotRef.current.submitting) return;
+    if (voteBallotRef.current.submitting || pendingVoteIntent) return;
 
     const resolution = resolutionRef.current;
     const ballot = voteBallotRef.current;
     const wallet = managedWalletRef.current;
     const processId = resolution.processId;
-    const choices = ballot.choices.map((value) => Number(value));
+    const walletAddress = wallet?.address || '';
 
-    if (!processId || !wallet?.privateKey) {
-      setVoteStatusMessage('Resolve process and managed wallet before emitting vote.', true);
-      return;
-    }
-    if (isVoteProcessClosed(resolution)) {
-      setVoteStatusMessage(getClosedProcessMessage(resolution), true);
-      return;
-    }
-    if (!ballot.questions.length) {
-      setVoteStatusMessage('No questions available for this process.', true);
-      return;
-    }
-    if (!hasVoteReadiness(resolution)) {
-      const message = isOnchainReadinessRequired(resolution)
-        ? 'Wait until Onchain and Sequencer readiness are both Yes.'
-        : 'Wait until Sequencer readiness is Yes.';
-      setVoteStatusMessage(message, true);
-      return;
-    }
-    if (!canOverwriteVote(ballot)) {
-      setVoteStatusMessage('Current vote is still processing. Wait until status becomes Settled or Error before overwriting.', true);
-      return;
-    }
+    const hasQuestion = Boolean(ballot.question);
+    const selectedChoice = ballot.choice;
+    const hasAllSelectedChoices =
+      hasQuestion &&
+      Number.isInteger(selectedChoice) &&
+      Number(selectedChoice) >= 0 &&
+      (ballot.question?.choices || []).some((choice) => Number(choice.value) === selectedChoice);
 
-    const censusUrl = trimTrailingSlash(CONFIG.onchainIndexerUrl);
-    if (!censusUrl) {
-      setVoteStatusMessage('Missing census URL config for vote proof generation.', true);
-      return;
-    }
-
-    try {
-      setVoteBallot((previous) => ({ ...previous, submitting: true }));
-      setVoteStatusMessage('Emitting vote...');
-
-      const sdk = new DavinciSDK({
-        signer: new Wallet(wallet.privateKey),
-        sequencerUrl: CONFIG.davinciSequencerUrl,
-        censusUrl,
-      });
-      await sdk.init();
-
-      const result = await sdk.submitVote({ processId, choices });
-      const voteId = String(result?.voteId || '');
-      const voteStatus = String(result?.status || 'pending');
-
-      setVoteBallot((previous) => ({
-        ...previous,
-        submissionId: voteId,
-        submissionStatus: voteStatus,
-        statusPanelVoteId: '',
-        hasVoted: true,
-      }));
-
-      persistVoteSubmission(processId, wallet.address, {
-        voteId,
-        status: voteStatus,
-      });
-      setVoteStatusMessage('Vote emitted successfully.');
-
-      const watcherToken = voteBallotRef.current.statusWatcherToken + 1;
-      setVoteBallot((previous) => ({ ...previous, statusWatcherToken: watcherToken }));
-      void trackVoteSubmissionStatus(sdk, processId, voteId, watcherToken, wallet.address);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to emit vote.';
-      if (voteBallotRef.current.submissionId) {
-        setVoteBallot((previous) => ({ ...previous, hasVoted: false, submissionStatus: 'error' }));
-        persistVoteSubmission(processId, wallet.address, {
-          voteId: voteBallotRef.current.submissionId,
-          status: 'error',
-        });
+    const gate = evaluateVoteSubmitGate(
+      {
+        hasProcessId: Boolean(processId),
+        hasWalletPrivateKey: Boolean(wallet?.privateKey),
+        isProcessClosed: isVoteProcessClosed(resolution),
+        hasQuestion,
+        hasAllChoices: hasAllSelectedChoices,
+        canOverwriteVote: canOverwriteVote(ballot),
+        hasVoteReadiness: hasVoteReadiness(resolution),
+      },
+      {
+        processClosed: getClosedProcessMessage(resolution),
       }
-      setVoteStatusMessage(message, true);
-    } finally {
-      setVoteBallot((previous) => ({ ...previous, submitting: false }));
+    );
+
+    if (gate.result === 'blocked') {
+      setVoteStatusMessage(gate.blockMessage, true);
+      return;
     }
-  }, [setVoteStatusMessage, trackVoteSubmissionStatus]);
+
+    let pendingIntent: PendingVoteIntent;
+    try {
+      pendingIntent = createPendingVoteIntent(processId, walletAddress, [ballot.choice]);
+    } catch (error) {
+      setVoteStatusMessage(error instanceof Error ? error.message : 'Select one option before submitting.', true);
+      return;
+    }
+
+    if (gate.result === 'ready') {
+      await submitVoteSnapshot(pendingIntent.choiceSnapshot);
+      return;
+    }
+
+    setPendingVoteIntent(pendingIntent);
+    setRegistrationModal({
+      open: true,
+      dismissReason: '',
+      isMobile: detectRegistrationMobileMode(),
+      status: 'waiting',
+    });
+    setVoteStatusMessage('Registration required. Complete Self verification and your vote will submit automatically.');
+
+    if (!voteSelfRef.current.link && !voteSelfRef.current.generating) {
+      void generateVoteSelfQr(true);
+    }
+  }, [pendingVoteIntent, setVoteStatusMessage, submitVoteSnapshot]);
+
+  const closeRegistrationModal = useCallback(
+    (
+      dismissReason: RegistrationModalState['dismissReason'],
+      options: { keepPending?: boolean; statusMessage?: string; error?: boolean } = {}
+    ) => {
+      setRegistrationModal((previous) => ({
+        ...previous,
+        open: false,
+        dismissReason,
+        status: 'idle',
+      }));
+      pendingAutoSubmitRef.current = false;
+      registrationQrRequestKeyRef.current = '';
+      if (!options.keepPending) {
+        setPendingVoteIntent(null);
+      }
+      if (options.statusMessage) {
+        setVoteStatusMessage(options.statusMessage, Boolean(options.error));
+      }
+    },
+    [setVoteStatusMessage]
+  );
+
+  const closeContextGatePopup = useCallback(() => {
+    setContextBlocked(false);
+    setVoteStatusMessage('A valid /vote/:processId link is required to continue.', true);
+  }, [setVoteStatusMessage]);
 
   useEffect(() => {
     setVoteStatusDetailsOpen(false);
@@ -1115,7 +1080,6 @@ export default function VoteRoute() {
       const message = 'Missing process ID in URL. Open the complete /vote/:processId link shared for this process.';
       setContextBlocked(true);
       setContextMessage(message);
-      setVoteProcessIdInput('');
       resetVoteResolution();
       setVoteStatusMessage(message, true);
       return;
@@ -1126,7 +1090,6 @@ export default function VoteRoute() {
       const message = 'Invalid process ID in URL. Open a valid /vote/:processId link to use this app.';
       setContextBlocked(true);
       setContextMessage(message);
-      setVoteProcessIdInput('');
       resetVoteResolution();
       setVoteStatusMessage(message, true);
       return;
@@ -1134,91 +1097,198 @@ export default function VoteRoute() {
 
     setContextBlocked(false);
     setContextMessage('');
-    setVoteProcessIdInput(normalized);
     void resolveVoteProcess(normalized, false);
   }, [params.processId, resetVoteResolution, resolveVoteProcess, setVoteStatusMessage]);
 
   useEffect(() => () => stopVotePolling(), [stopVotePolling]);
 
   useEffect(() => {
-    const sequencerEligible = voteResolution.sequencerWeight > 0n;
-    const closed = isVoteProcessClosed(voteResolution);
+    const updateMode = () => {
+      const isMobile = detectRegistrationMobileMode();
+      setRegistrationModal((previous) => (previous.isMobile === isMobile ? previous : { ...previous, isMobile }));
+    };
 
-    if (sequencerEligible) {
-      setVoteSelf((previous) => ({
-        ...previous,
-        autoCollapsedForEligibility: true,
-      }));
-      setVoteSelfStatusMessage('You are already registered in the sequencer census.');
-      return;
-    }
-
-    if (closed) {
-      setVoteSelf((previous) => ({
-        ...previous,
-        autoCollapsedForEligibility: false,
-        autoCollapsedForClosedStatus: true,
-      }));
-      if (shouldDefaultCollapseVoteSelfCard(voteResolution.statusCode)) {
-        setVoteSelfCardOpen(false);
-      }
-      setVoteSelfStatusMessage(getClosedProcessMessage(voteResolution));
-      return;
-    }
-
-    setVoteSelf((previous) => ({
-      ...previous,
-      autoCollapsedForEligibility: false,
-      autoCollapsedForClosedStatus: false,
-    }));
-  }, [setVoteSelfStatusMessage, voteResolution]);
+    updateMode();
+    window.addEventListener('resize', updateMode);
+    return () => {
+      window.removeEventListener('resize', updateMode);
+    };
+  }, []);
 
   useEffect(() => {
-    void maybeAutoGenerateVoteSelfQr();
-  }, [maybeAutoGenerateVoteSelfQr, voteResolution.censusContract, voteResolution.processId, voteResolution.sequencerWeight, managedWallet, voteSelf.scopeSeed, voteSelf.minAge]);
+    if (!registrationModal.open) return;
+    if (registrationModal.status === 'error') return;
+    if (hasVoteReadiness(voteResolution)) return;
+    if (isVoteProcessClosed(voteResolution)) return;
+    if (!voteResolution.processId || !voteResolution.censusContract || !managedWallet?.address || !voteSelf.scopeSeed) return;
+    if (voteSelf.generating || voteSelf.link) return;
 
-  const processTypeLabel = formatProcessTypeLabel(voteResolution.processTypeName);
+    const requestKey = [
+      String(voteResolution.processId || '').toLowerCase(),
+      String(voteResolution.censusContract || '').toLowerCase(),
+      String(managedWallet?.address || '').toLowerCase(),
+      normalizeScope(voteSelf.scopeSeed || ''),
+    ].join('|');
+    if (!requestKey.replace(/\|/g, '')) return;
+    if (registrationQrRequestKeyRef.current === requestKey) return;
+
+    registrationQrRequestKeyRef.current = requestKey;
+    void generateVoteSelfQr(true);
+  }, [
+    registrationModal.open,
+    registrationModal.status,
+    managedWallet?.address,
+    voteResolution.censusContract,
+    voteResolution.processId,
+    voteResolution.endDateMs,
+    voteResolution.isAcceptingVotes,
+    voteResolution.sequencerWeight,
+    voteResolution.statusCode,
+    voteResolution.onchainWeight,
+    voteSelf.generating,
+    voteSelf.link,
+    voteSelf.scopeSeed,
+  ]);
+
+  useEffect(() => {
+    if (!registrationModal.open) return;
+    if (registrationModal.status === 'error') return;
+    const nextStatus = voteBallot.submitting
+      ? 'submitting'
+      : hasVoteReadiness(voteResolution)
+        ? 'ready'
+        : voteSelf.generating
+          ? 'waiting'
+          : 'waiting';
+    setRegistrationModal((previous) => (previous.status === nextStatus ? previous : { ...previous, status: nextStatus }));
+  }, [registrationModal.open, registrationModal.status, voteBallot.submitting, voteResolution, voteSelf.generating]);
+
+  useEffect(() => {
+    if (!pendingVoteIntent) return;
+    const activeProcessId = normalizeProcessId(voteResolution.processId);
+    if (!activeProcessId || pendingVoteIntent.processId !== activeProcessId) {
+      closeRegistrationModal('process_changed', {
+        statusMessage: 'Process changed while registration was pending. Submit vote again for this process.',
+      });
+    }
+  }, [closeRegistrationModal, pendingVoteIntent, voteResolution.processId]);
+
+  useEffect(() => {
+    if (!pendingVoteIntent) return;
+    const activeWalletAddress = String(managedWallet?.address || '').toLowerCase();
+    if (!activeWalletAddress || pendingVoteIntent.walletAddress.toLowerCase() !== activeWalletAddress) {
+      closeRegistrationModal('wallet_changed', {
+        statusMessage: 'Managed wallet changed while registration was pending. Submit vote again.',
+      });
+    }
+  }, [closeRegistrationModal, managedWallet?.address, pendingVoteIntent]);
+
+  useEffect(() => {
+    if (!registrationModal.open) return;
+    if (!isVoteProcessClosed(voteResolution)) return;
+    closeRegistrationModal('process_closed', {
+      statusMessage: getClosedProcessMessage(voteResolution),
+      error: true,
+    });
+  }, [closeRegistrationModal, registrationModal.open, voteResolution]);
+
+  useEffect(() => {
+    if (
+      !shouldAutoSubmitPendingVote({
+        pendingVoteIntent,
+        modalOpen: registrationModal.open,
+        hasReadiness: hasVoteReadiness(voteResolution),
+        submitting: voteBallot.submitting,
+      })
+    ) {
+      return;
+    }
+    if (pendingAutoSubmitRef.current) return;
+
+    pendingAutoSubmitRef.current = true;
+    const snapshot = pendingVoteIntent?.choiceSnapshot || [];
+    setRegistrationModal((previous) => ({ ...previous, status: 'submitting' }));
+
+    void (async () => {
+      const submitted = await submitVoteSnapshot(snapshot);
+
+      if (submitted) {
+        setPendingVoteIntent(null);
+        closeRegistrationModal('submitted', { keepPending: true });
+        pendingAutoSubmitRef.current = false;
+        return;
+      }
+
+      setPendingVoteIntent(null);
+      setRegistrationModal((previous) => ({ ...previous, status: 'error' }));
+      setVoteStatusMessage('Vote was not submitted after registration. Review the error and click submit vote again.', true);
+      pendingAutoSubmitRef.current = false;
+    })();
+  }, [
+    closeRegistrationModal,
+    pendingVoteIntent,
+    registrationModal.open,
+    setVoteStatusMessage,
+    submitVoteSnapshot,
+    voteBallot.submitting,
+    voteResolution,
+  ]);
+
   const lifecycle = formatVoteLifecycle(voteResolution);
   const processClosed = isVoteProcessClosed(voteResolution);
   const sequencerEligible = voteResolution.sequencerWeight > 0n;
-  const registrationLocked = sequencerEligible || processClosed;
 
   const hasStoredVoteId = Boolean(voteBallot.submissionId);
   const overwriteAllowed = canOverwriteVote(voteBallot);
   const answersEnabled = areVoteChoicesEnabled(voteResolution, voteBallot);
-  const hasQuestions = voteBallot.questions.length > 0;
+  const hasQuestion = Boolean(voteBallot.question);
+  const selectedBallotChoice = voteBallot.choice;
   const hasAllChoices =
-    hasQuestions &&
-    voteBallot.questions.every(
-      (question, index) =>
-        Number.isInteger(voteBallot.choices[index]) &&
-        question.choices.some((choice) => Number(choice.value) === Number(voteBallot.choices[index]))
-    );
+    hasQuestion &&
+    Number.isInteger(selectedBallotChoice) &&
+    Number(selectedBallotChoice) >= 0 &&
+    (voteBallot.question?.choices || []).some((choice) => Number(choice.value) === selectedBallotChoice);
 
   const canSubmitVote =
     Boolean(voteResolution.processId) &&
     Boolean(managedWallet?.privateKey) &&
     !processClosed &&
-    hasVoteReadiness(voteResolution) &&
-    hasQuestions &&
+    hasQuestion &&
     hasAllChoices &&
     !voteBallot.submitting &&
-    overwriteAllowed;
+    overwriteAllowed &&
+    !registrationModal.open &&
+    !pendingVoteIntent;
 
   const voteButtonLabel = voteBallot.submitting
-    ? 'Emitting vote...'
+    ? 'Submitting vote...'
     : processClosed
       ? 'Voting closed'
-      : hasStoredVoteId && isVoteStatusTerminal(voteBallot.submissionStatus)
-        ? 'Emit vote again'
-        : hasStoredVoteId
-          ? 'Vote in progress'
-          : 'Emit vote';
+      : pendingVoteIntent
+        ? 'Waiting for registration...'
+        : hasStoredVoteId && isVoteStatusTerminal(voteBallot.submissionStatus)
+          ? 'Submit vote again'
+          : hasStoredVoteId
+            ? 'Vote in progress'
+            : 'Submit vote';
 
-  const voteButtonIcon = voteBallot.submitting ? 'iconoir-refresh' : processClosed ? 'iconoir-lock' : 'iconoir-check';
+  const voteButtonIcon =
+    voteBallot.submitting || pendingVoteIntent
+      ? 'iconoir-refresh'
+      : processClosed
+        ? 'iconoir-lock'
+        : hasVoteReadiness(voteResolution)
+          ? 'iconoir-check'
+          : 'iconoir-user-plus';
 
   const voteResultsVisible = Boolean(voteResolution.processId) && shouldShowVoteResults(voteResolution.statusCode);
   const voteResultsModel = useMemo(() => buildVoteResultsModel(voteResolution, voteBallot), [voteBallot, voteResolution]);
+  const showRegistrationSubmittingNotice =
+    registrationModal.status === 'submitting' || (hasVoteReadiness(voteResolution) && Boolean(pendingVoteIntent));
+  const registrationManualCloseBlocked =
+    registrationModal.open &&
+    Boolean(pendingVoteIntent) &&
+    (hasVoteReadiness(voteResolution) || voteBallot.submitting || registrationModal.status === 'submitting');
 
   const registrationSteps = useMemo(() => {
     const onchainRequired = isOnchainReadinessRequired(voteResolution);
@@ -1232,7 +1302,7 @@ export default function VoteRoute() {
       steps.push({
         id: 'onchain',
         label: 'Onchain census inclusion',
-        description: 'After scanning the Self QR, this step completes when onchain weight is greater than zero.',
+        description: 'After Self verification, this step completes when onchain weight is greater than zero.',
         done: onchainReady,
       });
     }
@@ -1246,8 +1316,8 @@ export default function VoteRoute() {
       },
       {
         id: 'ready',
-        label: 'Ready to vote',
-        description: 'Questions unlock and vote can be emitted.',
+        label: 'Ready to submit',
+        description: 'Vote submission unlocks as soon as readiness checks pass.',
         done: readyToVote,
       }
     );
@@ -1256,37 +1326,6 @@ export default function VoteRoute() {
   }, [voteResolution]);
 
   const registrationCurrentId = registrationSteps.find((step) => !step.done)?.id || 'ready';
-  const pollSeconds = Math.max(1, Math.round(VOTE_POLL_MS / 1000));
-  const checkTime = formatReadinessCheckTime(voteResolution.readinessCheckedAt);
-  const onchainRequired = isOnchainReadinessRequired(voteResolution);
-
-  let registrationSummary = 'Resolve process and load managed wallet to start registration.';
-  if (processClosed) {
-    registrationSummary = getClosedProcessMessage(voteResolution);
-  } else if (voteResolution.processId && managedWallet?.address && voteSelf.scopeSeed && !voteSelf.link) {
-    registrationSummary = voteSelf.generating
-      ? 'Generating QR for Self...'
-      : 'Scan the QR in Self after completing ID or passport verification to start registration.';
-  } else if (voteResolution.processId && managedWallet?.address && onchainRequired && voteResolution.onchainWeight <= 0n) {
-    registrationSummary = 'Waiting for onchain census inclusion.';
-  } else if (voteResolution.processId && managedWallet?.address && voteResolution.sequencerWeight <= 0n) {
-    registrationSummary = 'Waiting for sequencer census inclusion.';
-  } else if (hasVoteReadiness(voteResolution)) {
-    registrationSummary = 'Registration complete. You can now select options and emit your vote.';
-  }
-
-  const registrationDiagnostics = [
-    onchainRequired
-      ? `Onchain weight: ${voteResolution.onchainWeight.toString()}.`
-      : voteResolution.onchainLookupFailed
-        ? 'Onchain check unavailable (RPC fallback active).'
-        : 'Onchain check not required for this process.',
-    `Sequencer weight: ${voteResolution.sequencerWeight.toString()}.`,
-    checkTime ? `Last check: ${checkTime}.` : '',
-    `Auto-check every ${pollSeconds}s.`,
-  ]
-    .filter(Boolean)
-    .join(' ');
 
   const voteStatusFlow = (() => {
     const currentStatus = normalizeVoteStatus(voteBallot.submissionStatus) || (hasStoredVoteId ? 'pending' : '');
@@ -1339,541 +1378,153 @@ export default function VoteRoute() {
     };
   })();
 
+  const voteHeaderQuestionTitle = (() => {
+    const questionTitle = String(voteBallot.question?.title || '').trim();
+    if (questionTitle) return questionTitle;
+    if (voteBallot.loading) return 'Loading question...';
+    return 'Choose an option';
+  })();
+
+  const voteHeaderHelpText = voteResultsVisible
+    ? 'Results are available for this process.'
+    : 'Choose an option, register with the Self.xyz app to join the census when required, and then submit your vote.';
+
   return (
     <>
       <section id="voteView" className="view">
-        <article className="card">
-          <div className="inline-form">
-            <label className="inline-grow">
-              Process ID
-              <input
-                id="voteProcessIdInput"
-                name="vote_process_id"
-                spellCheck={false}
-                autoComplete="off"
-                type="text"
-                placeholder="0xabc…"
-                value={voteProcessIdInput}
-                onChange={(event) => setVoteProcessIdInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (contextBlocked) {
-                    setVoteStatusMessage(contextMessage, true);
-                    return;
-                  }
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  const processId = normalizeProcessId(voteProcessIdInput);
-                  if (!processId) {
-                    setVoteStatusMessage('Process ID is required.', true);
-                    return;
-                  }
-                  navigate(`/vote/${encodeURIComponent(processId)}`);
-                }}
-              />
-            </label>
-            <button id="showVoteDetailsBtn" type="button" className="ghost" disabled={!voteResolution.processId} onClick={() => setVoteDetailsOpen(true)}>
-              <span className="btn-icon iconoir-info-circle" aria-hidden="true" />
-              <span className="btn-text">Details</span>
-            </button>
-          </div>
-
-          <div className="vote-lifecycle-card" id="voteLifecycleCard" hidden={!voteResolution.processId} data-state={lifecycle.stateKey}>
+        <AppNavbar
+          id="voteNavbar"
+          brandId="voteNavbarBrand"
+          baseHref={baseUrl}
+          logoSrc={withBase('davinci_logo.png')}
+          brandLabel="Ask the World"
+        >
+          <div className="vote-lifecycle-card vote-lifecycle-header-card vote-navbar-widget" id="voteLifecycleCard" hidden={!voteResolution.processId} data-state={lifecycle.stateKey}>
             <div className="vote-lifecycle-head">
               <div className="vote-lifecycle-left">
                 <span className="vote-lifecycle-dot" aria-hidden="true" />
                 <strong id="voteLifecycleTitle">{lifecycle.title}</strong>
-                <span id="voteLifecycleType" className="vote-lifecycle-pill" hidden={!processTypeLabel}>
-                  {processTypeLabel || '-'}
-                </span>
               </div>
               <div className="vote-lifecycle-right">
                 <span className="iconoir-clock" aria-hidden="true" />
                 <span id="voteLifecycleLabel">{lifecycle.label}</span>
               </div>
             </div>
-            <p id="voteLifecycleDescription" className="muted">
-              {lifecycle.description}
-            </p>
-          </div>
-        </article>
-
-        <dialog id="voteDetailsDialog" className="details-dialog" open={voteDetailsOpen}>
-          <div className="details-dialog-head">
-            <h3>Process Details</h3>
-            <button id="closeVoteDetailsBtn" type="button" className="ghost" onClick={() => setVoteDetailsOpen(false)}>
-              <span className="btn-icon iconoir-xmark" aria-hidden="true" />
-              <span className="btn-text">Close</span>
-            </button>
-          </div>
-          <div className="details-dialog-body">
-            <table className="details-table">
-              <tbody>
-                <tr>
-                  <th>Process ID</th>
-                  <td>
-                    <code id="voteProcessId" className="output-scroll details-url-scroll">
-                      {voteResolution.processId || '-'}
-                    </code>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Title</th>
-                  <td>
-                    <span id="voteProcessTitle">{voteResolution.title || '-'}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Description</th>
-                  <td>
-                    <span id="voteProcessDescription">{voteResolution.description || '-'}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Remaining time</th>
-                  <td>
-                    <strong id="voteProcessRemainingTime">{formatRemainingTimeFromEndMs(voteResolution.endDateMs)}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Census contract</th>
-                  <td>
-                    <code id="voteCensusContract" className="output-scroll details-url-scroll">
-                      {voteResolution.censusContract || '-'}
-                    </code>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Census URI</th>
-                  <td>
-                    <span id="voteCensusUri" className="output-scroll details-url-scroll">
-                      {voteResolution.censusUri || '-'}
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <th>Sequencer</th>
-                  <td>
-                    <span id="voteSequencerUrl" className="output-scroll details-url-scroll">
-                      {CONFIG.davinciSequencerUrl || '-'}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </dialog>
-
-        <article className="card vote-results-card" id="voteResultsCard" hidden={!voteResultsVisible}>
-          <div className="card-head vote-results-head">
-            <div className="vote-results-process">
-              <p className="label">Process</p>
-              <h4 id="voteResultsProcessTitle" className="vote-results-process-title">
-                {voteResolution.title && voteResolution.title !== '-' ? voteResolution.title : 'Untitled process'}
-              </h4>
-              <p id="voteResultsProcessDescription" className="muted vote-results-process-description" hidden={!voteResolution.description}>
-                {voteResolution.description}
-              </p>
-            </div>
-          </div>
-
-          <div className="vote-results-body">
-            <section className="panel vote-results-summary">
-              <p className="label">Vote Summary</p>
-              <div className="grid three vote-results-summary-grid">
-                <div>
-                  <p id="voteResultsTotalVotes" className="vote-results-summary-value">
-                    {voteResultsModel.totalVotes}
-                  </p>
-                  <p className="muted">Total votes</p>
-                </div>
-                <div>
-                  <p id="voteResultsTurnout" className="vote-results-summary-value">
-                    {voteResultsModel.turnoutLabel}
-                  </p>
-                  <p className="muted">Turnout</p>
-                </div>
-                <div>
-                  <p id="voteResultsChoicesWithVotes" className="vote-results-summary-value">
-                    {voteResultsModel.choicesWithVotes}
-                  </p>
-                  <p className="muted">Choices with votes</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="panel vote-results-detail">
-              <div className="vote-results-detail-head">
-                <h4>Detailed Results</h4>
-                <p id="voteResultsTotalVotesLabel" className="muted">
-                  Total: {voteResultsModel.totalVotes} vote{voteResultsModel.totalVotes === 1 ? '' : 's'}
-                </p>
-              </div>
-
-              <div id="voteResultsContent" className="vote-results-content">
-                {!voteResultsModel.hasComputedResults && (
-                  <div className="vote-results-empty">
-                    <span className="timeline-spinner" aria-hidden="true" />
-                    <span>Computing results</span>
-                  </div>
-                )}
-
-                {voteResultsModel.hasComputedResults && !voteResultsModel.questions.length && (
-                  <div className="vote-results-empty">No question metadata available for this process.</div>
-                )}
-
-                {voteResultsModel.hasComputedResults &&
-                  voteResultsModel.questions.map((question, questionIndex) => (
-                    <section className="vote-results-question" key={questionIndex}>
-                      <h5 className="vote-results-question-title">{question.title}</h5>
-                      {question.choices.map((choice, choiceIndex) => (
-                        <div className="vote-results-choice" key={`${questionIndex}-${choiceIndex}`}>
-                          <div className="vote-results-choice-head">
-                            <p className="vote-results-choice-title">{choice.title}</p>
-                            <p className="vote-results-choice-votes">{choice.votes}</p>
-                          </div>
-                          <div className="vote-results-choice-meta">
-                            <p className="muted">{formatVotePercent(choice.votes, voteResultsModel.totalVotes)} of total votes</p>
-                            <p className="muted">Rank #{choice.rank}</p>
-                          </div>
-                          <div className="vote-results-bar">
-                            <span style={{ width: `${choice.percentage.toFixed(1)}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </section>
-                  ))}
-              </div>
-            </section>
-          </div>
-        </article>
-
-        <details className="card collapsible-card" id="voteSelfCard" open={voteSelfCardOpen} hidden={voteResultsVisible}>
-          <summary
-            className="collapsible-summary"
-            onClick={(event) => {
-              event.preventDefault();
-              setVoteSelfCardOpen((previous) => !previous);
-            }}
-          >
-            <span className="collapsible-title-group">
-              <span className="collapsible-title-main">Process Registration</span>
-              <span className="collapsible-title-meta">Powered by Self.xyz</span>
-            </span>
-          </summary>
-
-          <div className="collapsible-body">
-            <p className="muted">Generate a Self QR using your managed identity wallet to register in this census.</p>
-
-            <div className="grid three info-widgets">
-              <div className="panel info-widget">
-                <p className="label">Scope seed</p>
-                <p className="value" id="voteScopeSeedInfo">
-                  {voteSelf.scopeSeed || '-'}
-                </p>
-              </div>
-              <div className="panel info-widget">
-                <p className="label">Minimum age</p>
-                <p className="value" id="voteSelfMinAgeInfo">
-                  {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
-                </p>
-              </div>
-              <div className="panel info-widget">
-                <p className="label">Country</p>
-                <p className="value" id="voteCountryInfo">
-                  {voteSelf.country || '-'}
-                </p>
-              </div>
-            </div>
-
-            <div id="voteSelfRegistrationLayout" className={`self-registration-layout ${registrationLocked ? 'is-locked' : ''}`}>
-              <div id="voteSelfQrWrap" className="self-qr-wrap" hidden={!voteSelf.selfApp}>
-                <div id="voteSelfQrRoot" className="self-qr-root" aria-label="Self registration QR code">
-                  {voteSelf.selfApp && (
-                    <SelfQRcodeWrapper
-                      key={`${voteResolution.processId}-${voteSelf.autoTriggerKey}-${voteSelf.link}`}
-                      selfApp={voteSelf.selfApp}
-                      type="deeplink"
-                      size={280}
-                      onSuccess={() => {
-                        setVoteSelfStatusMessage('Verification completed in Self. Waiting for census inclusion...');
-                        setVoteStatusMessage('Self verification completed. Waiting for onchain/sequencer readiness.');
-                        void refreshVoteReadiness();
-                      }}
-                      onError={(data: any = {}) => {
-                        const reason = String(data.reason || data.error_code || '').trim();
-                        setVoteSelfStatusMessage(reason ? `Self QR error: ${reason}` : 'Self verification failed.', true);
-                      }}
-                    />
-                  )}
-                </div>
-
-                <button
-                  id="generateVoteSelfQrBtn"
-                  type="button"
-                  className="ghost qr-regen-btn"
-                  aria-label="Regenerate Self QR"
-                  title="Regenerate QR"
-                  disabled={
-                    !voteResolution.processId ||
-                    !voteResolution.censusContract ||
-                    !managedWallet?.address ||
-                    !voteSelf.scopeSeed ||
-                    voteSelf.generating ||
-                    sequencerEligible ||
-                    processClosed
-                  }
-                  onClick={() => void generateVoteSelfQr()}
-                >
-                  <span className="btn-icon iconoir-refresh" aria-hidden="true" />
-                  <span className="btn-text">{voteSelf.generating ? 'Regenerating...' : 'Regenerate QR'}</span>
-                </button>
-              </div>
-
-              <aside className="panel self-steps-panel">
-                <p className="label">How to use Self</p>
-                <ol className="self-steps-list">
-                  <li>
-                    <strong>Download the app</strong>
-                    <p className="self-step-helper">
-                      Install Self on{' '}
-                      <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">
-                        iOS
-                      </a>{' '}
-                      or{' '}
-                      <a
-                        href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Android
-                      </a>
-                      .
-                    </p>
-                  </li>
-                  <li>
-                    <strong>Register your identity</strong>
-                    <p className="self-step-helper">Open Self and complete the verification using your ID card or passport.</p>
-                  </li>
-                  <li>
-                    <strong>Scan the QR</strong>
-                    <p className="self-step-helper">Use Self to scan this QR, join the census, and wait until voting is enabled.</p>
-                  </li>
-                </ol>
-              </aside>
-
-              <p id="voteAlreadyRegisteredMsg" className={`muted vote-registered-message ${processClosed ? 'is-closed' : ''}`} hidden={!registrationLocked}>
-                <span
-                  id="voteRegistrationLockIcon"
-                  className={`vote-registered-icon ${processClosed ? 'iconoir-lock' : 'iconoir-check-circle'}`}
-                  aria-hidden="true"
-                />
-                <span id="voteRegistrationLockText" className="vote-registered-text">
-                  {processClosed ? 'Registration is closed for this process.' : 'You are already registered.'}
-                </span>
-              </p>
-            </div>
-
-            <div id="voteSelfQrActions" className={`row self-qr-actions ${registrationLocked ? 'is-locked' : ''}`}>
-              <button id="copyVoteSelfLinkBtn" type="button" className="ghost" disabled={!voteSelf.link || registrationLocked} onClick={() => void copyVoteSelfLink()}>
-                <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                <span className="btn-text">Copy Self link</span>
-              </button>
-              <button id="openVoteSelfLinkBtn" type="button" className="ghost" disabled={!voteSelf.link || registrationLocked} onClick={openVoteSelfLink}>
-                <span className="btn-icon iconoir-link" aria-hidden="true" />
-                <span className="btn-text">Open Self link</span>
-              </button>
-            </div>
-
-            <p id="voteSelfStatus" className="status" data-state={voteSelfStatus.error ? 'error' : 'ok'} aria-live="polite">
-              {voteSelfStatus.message}
-            </p>
-
-            <div className="vote-status-guide registration-status-guide" id="registrationStatusGuide">
-              <p className="label">Registration progress</p>
-              <ol id="registrationStatusTimeline" className="vote-status-timeline">
-                {registrationSteps.map((step, index) => {
-                  const isComplete = step.done;
-                  const isCurrent = !isComplete && step.id === registrationCurrentId;
-                  return (
-                    <li
-                      key={step.id}
-                      className={`vote-status-item ${isComplete ? 'is-complete' : ''} ${isCurrent ? 'is-current' : ''}`}
-                    >
-                      <span className="vote-status-marker" aria-hidden="true">
-                        {isCurrent ? <span className="timeline-spinner" /> : isComplete ? '✓' : String(index + 1)}
-                      </span>
-                      <div className="vote-status-content">
-                        <p className="vote-status-label">{step.label}</p>
-                        <p className="vote-status-description">{step.description}</p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-              <p id="registrationHint" className="muted registration-hint">
-                {`${registrationSummary} ${registrationDiagnostics}`.trim()}
-              </p>
-            </div>
-          </div>
-        </details>
-
-        <article className="card vote-focus-card" id="voteBallotCard" hidden={voteResultsVisible}>
-          <h2 id="voteFocusProcessTitle" className="vote-focus-title">
-            {voteResolution.title && voteResolution.title !== '-' ? voteResolution.title : 'Questions'}
-          </h2>
-          <p id="voteFocusProcessDescription" className="vote-focus-description" hidden={!voteResolution.description}>
-            {voteResolution.description || '-'}
-          </p>
-          <p id="voteFocusRemainingTime" className="vote-focus-meta" hidden={!voteResolution.endDateMs}>
-            Remaining time: {formatRemainingTimeFromEndMs(voteResolution.endDateMs)}
-          </p>
-          <p className="muted vote-focus-note">Choose one option per question and emit your vote.</p>
-
-          <div id="voteQuestions" className="vote-questions">
-            {!voteBallot.questions.length && (
-              <p className="muted">{voteBallot.loading ? 'Loading process questions...' : 'No questions available for this process.'}</p>
-            )}
-
-            {voteBallot.questions.map((question, questionIndex) => (
-              <fieldset className="vote-question-card" key={questionIndex}>
-                <legend>{question.title || `Question ${questionIndex + 1}`}</legend>
-                {question.description && <p className="muted">{question.description}</p>}
-
-                {question.choices.map((choice, choiceIndex) => {
-                  const checked = Number(voteBallot.choices[questionIndex]) === Number(choice.value);
-                  return (
-                    <label className={`vote-choice ${!answersEnabled ? 'is-disabled' : ''}`} key={`${questionIndex}-${choiceIndex}`}>
-                      <input
-                        type="radio"
-                        name={`vote-question-${questionIndex}`}
-                        value={choice.value}
-                        checked={checked}
-                        disabled={!answersEnabled}
-                        onChange={() => {
-                          setVoteBallot((previous) => {
-                            const nextChoices = [...previous.choices];
-                            nextChoices[questionIndex] = Number(choice.value);
-                            return {
-                              ...previous,
-                              choices: nextChoices,
-                            };
-                          });
-                        }}
-                      />
-                      <span>{choice.title}</span>
-                    </label>
-                  );
-                })}
-              </fieldset>
-            ))}
-          </div>
-
-          <div className="row">
-            <button id="emitVoteBtn" type="button" className="secondary" disabled={!canSubmitVote} onClick={() => void emitVote()}>
-              <span className={`btn-icon ${voteButtonIcon}`} aria-hidden="true" />
-              <span className="btn-text">{voteButtonLabel}</span>
-            </button>
-          </div>
-
-          <div className="vote-status-guide vote-submit-guide" id="voteStatusGuide" hidden={!hasStoredVoteId}>
-            {voteSubmitResult && (
-              <div id="voteSubmitResult" className={`vote-submit-result ${voteSubmitResult.isErrorStatus ? 'is-error' : ''}`}>
-                <span id="voteSubmitResultIcon" className={`vote-submit-result-icon ${voteSubmitResult.iconClass}`} aria-hidden="true" />
-                <div className="vote-submit-result-content">
-                  <p id="voteSubmitResultTitle" className="vote-submit-result-title">
-                    {voteSubmitResult.title}
-                  </p>
-                  <p id="voteSubmitResultText" className="muted">
-                    {voteSubmitResult.description}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <details id="voteStatusDetails" className="vote-status-details" open={voteStatusDetailsOpen}>
-              <summary
-                className="vote-status-details-summary"
-                onClick={(event) => {
-                  event.preventDefault();
-                  setVoteStatusDetailsOpen((previous) => !previous);
-                }}
+            <div className="vote-header-actions">
+              <button
+                id="showVoteDetailsBtn"
+                type="button"
+                className="cta-btn secondary"
+                disabled={!voteResolution.processId}
+                onClick={() => setVoteDetailsOpen(true)}
               >
-                <span className="vote-status-details-label-wrap">
-                  <span className="vote-status-details-label">Track vote status</span>
-                  <span id="voteStatusDetailsMeta" className="muted vote-status-details-meta">
-                    {voteSubmitResult?.statusLabel || 'Pending'}
-                  </span>
-                </span>
-              </summary>
-
-              <div className="vote-status-details-body">
-                <div id="voteStatusFlowIdLine" className="vote-status-id-row" hidden={!hasStoredVoteId}>
-                  <p className="label">Vote ID</p>
-                  <div className="vote-status-id-actions">
-                    <code id="voteStatusFlowVoteId" className="output-scroll">
-                      {voteBallot.submissionId || '-'}
-                    </code>
-                    <button
-                      id="copyVoteStatusIdBtn"
-                      type="button"
-                      className="ghost"
-                      disabled={!hasStoredVoteId}
-                      onClick={async () => {
-                        const voteId = String(voteBallot.submissionId || '').trim();
-                        if (!voteId) return;
-                        try {
-                          await navigator.clipboard.writeText(voteId);
-                          setCopyVoteIdLabel('Copied');
-                        } catch {
-                          setCopyVoteIdLabel('Error');
-                        }
-                        window.setTimeout(() => {
-                          setCopyVoteIdLabel('Copy');
-                        }, 1200);
-                      }}
-                    >
-                      <span className={`btn-icon ${copyVoteIdLabel === 'Error' ? 'iconoir-warning-circle' : copyVoteIdLabel === 'Copied' ? 'iconoir-check' : 'iconoir-copy'}`} aria-hidden="true" />
-                      <span className="btn-text">{copyVoteIdLabel}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <ol id="voteStatusTimeline" className="vote-status-timeline">
-                  {voteStatusFlow.map((entry) => (
-                    <li
-                      key={entry.status}
-                      className={`vote-status-item ${entry.isComplete ? 'is-complete' : ''} ${entry.isCurrent ? 'is-current' : ''} ${
-                        entry.isError ? 'is-error' : ''
-                      }`}
-                    >
-                      <span className="vote-status-marker" aria-hidden="true">
-                        {entry.marker === 'spinner' ? (
-                          <span className="timeline-spinner" />
-                        ) : entry.marker === 'check' ? (
-                          '✓'
-                        ) : entry.marker === 'error' ? (
-                          '!'
-                        ) : (
-                          entry.marker
-                        )}
-                      </span>
-                      <div className="vote-status-content">
-                        <p className="vote-status-label">{VOTE_STATUS_INFO[entry.status].label}</p>
-                        <p className="vote-status-description">{VOTE_STATUS_INFO[entry.status].description}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </details>
+                <span className="btn-icon iconoir-info-circle" aria-hidden="true" />
+                <span className="btn-text">Details</span>
+              </button>
+              <button
+                id="showIdentityInfoBtn"
+                type="button"
+                className="cta-btn secondary"
+                disabled={!voteResolution.processId}
+                onClick={() => setVoteIdentityOpen(true)}
+              >
+                <span className="btn-icon iconoir-user" aria-hidden="true" />
+                <span className="btn-text">Identity</span>
+              </button>
+            </div>
           </div>
-        </article>
+        </AppNavbar>
 
-        <details className="card collapsible-card" id="managedWalletCard" hidden={voteResultsVisible}>
-          <summary className="collapsible-summary">
-            <span>Managed Identity Wallet</span>
-          </summary>
-          <div className="collapsible-body">
+        <header className="app-header create-header vote-header question-hero-header" id="voteHeader">
+          <h1 id="voteHeaderTitle" className="question-hero-title">
+            {voteHeaderQuestionTitle}
+          </h1>
+          <p id="voteHeaderHelp" className="create-intro vote-help-text question-hero-helper">
+            {voteHeaderHelpText}
+          </p>
+        </header>
+
+        <PopupModal
+          id="voteDetailsDialog"
+          open={voteDetailsOpen}
+          title="Process Details"
+          titleId="voteDetailsDialogTitle"
+          className="vote-popup vote-details-popup"
+          cardClassName="vote-popup-card vote-details-popup-card"
+          bodyClassName="vote-popup-body"
+          closeButtonId="closeVoteDetailsBtn"
+          closeLabel="Close process details popup"
+          onClose={() => setVoteDetailsOpen(false)}
+        >
+          <table className="details-table">
+            <tbody>
+              <tr>
+                <th>Process ID</th>
+                <td>
+                  <code id="voteProcessId" className="output-scroll details-url-scroll">
+                    {voteResolution.processId || '-'}
+                  </code>
+                </td>
+              </tr>
+              <tr>
+                <th>Title</th>
+                <td>
+                  <span id="voteProcessTitle">{voteResolution.title || '-'}</span>
+                </td>
+              </tr>
+              <tr>
+                <th>Description</th>
+                <td>
+                  <span id="voteProcessDescription">{voteResolution.description || '-'}</span>
+                </td>
+              </tr>
+              <tr>
+                <th>Remaining time</th>
+                <td>
+                  <strong id="voteProcessRemainingTime">{formatRemainingTimeFromEndMs(voteResolution.endDateMs)}</strong>
+                </td>
+              </tr>
+              <tr>
+                <th>Census contract</th>
+                <td>
+                  <code id="voteCensusContract" className="output-scroll details-url-scroll">
+                    {voteResolution.censusContract || '-'}
+                  </code>
+                </td>
+              </tr>
+              <tr>
+                <th>Census URI</th>
+                <td>
+                  <span id="voteCensusUri" className="output-scroll details-url-scroll">
+                    {voteResolution.censusUri || '-'}
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <th>Sequencer</th>
+                <td>
+                  <span id="voteSequencerUrl" className="output-scroll details-url-scroll">
+                    {CONFIG.davinciSequencerUrl || '-'}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </PopupModal>
+
+        <PopupModal
+          id="voteIdentityDialog"
+          open={voteIdentityOpen}
+          title="Managed Identity Wallet"
+          titleId="voteIdentityDialogTitle"
+          className="vote-popup vote-identity-popup"
+          cardClassName="vote-popup-card vote-identity-popup-card"
+          bodyClassName="vote-popup-body vote-identity-popup-body"
+          closeButtonId="closeVoteIdentityBtn"
+          closeLabel="Close identity popup"
+          onClose={() => setVoteIdentityOpen(false)}
+        >
+          <div className="identity-dialog-content">
             <p>
               Address: <code id="walletAddress">{managedWallet?.address || '-'}</code>
             </p>
@@ -2001,29 +1652,433 @@ export default function VoteRoute() {
 
             <p className="muted danger">Warning: revealing or importing keys exposes signing authority for this process context.</p>
           </div>
-        </details>
+        </PopupModal>
 
-        <p id="voteStatus" className="status" data-state={voteStatus.error ? 'error' : 'ok'} aria-live="polite">
-          {voteStatus.message}
-        </p>
+        <article className="card vote-results-card" id="voteResultsCard" hidden={!voteResultsVisible}>
+          <div className="vote-results-body">
+            <section className="panel vote-results-summary">
+              <p className="label">Vote Summary</p>
+              <div className="grid two vote-results-summary-grid">
+                <div>
+                  <p id="voteResultsTotalVotes" className="vote-results-summary-value">
+                    {voteResultsModel.totalVotes}
+                  </p>
+                  <p className="muted">Total votes</p>
+                </div>
+                <div>
+                  <p id="voteResultsChoicesWithVotes" className="vote-results-summary-value">
+                    {voteResultsModel.choicesWithVotes}
+                  </p>
+                  <p className="muted">Choices with votes</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel vote-results-detail">
+              <div className="vote-results-detail-head">
+                <h4>Detailed Results</h4>
+                <p id="voteResultsTotalVotesLabel" className="muted">
+                  Total: {voteResultsModel.totalVotes} vote{voteResultsModel.totalVotes === 1 ? '' : 's'}
+                </p>
+              </div>
+
+              <div id="voteResultsContent" className="vote-results-content">
+                {!voteResultsModel.hasComputedResults && (
+                  <div className="vote-results-empty">
+                    <span className="timeline-spinner" aria-hidden="true" />
+                    <span>Computing results</span>
+                  </div>
+                )}
+
+                {voteResultsModel.hasComputedResults && !voteResultsModel.choices.length && (
+                  <div className="vote-results-empty">No question metadata available for this process.</div>
+                )}
+
+                {voteResultsModel.hasComputedResults && voteResultsModel.choices.length > 0 && (
+                  <section className="vote-results-question">
+                    {voteResultsModel.choices.map((choice, choiceIndex) => (
+                      <div className="vote-results-choice" key={choiceIndex}>
+                        <div className="vote-results-choice-head">
+                          <p className="vote-results-choice-title">{choice.title}</p>
+                          <p className="vote-results-choice-votes">{choice.votes}</p>
+                        </div>
+                        <div className="vote-results-choice-meta">
+                          <p className="muted">{formatVotePercent(choice.votes, voteResultsModel.totalVotes)} of total votes</p>
+                          <p className="muted">Rank #{choice.rank}</p>
+                        </div>
+                        <div className="vote-results-bar">
+                          <span style={{ width: `${choice.percentage.toFixed(1)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                )}
+              </div>
+            </section>
+          </div>
+        </article>
+
+        <article className="card vote-focus-card" id="voteBallotCard" hidden={voteResultsVisible}>
+          <div id="voteQuestions" className="vote-questions">
+            {!voteBallot.question && (
+              <p className="muted">{voteBallot.loading ? 'Loading process question...' : 'No question available for this process.'}</p>
+            )}
+
+            {voteBallot.question && (
+              <fieldset className="vote-question-card">
+                <legend className="vote-question-legend-hidden">{voteBallot.question.title || 'Question'}</legend>
+
+                {voteBallot.question.choices.map((choice, choiceIndex) => {
+                  const checked = voteBallot.choice !== null && Number(voteBallot.choice) === Number(choice.value);
+                  return (
+                    <label className={`vote-choice ${checked ? 'is-selected' : ''} ${!answersEnabled ? 'is-disabled' : ''}`} key={choiceIndex}>
+                      <input
+                        type="radio"
+                        name="vote-question"
+                        value={choice.value}
+                        checked={checked}
+                        disabled={!answersEnabled}
+                        onChange={() => {
+                          setVoteBallot((previous) => ({
+                            ...previous,
+                            choice: Number(choice.value),
+                          }));
+                        }}
+                      />
+                      <span>{choice.title}</span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            )}
+          </div>
+
+          <div className="row">
+            <button id="emitVoteBtn" type="button" className="cta-btn" disabled={!canSubmitVote} onClick={() => void emitVote()}>
+              <span className={`btn-icon ${voteButtonIcon}`} aria-hidden="true" />
+              <span className="btn-text">{voteButtonLabel}</span>
+            </button>
+          </div>
+
+          <div className="vote-status-guide vote-submit-guide" id="voteStatusGuide" hidden={!hasStoredVoteId}>
+            {voteSubmitResult && (
+              <div id="voteSubmitResult" className={`vote-submit-result ${voteSubmitResult.isErrorStatus ? 'is-error' : ''}`}>
+                <span id="voteSubmitResultIcon" className={`vote-submit-result-icon ${voteSubmitResult.iconClass}`} aria-hidden="true" />
+                <div className="vote-submit-result-content">
+                  <p id="voteSubmitResultTitle" className="vote-submit-result-title">
+                    {voteSubmitResult.title}
+                  </p>
+                  <p id="voteSubmitResultText" className="muted">
+                    {voteSubmitResult.description}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <details id="voteStatusDetails" className="vote-status-details" open={voteStatusDetailsOpen}>
+              <summary
+                className="vote-status-details-summary"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setVoteStatusDetailsOpen((previous) => !previous);
+                }}
+              >
+                <span className="vote-status-details-label-wrap">
+                  <span className="vote-status-details-label">Track vote status</span>
+                  <span id="voteStatusDetailsMeta" className="muted vote-status-details-meta">
+                    {voteSubmitResult?.statusLabel || 'Pending'}
+                  </span>
+                </span>
+              </summary>
+
+              <div className="vote-status-details-body">
+                <div id="voteStatusFlowIdLine" className="vote-status-id-row" hidden={!hasStoredVoteId}>
+                  <p className="label">Vote ID</p>
+                  <div className="vote-status-id-actions">
+                    <code id="voteStatusFlowVoteId" className="output-scroll">
+                      {voteBallot.submissionId || '-'}
+                    </code>
+                    <button
+                      id="copyVoteStatusIdBtn"
+                      type="button"
+                      className="ghost"
+                      disabled={!hasStoredVoteId}
+                      onClick={async () => {
+                        const voteId = String(voteBallot.submissionId || '').trim();
+                        if (!voteId) return;
+                        try {
+                          await navigator.clipboard.writeText(voteId);
+                          setCopyVoteIdLabel('Copied');
+                        } catch {
+                          setCopyVoteIdLabel('Error');
+                        }
+                        window.setTimeout(() => {
+                          setCopyVoteIdLabel('Copy');
+                        }, 1200);
+                      }}
+                    >
+                      <span className={`btn-icon ${copyVoteIdLabel === 'Error' ? 'iconoir-warning-circle' : copyVoteIdLabel === 'Copied' ? 'iconoir-check' : 'iconoir-copy'}`} aria-hidden="true" />
+                      <span className="btn-text">{copyVoteIdLabel}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <ol id="voteStatusTimeline" className="vote-status-timeline">
+                  {voteStatusFlow.map((entry) => (
+                    <li
+                      key={entry.status}
+                      className={`vote-status-item ${entry.isComplete ? 'is-complete' : ''} ${entry.isCurrent ? 'is-current' : ''} ${
+                        entry.isError ? 'is-error' : ''
+                      }`}
+                    >
+                      <span className="vote-status-marker" aria-hidden="true">
+                        {entry.marker === 'spinner' ? (
+                          <span className="timeline-spinner" />
+                        ) : entry.marker === 'check' ? (
+                          '✓'
+                        ) : entry.marker === 'error' ? (
+                          '!'
+                        ) : (
+                          entry.marker
+                        )}
+                      </span>
+                      <div className="vote-status-content">
+                        <p className="vote-status-label">{VOTE_STATUS_INFO[entry.status].label}</p>
+                        <p className="vote-status-description">{VOTE_STATUS_INFO[entry.status].description}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </details>
+          </div>
+        </article>
+
       </section>
 
-      <div
-        id="voteContextGatePopup"
-        className="blocking-popup"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="voteContextGatePopupTitle"
-        aria-describedby="voteContextGatePopupMessage"
-        hidden={!contextBlocked}
+      <PopupModal
+        id="voteRegistrationPopup"
+        open={registrationModal.open}
+        title="Complete Self verification to continue"
+        titleId="voteRegistrationPopupTitle"
+        className="vote-popup vote-registration-popup"
+        cardClassName="vote-popup-card vote-registration-card"
+        bodyClassName="vote-popup-body vote-registration-popup-body"
+        closeLabel="Close registration popup"
+        eyebrow="Registration required"
+        onClose={
+          registrationManualCloseBlocked
+            ? undefined
+            : () =>
+                closeRegistrationModal('close', {
+                  statusMessage: 'Registration popup closed. Click submit vote again when you are ready.',
+                })
+        }
+        backdropClosable={!registrationManualCloseBlocked}
       >
-        <div className="blocking-popup-backdrop" />
-        <div className="blocking-popup-card">
-          <p className="eyebrow">Process ID required</p>
-          <h2 id="voteContextGatePopupTitle">This voting link is incomplete</h2>
-          <p id="voteContextGatePopupMessage">{contextMessage}</p>
+        <div className="self-registration-layout vote-registration-layout">
+          {!registrationModal.isMobile && (
+            <div className="vote-registration-qr-column">
+              <div id="voteSelfQrWrap" className="self-qr-wrap" hidden={!voteSelf.selfApp}>
+                <div id="voteSelfQrRoot" className="self-qr-root" aria-label="Self registration QR code">
+                  {voteSelf.selfApp ? (
+                    <SelfQRcodeWrapper
+                      key={`${voteResolution.processId}-${voteSelf.link}`}
+                      selfApp={voteSelf.selfApp}
+                      type="deeplink"
+                      size={280}
+                      onSuccess={() => {
+                        setVoteStatusMessage('Self verification completed. Waiting for onchain/sequencer readiness.');
+                        void refreshVoteReadiness();
+                      }}
+                      onError={(data: any = {}) => {
+                        const reason = String(data.reason || data.error_code || '').trim();
+                        setVoteStatusMessage(reason ? `Self QR error: ${reason}` : 'Self verification failed.', true);
+                      }}
+                    />
+                  ) : (
+                    <p className="muted">Preparing Self QR...</p>
+                  )}
+                </div>
+
+                <button
+                  id="copyVoteSelfLinkBtn"
+                  type="button"
+                  className="cta-btn secondary qr-copy-btn"
+                  aria-label="Copy Self link"
+                  title="Copy Self link"
+                  disabled={!voteSelf.link || processClosed}
+                  onClick={() => void copyVoteSelfLink()}
+                >
+                  <span className="btn-icon iconoir-copy" aria-hidden="true" />
+                  <span className="btn-text">Copy link</span>
+                </button>
+              </div>
+
+              <div className="vote-registration-requirements">
+                <p className="label">Requirements to vote</p>
+                <div className="vote-registration-requirements-grid">
+                  <div className="vote-registration-requirement">
+                    <p className="label">Minimum age</p>
+                    <p className="value" id="voteSelfMinAgeInfo">
+                      {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
+                    </p>
+                  </div>
+                  <div className="vote-registration-requirement">
+                    <p className="label">Country</p>
+                    <p className="value" id="voteCountryInfo">
+                      {voteSelf.country || '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <aside className="panel self-steps-panel">
+            <p className="label">Quick steps</p>
+            <ol className={`self-registration-steps ${registrationModal.isMobile ? 'is-mobile' : ''}`}>
+              <li>
+                <p className="self-registration-step-title">{registrationModal.isMobile ? 'Open Self app' : 'Install Self app'}</p>
+                <p className="self-step-helper">
+                  {registrationModal.isMobile ? (
+                    <>
+                      Get it on{' '}
+                      <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">
+                        iOS
+                      </a>{' '}
+                      or{' '}
+                      <a
+                        href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Android
+                      </a>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Available on{' '}
+                      <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">
+                        iOS
+                      </a>{' '}
+                      and{' '}
+                      <a
+                        href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Android
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
+              </li>
+              <li>
+                <p className="self-registration-step-title">
+                  {registrationModal.isMobile ? 'Verify your ID or passport' : 'Use a valid ID or passport'}
+                </p>
+                <p className="self-step-helper">
+                  {registrationModal.isMobile
+                    ? 'Complete verification in Self to join the census.'
+                    : 'Complete identity verification in Self to be added to the census.'}
+                </p>
+              </li>
+              <li>
+                <p className="self-registration-step-title">
+                  {registrationModal.isMobile ? 'Finish in Self and return here' : 'Finish this registration request'}
+                </p>
+                <p className="self-step-helper">
+                  {registrationModal.isMobile
+                    ? 'Tap "Open in Self app" below and complete verification.'
+                    : 'Scan the QR (or open the deep-link) and wait for readiness.'}
+                </p>
+              </li>
+            </ol>
+
+            {registrationModal.isMobile && (
+              <div id="voteSelfQrActions" className="row self-qr-actions">
+                <button
+                  id="openVoteSelfLinkBtn"
+                  type="button"
+                  className="cta-btn"
+                  disabled={!voteSelf.link || processClosed}
+                  onClick={openVoteSelfLink}
+                >
+                  <span className="btn-icon iconoir-link" aria-hidden="true" />
+                  <span className="btn-text">Open in Self app</span>
+                </button>
+              </div>
+            )}
+
+            {registrationModal.isMobile && (
+              <div className="vote-registration-requirements">
+                <p className="label">Requirements to vote</p>
+                <div className="vote-registration-requirements-grid">
+                  <div className="vote-registration-requirement">
+                    <p className="label">Minimum age</p>
+                    <p className="value" id="voteSelfMinAgeInfo">
+                      {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
+                    </p>
+                  </div>
+                  <div className="vote-registration-requirement">
+                    <p className="label">Country</p>
+                    <p className="value" id="voteCountryInfo">
+                      {voteSelf.country || '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="vote-status-guide registration-status-guide" id="registrationStatusGuide">
+              <p className="label">Registration progress</p>
+              <ol id="registrationStatusTimeline" className="vote-status-timeline">
+                {registrationSteps.map((step, index) => {
+                  const isComplete = step.done;
+                  const isCurrent = !isComplete && step.id === registrationCurrentId;
+                  return (
+                    <li key={step.id} className={`vote-status-item ${isComplete ? 'is-complete' : ''} ${isCurrent ? 'is-current' : ''}`}>
+                      <span className="vote-status-marker" aria-hidden="true">
+                        {isCurrent ? <span className="timeline-spinner" /> : isComplete ? '✓' : String(index + 1)}
+                      </span>
+                      <div className="vote-status-content">
+                        <p className="vote-status-label">{step.label}</p>
+                        <p className="vote-status-description">{step.description}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          </aside>
         </div>
-      </div>
+        {showRegistrationSubmittingNotice && (
+          <p className="vote-registration-submit-note" role="status" aria-live="polite">
+            <span className="timeline-spinner" aria-hidden="true" />
+            <span>Registration completed. Your vote is being submitted...</span>
+          </p>
+        )}
+      </PopupModal>
+
+      <PopupModal
+        id="voteContextGatePopup"
+        open={contextBlocked}
+        role="alertdialog"
+        title="This voting link is incomplete"
+        titleId="voteContextGatePopupTitle"
+        descriptionId="voteContextGatePopupMessage"
+        className="vote-popup vote-context-popup"
+        cardClassName="vote-popup-card vote-context-popup-card"
+        bodyClassName="vote-popup-body vote-context-popup-body"
+        closeLabel="Close context popup"
+        eyebrow="Process ID required"
+        onClose={closeContextGatePopup}
+      >
+        <p id="voteContextGatePopupMessage">{contextMessage}</p>
+      </PopupModal>
     </>
   );
 }
