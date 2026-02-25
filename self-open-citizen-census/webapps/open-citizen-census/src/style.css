@@ -1367,13 +1367,18 @@ textarea {
   align-items: center;
   position: relative;
   min-height: 320px;
-  max-height: 320px;
+  max-height: 360px;
   overflow: hidden;
 }
 
-.self-qr-wrap img {
+.self-qr-root {
   width: min(320px, 100%);
-  height: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.self-qr-root svg {
   border-radius: 8px;
 }
 

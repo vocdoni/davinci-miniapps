@@ -113,8 +113,10 @@ The app stores minimal local state for continuity:
 - Raw technical errors are logged to console; user-facing messages are simplified.
 
 ## Related files
-- Main app logic: `src/main.js`
+- App shell and routing: `src/App.tsx`
+- Create flow route: `src/routes/CreateRoute.tsx`
+- Vote flow route: `src/routes/VoteRoute.tsx`
 - Styling: `src/style.css`
-- Self payload adapter: `src/selfApp.js`
+- Self payload adapter: `src/selfApp.ts`
 - Runtime HTML: `index.html`
-- Historical planning document: `PLAN.md`
+- Shared app constants/helpers: `src/lib/occ.ts`

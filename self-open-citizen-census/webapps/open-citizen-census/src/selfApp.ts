@@ -4,30 +4,70 @@ const ASCII_RE = /^[\x00-\x7F]*$/;
 const HEX_RE = /^[0-9A-Fa-f]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function getUniversalLink(selfApp) {
+export type SelfEndpointType = 'celo' | 'staging_celo';
+export type SelfUserIdType = 'hex' | 'uuid';
+
+export interface SelfDisclosures {
+  minimumAge?: number;
+  nationality?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SelfAppPayload {
+  appName: string;
+  logoBase64: string;
+  endpointType: SelfEndpointType;
+  endpoint: string;
+  deeplinkCallback: string;
+  header: string;
+  scope: string;
+  sessionId: string;
+  userId: string;
+  userIdType: SelfUserIdType;
+  devMode: boolean;
+  disclosures: SelfDisclosures;
+  version: number;
+  chainID: number;
+  userDefinedData: string;
+  selfDefinedData?: string;
+}
+
+export interface BuildSelfAppInput {
+  appName: string;
+  scope: string;
+  endpoint: string;
+  endpointType: SelfEndpointType;
+  userId: string;
+  userIdType?: SelfUserIdType;
+  disclosures?: SelfDisclosures;
+  userDefinedData?: string;
+  deeplinkCallback?: string;
+}
+
+export function getUniversalLink(selfApp: unknown): string {
   return `${REDIRECT_URL}?selfApp=${encodeURIComponent(JSON.stringify(selfApp))}`;
 }
 
-export function getQrLink(selfApp) {
+export function getQrLink(selfApp: { sessionId: string }): string {
   return `${REDIRECT_URL}?sessionId=${encodeURIComponent(selfApp.sessionId)}`;
 }
 
-function formatEndpoint(endpoint) {
+function formatEndpoint(endpoint: string): string {
   if (!endpoint) return '';
-  return endpoint.replace(/^https?:\/\//, '').split('/')[0];
+  return endpoint.replace(/^https?:\/\//, '').split('/')[0] || '';
 }
 
-function validateUserId(userId, type) {
+function validateUserId(userId: string, type: SelfUserIdType): boolean {
   if (type === 'hex') return HEX_RE.test(userId);
   if (type === 'uuid') return UUID_RE.test(userId);
   return false;
 }
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function newSessionId() {
+function newSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -44,7 +84,7 @@ export function buildSelfApp({
   disclosures = {},
   userDefinedData = '',
   deeplinkCallback = '',
-}) {
+}: BuildSelfAppInput): SelfAppPayload {
   assert(appName, 'appName is required');
   assert(scope, 'scope is required');
   assert(endpoint, 'endpoint is required');
