@@ -41,7 +41,7 @@ export const CONFIG = {
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
-  selfAppName: String(env.VITE_SELF_APP_NAME || 'Open Citizen Census').trim(),
+  selfAppName: String(env.VITE_SELF_APP_NAME || 'Ask The World - DAVINCI').trim(),
 };
 
 export const ACTIVE_NETWORK = NETWORKS[CONFIG.network] || NETWORKS.celo;
@@ -56,7 +56,7 @@ export const VOTE_SUBMISSION_STORAGE_PREFIX = 'occ.voteSubmission.v1';
 export const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
 export const INTERNAL_RPC_RETRY_DELAY_MS = 1_500;
 
-export const DEFAULT_DOCUMENT_TITLE = 'Open Citizen Census';
+export const DEFAULT_DOCUMENT_TITLE = 'Ask The World - DAVINCI';
 export const CREATE_HEADER_TITLE = 'Official-ID Voting Process Creator';
 export const VOTE_HEADER_TITLE = 'Official-ID Voting Process';
 
@@ -282,6 +282,20 @@ export function formatRemainingTimeFromEndMs(endDateMs: number | null): string {
   if (remainingMs <= 0) return 'Ended';
 
   const totalMinutes = Math.floor(remainingMs / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return '<1m';
+}
+
+export function formatDurationMs(durationMs: number | null): string {
+  if (!Number.isFinite(Number(durationMs))) return '-';
+  const safeDurationMs = Math.max(0, Math.round(Number(durationMs)));
+  const totalMinutes = Math.floor(safeDurationMs / 60_000);
   const days = Math.floor(totalMinutes / (24 * 60));
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
   const minutes = totalMinutes % 60;
@@ -937,16 +951,47 @@ export function extractProcessEndDateMs(
     metadata?.durationMs,
   ];
 
+  let durationMs: number | null = null;
+  for (const durationCandidate of durationCandidates) {
+    const parsedDurationMs = toDurationMs(durationCandidate);
+    if (!parsedDurationMs) continue;
+    durationMs = parsedDurationMs;
+    break;
+  }
+  if (!durationMs) return null;
+
   for (const startCandidate of startCandidates) {
     const startDate = toDateFromUnknown(startCandidate);
     if (!startDate) continue;
-    for (const durationCandidate of durationCandidates) {
-      const durationMs = toDurationMs(durationCandidate);
-      if (!durationMs) continue;
-      return startDate.getTime() + durationMs;
-    }
+    return startDate.getTime() + durationMs;
   }
 
+  return null;
+}
+
+export function extractProcessDurationMs(
+  process: Record<string, any> | null,
+  metadata: Record<string, any> | null
+): number | null {
+  const durationCandidates = [
+    process?.timing?.duration,
+    process?.timing?.durationSeconds,
+    process?.timing?.durationMs,
+    process?.duration,
+    process?.durationSeconds,
+    process?.durationMs,
+    metadata?.timing?.duration,
+    metadata?.timing?.durationSeconds,
+    metadata?.timing?.durationMs,
+    metadata?.duration,
+    metadata?.durationSeconds,
+    metadata?.durationMs,
+  ];
+
+  for (const durationCandidate of durationCandidates) {
+    const durationMs = toDurationMs(durationCandidate);
+    if (durationMs) return durationMs;
+  }
   return null;
 }
 

@@ -56,6 +56,7 @@ import {
   removeOption,
   updateOption,
 } from './create/model';
+import { searchCountryOptions } from './create/countrySearch';
 import type { CreateFormState, CreateOverlayState } from './create/types';
 
 interface CreatorWalletState extends Omit<CreatorWalletConnection, 'provider' | 'browserProvider' | 'signer'> {
@@ -87,6 +88,15 @@ interface PipelineContext {
   censusUri: string;
   sdk: any;
   processId: string;
+}
+
+interface ShareTarget {
+  id: string;
+  label: string;
+  href: string;
+  iconSrc?: string;
+  iconFallbackSrc?: string;
+  fallbackText: string;
 }
 
 const CREATOR_WALLET_STATUS_DEFAULT =
@@ -153,10 +163,13 @@ export default function CreateRoute() {
   const [pipeline, setPipeline] = useState<PipelineStageState[]>(newPipelineState);
   const [outputs, setOutputs] = useState<CreateOutputs>(EMPTY_OUTPUTS);
   const [countriesMenuOpen, setCountriesMenuOpen] = useState(false);
+  const [countryQuery, setCountryQuery] = useState('');
+  const [activeCountryIndex, setActiveCountryIndex] = useState(-1);
 
   const walletRef = useRef(creatorWallet);
   const createTimelineRef = useRef<HTMLDetailsElement | null>(null);
   const countriesSelectRef = useRef<HTMLDivElement | null>(null);
+  const countryQueryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     walletRef.current = creatorWallet;
@@ -176,7 +189,7 @@ export default function CreateRoute() {
   }, []);
 
   useEffect(() => {
-    document.title = 'Ask the World';
+    document.title = 'Ask The World - DAVINCI';
   }, []);
 
   useEffect(() => {
@@ -205,6 +218,77 @@ export default function CreateRoute() {
   const formLocked = createSubmitting;
   const selectedCountriesCount = form.countries.length;
   const countriesLimitReached = selectedCountriesCount >= MAX_NATIONALITIES;
+  const shareTargets = useMemo<ShareTarget[]>(() => {
+    const voteUrl = String(outputs.voteUrl || '').trim();
+    if (!voteUrl) return [];
+
+    const encodedUrl = encodeURIComponent(voteUrl);
+    const shareText = encodeURIComponent('Join this vote on Ask The World - DAVINCI');
+    const shareTextWithUrl = encodeURIComponent(`Join this vote on Ask The World - DAVINCI ${voteUrl}`);
+
+    const simpleIconsBase = 'https://cdn.jsdelivr.net/npm/simple-icons@v16/icons';
+    const simpleIconsFallbackBase = 'https://cdn.simpleicons.org';
+
+    return [
+      {
+        id: 'x',
+        label: 'X',
+        href: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${shareText}`,
+        iconSrc: `${simpleIconsBase}/x.svg`,
+        iconFallbackSrc: `${simpleIconsFallbackBase}/x`,
+        fallbackText: 'X',
+      },
+      {
+        id: 'facebook',
+        label: 'Facebook',
+        href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+        iconSrc: `${simpleIconsBase}/facebook.svg`,
+        iconFallbackSrc: `${simpleIconsFallbackBase}/facebook`,
+        fallbackText: 'f',
+      },
+      {
+        id: 'linkedin',
+        label: 'LinkedIn',
+        href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
+        fallbackText: 'in',
+      },
+      {
+        id: 'whatsapp',
+        label: 'WhatsApp',
+        href: `https://wa.me/?text=${shareTextWithUrl}`,
+        iconSrc: `${simpleIconsBase}/whatsapp.svg`,
+        iconFallbackSrc: `${simpleIconsFallbackBase}/whatsapp`,
+        fallbackText: 'wa',
+      },
+      {
+        id: 'telegram',
+        label: 'Telegram',
+        href: `https://t.me/share/url?url=${encodedUrl}&text=${shareText}`,
+        iconSrc: `${simpleIconsBase}/telegram.svg`,
+        iconFallbackSrc: `${simpleIconsFallbackBase}/telegram`,
+        fallbackText: 'tg',
+      },
+      {
+        id: 'farcaster',
+        label: 'Farcaster',
+        href: `https://warpcast.com/~/compose?text=${shareTextWithUrl}`,
+        iconSrc: `${simpleIconsBase}/farcaster.svg`,
+        iconFallbackSrc: `${simpleIconsFallbackBase}/farcaster`,
+        fallbackText: 'fc',
+      },
+    ];
+  }, [outputs.voteUrl]);
+  const filteredCountryOptions = useMemo(
+    () => searchCountryOptions(COUNTRY_OPTIONS, countryQuery),
+    [countryQuery]
+  );
+  const activeCountryOption = activeCountryIndex >= 0 ? filteredCountryOptions[activeCountryIndex] : undefined;
+  const activeCountryOptionId = countriesMenuOpen && activeCountryOption ? `country-option-${activeCountryOption.code}` : undefined;
+
+  const closeCountriesMenu = useCallback(() => {
+    setCountriesMenuOpen(false);
+    setActiveCountryIndex(-1);
+  }, []);
 
   useEffect(() => {
     if (!hasError) return;
@@ -229,12 +313,12 @@ export default function CreateRoute() {
       if (!(event.target instanceof Node)) return;
       if (!countriesSelectRef.current) return;
       if (countriesSelectRef.current.contains(event.target)) return;
-      setCountriesMenuOpen(false);
+      closeCountriesMenu();
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setCountriesMenuOpen(false);
+        closeCountriesMenu();
       }
     };
 
@@ -247,12 +331,33 @@ export default function CreateRoute() {
       window.removeEventListener('touchstart', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [countriesMenuOpen]);
+  }, [closeCountriesMenu, countriesMenuOpen]);
 
   useEffect(() => {
     if (formLocked && countriesMenuOpen) {
-      setCountriesMenuOpen(false);
+      closeCountriesMenu();
     }
+  }, [closeCountriesMenu, countriesMenuOpen, formLocked]);
+
+  useEffect(() => {
+    if (!countriesMenuOpen) {
+      setActiveCountryIndex(-1);
+      return;
+    }
+    if (filteredCountryOptions.length === 0) {
+      setActiveCountryIndex(-1);
+      return;
+    }
+    setActiveCountryIndex((previous) => {
+      if (previous < 0) return 0;
+      if (previous >= filteredCountryOptions.length) return filteredCountryOptions.length - 1;
+      return previous;
+    });
+  }, [countriesMenuOpen, filteredCountryOptions]);
+
+  useEffect(() => {
+    if (!countriesMenuOpen || formLocked) return;
+    countryQueryInputRef.current?.focus();
   }, [countriesMenuOpen, formLocked]);
 
   const updateStage = useCallback((stageId: string, updates: Partial<PipelineStageState>) => {
@@ -389,6 +494,75 @@ export default function CreateRoute() {
       setCreateFormDirty(true);
     },
     [formLocked]
+  );
+
+  const handleCountrySelect = useCallback(
+    (countryCode: string) => {
+      toggleCountrySelection(countryCode);
+      setCountryQuery('');
+      closeCountriesMenu();
+    },
+    [closeCountriesMenu, toggleCountrySelection]
+  );
+
+  const handleCountryQueryChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setCountryQuery(value);
+      if (formLocked) return;
+      setCountriesMenuOpen(true);
+    },
+    [formLocked]
+  );
+
+  const handleCountryQueryKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (formLocked) return;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (!countriesMenuOpen) {
+          setCountriesMenuOpen(true);
+          setActiveCountryIndex(filteredCountryOptions.length ? 0 : -1);
+          return;
+        }
+        if (!filteredCountryOptions.length) return;
+        setActiveCountryIndex((previous) => {
+          if (previous < 0) return 0;
+          return Math.min(previous + 1, filteredCountryOptions.length - 1);
+        });
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!countriesMenuOpen) {
+          setCountriesMenuOpen(true);
+          setActiveCountryIndex(filteredCountryOptions.length ? 0 : -1);
+          return;
+        }
+        if (!filteredCountryOptions.length) return;
+        setActiveCountryIndex((previous) => {
+          if (previous < 0) return 0;
+          return Math.max(previous - 1, 0);
+        });
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        if (!countriesMenuOpen) return;
+        const option = filteredCountryOptions[activeCountryIndex];
+        if (!option) return;
+        event.preventDefault();
+        handleCountrySelect(option.code);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        closeCountriesMenu();
+      }
+    },
+    [activeCountryIndex, closeCountriesMenu, countriesMenuOpen, filteredCountryOptions, formLocked, handleCountrySelect]
   );
 
   const adjustMinAge = useCallback((delta: number) => {
@@ -654,7 +828,6 @@ export default function CreateRoute() {
       maxVoters: ctx.values.maxVoters,
       ballot: ctx.values.ballot,
       timing: {
-        startDate: ctx.values.startDate,
         duration: ctx.values.duration,
       },
     };
@@ -777,6 +950,8 @@ export default function CreateRoute() {
         }
 
         setForm(createInitialFormState());
+        setCountryQuery('');
+        closeCountriesMenu();
         setCreateFormDirty(false);
       } catch (error) {
         console.error('[OpenCitizenCensus] Create pipeline failed', error);
@@ -796,12 +971,13 @@ export default function CreateRoute() {
       startIndexer,
       waitIndexerReady,
       waitProcessReadyInSequencer,
+      closeCountriesMenu,
     ]
   );
 
   return (
     <section id="createView" className="view create-route">
-      <AppNavbar id="appNavbar" brandId="navbarBrand" baseHref={baseUrl} logoSrc={withBase('davinci_logo.png')} brandLabel="Ask the World">
+      <AppNavbar id="appNavbar" brandId="navbarBrand" baseHref={baseUrl} logoSrc={withBase('davinci_logo.png')} brandLabel="Ask The World">
         <article
           className="vote-lifecycle-card vote-lifecycle-header-card create-wallet-widget"
           id="createWalletWidget"
@@ -845,8 +1021,18 @@ export default function CreateRoute() {
         </h1>
         <p className="create-intro question-hero-helper">
           Ask a question to one or more countries. Citizens who match your criteria can authenticate with their ID or
-          passport and vote immediately, without any prior census setup. The <strong>DAVINCI Protocol</strong> makes every
-          vote anonymous, verifiable from end to end, and protected against censorship, coercion, and bribery.
+          passport and vote immediately, using{' '}
+          <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
+            <strong>Self.xyz</strong>
+          </a>{' '}
+          app.
+          <br />
+          The{' '}
+          <a className="field-link" href="https://davinci.vote" target="_blank" rel="noreferrer">
+            <strong>DAVINCI</strong>
+          </a>{' '}
+          Protocol makes every vote anonymous, verifiable from end to end, and protected against censorship, coercion,
+          and bribery.
         </p>
       </header>
 
@@ -945,36 +1131,13 @@ export default function CreateRoute() {
               <div
                 id="country"
                 className="country-multiselect-trigger"
-                role="combobox"
-                aria-label="Choose allowed countries"
-                aria-haspopup="listbox"
-                aria-expanded={countriesMenuOpen}
-                aria-controls="countryList"
-                aria-disabled={formLocked}
-                tabIndex={formLocked ? -1 : 0}
                 onClick={() => {
                   if (formLocked) return;
-                  setCountriesMenuOpen((previous) => !previous);
-                }}
-                onKeyDown={(event) => {
-                  if (formLocked) return;
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setCountriesMenuOpen((previous) => !previous);
-                    return;
-                  }
-                  if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    setCountriesMenuOpen(true);
-                    return;
-                  }
-                  if (event.key === 'Escape') {
-                    setCountriesMenuOpen(false);
-                  }
+                  setCountriesMenuOpen(true);
+                  countryQueryInputRef.current?.focus();
                 }}
               >
                 <div className="country-chip-list">
-                  {form.countries.length === 0 && <span className="country-chip-placeholder">Select countries</span>}
                   {form.countries.map((code) => (
                     <span className="country-chip" key={code}>
                       <span className="country-chip-text">
@@ -995,6 +1158,29 @@ export default function CreateRoute() {
                       </button>
                     </span>
                   ))}
+                  <input
+                    ref={countryQueryInputRef}
+                    id="countryQuery"
+                    className="country-query-input"
+                    type="text"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-label="Choose allowed countries"
+                    aria-haspopup="listbox"
+                    aria-expanded={countriesMenuOpen}
+                    aria-controls="countryList"
+                    aria-activedescendant={activeCountryOptionId}
+                    aria-disabled={formLocked}
+                    disabled={formLocked}
+                    placeholder="Type to search countries..."
+                    value={countryQuery}
+                    onChange={handleCountryQueryChange}
+                    onFocus={() => {
+                      if (formLocked) return;
+                      setCountriesMenuOpen(true);
+                    }}
+                    onKeyDown={handleCountryQueryKeyDown}
+                  />
                 </div>
                 <span className="country-multiselect-caret" aria-hidden="true">
                   ▾
@@ -1002,28 +1188,37 @@ export default function CreateRoute() {
               </div>
 
               <div id="countryList" className="country-dropdown" role="listbox" aria-label="Allowed countries" aria-multiselectable="true">
-                {COUNTRY_OPTIONS.map((option) => {
-                  const checked = form.countries.includes(option.code);
-                  const disabled = formLocked || (!checked && countriesLimitReached);
-                  return (
-                    <button
-                      key={option.code}
-                      type="button"
-                      role="option"
-                      aria-selected={checked}
-                      className={`country-dropdown-option ${checked ? 'is-selected' : ''}`}
-                      disabled={disabled}
-                      onClick={() => toggleCountrySelection(option.code)}
-                    >
-                      <span className="country-dropdown-check" aria-hidden="true">
-                        {checked ? '✓' : ''}
-                      </span>
-                      <span className="country-dropdown-label">
-                        {option.label} ({option.code})
-                      </span>
-                    </button>
-                  );
-                })}
+                {filteredCountryOptions.length === 0 ? (
+                  <div className="country-dropdown-empty" role="status" aria-live="polite">
+                    No countries found
+                  </div>
+                ) : (
+                  filteredCountryOptions.map((option, optionIndex) => {
+                    const checked = form.countries.includes(option.code);
+                    const disabled = formLocked || (!checked && countriesLimitReached);
+                    const isActive = optionIndex === activeCountryIndex;
+                    return (
+                      <button
+                        key={option.code}
+                        id={`country-option-${option.code}`}
+                        type="button"
+                        role="option"
+                        aria-selected={checked}
+                        className={`country-dropdown-option ${checked ? 'is-selected' : ''} ${isActive ? 'is-active' : ''}`}
+                        disabled={disabled}
+                        onMouseEnter={() => setActiveCountryIndex(optionIndex)}
+                        onClick={() => handleCountrySelect(option.code)}
+                      >
+                        <span className="country-dropdown-check" aria-hidden="true">
+                          {checked ? '✓' : ''}
+                        </span>
+                        <span className="country-dropdown-label">
+                          {option.label} ({option.code})
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -1252,6 +1447,61 @@ export default function CreateRoute() {
               <button id="copyVoteUrlBtnSuccess" type="button" className="icon-btn" title="Copy link" onClick={() => void handleCopyVoteUrl()}>
                 <span className="iconoir-copy" aria-hidden="true" />
               </button>
+            </div>
+
+            <div className="vote-share-wrapper" id="createShareLinks" hidden={shareTargets.length === 0}>
+              <span className="vote-share-label">Share on social networks</span>
+              <div className="vote-share-grid">
+                {shareTargets.map((target) => (
+                  <a
+                    key={target.id}
+                    id={`shareVoteUrl${target.id}`}
+                    className={`share-link-btn share-link-btn--${target.id}`}
+                    href={target.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Share on ${target.label}`}
+                    title={`Share on ${target.label}`}
+                    data-fallback={target.fallbackText}
+                  >
+                    {target.id === 'linkedin' ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        className="share-link-inline-icon"
+                        focusable="false"
+                      >
+                        <circle cx="7" cy="7" r="1.5" fill="#1f2a3a" />
+                        <rect x="5.7" y="10" width="2.6" height="8.3" fill="#1f2a3a" />
+                        <path
+                          d="M10.4 10h2.5v1.2c.5-.8 1.4-1.4 2.8-1.4 2.5 0 3.4 1.6 3.4 4.2v4.3h-2.7v-3.8c0-1.3-.2-2.5-1.4-2.5-1.2 0-1.6.8-1.6 2.4v3.9h-2.9z"
+                          fill="#1f2a3a"
+                        />
+                      </svg>
+                    ) : (
+                      <img
+                        src={target.iconSrc}
+                        alt={target.label}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(event) => {
+                          const element = event.currentTarget;
+                          if (element.dataset.fallbackApplied !== '1' && target.iconFallbackSrc) {
+                            element.dataset.fallbackApplied = '1';
+                            element.src = target.iconFallbackSrc;
+                            return;
+                          }
+                          element.style.display = 'none';
+                          const button = element.closest('.share-link-btn');
+                          if (button instanceof HTMLElement) {
+                            button.classList.add('share-link-btn--fallback');
+                          }
+                        }}
+                      />
+                    )}
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
 

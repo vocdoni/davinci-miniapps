@@ -82,7 +82,7 @@ export async function createWalletConnectProvider(): Promise<OCCProvider> {
     optionalChains,
     showQrModal: true,
     metadata: {
-      name: 'Open Citizen Census',
+      name: 'Ask The World - DAVINCI',
       description: 'Create and vote on census-based processes',
       url: window.location.origin,
       icons: [],

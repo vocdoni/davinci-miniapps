@@ -18,9 +18,10 @@ import {
   clearWalletOverride,
   extractCensusContract,
   extractCensusUri,
-  extractProcessDescription,
+  extractProcessDurationMs,
   extractProcessEndDateMs,
   extractVoteContextFromMetadata,
+  formatDurationMs,
   formatRemainingTimeFromEndMs,
   formatVotePercent,
   formatVoteStatusLabel,
@@ -91,7 +92,6 @@ interface VoteResolutionState {
   processTypeName: string;
   network: string;
   title: string;
-  description: string;
   censusContract: string;
   censusUri: string;
   endDateMs: number | null;
@@ -135,7 +135,6 @@ const EMPTY_RESOLUTION: VoteResolutionState = {
   processTypeName: '',
   network: CONFIG.network,
   title: '',
-  description: '',
   censusContract: '',
   censusUri: '',
   endDateMs: null,
@@ -701,7 +700,6 @@ export default function VoteRoute() {
         const title = String(
           getLocalizedText(metadata?.title) || process?.title || process?.metadata?.title || process?.metadata?.name || '-'
         ).trim();
-        const description = extractProcessDescription(process, metadata);
         const endDateMs = extractProcessEndDateMs(process, metadata);
         const metadataContext = extractVoteContextFromMetadata(metadata);
         const statusCode = normalizeProcessStatus(process?.status);
@@ -723,7 +721,6 @@ export default function VoteRoute() {
           maxVoters,
           processTypeName,
           title,
-          description,
           censusContract: contractAddress,
           censusUri,
           endDateMs,
@@ -876,7 +873,7 @@ export default function VoteRoute() {
       };
 
       const selfApp = new SelfAppBuilder({
-        appName: CONFIG.selfAppName || 'Open Citizen Census',
+        appName: CONFIG.selfAppName || 'Ask The World - DAVINCI',
         scope: scopeSeed,
         endpoint: String(contractAddress).toLowerCase(),
         endpointType: toSelfEndpointType(resolution.network),
@@ -1416,11 +1413,21 @@ export default function VoteRoute() {
     return 'Choose an option';
   })();
 
-  const voteHeaderHelpText = voteResultsVisible
-    ? 'Results are available for this process.'
-    : 'Choose an option, register with the Self.xyz app to join the census when required, and then submit your vote.';
+  const voteHeaderHelpText = voteResultsVisible ? (
+    'Results are available for this process.'
+  ) : (
+    <>
+      Choose an option, register with the{' '}
+      <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
+        Self.xyz
+      </a>{' '}
+      app to join the census, and then submit your vote.
+    </>
+  );
   const voteSelfCountriesText =
     voteSelf.countries.length > 0 ? voteSelf.countries.join(', ') : voteSelf.country ? voteSelf.country : '-';
+  const voteConfiguredDuration = formatDurationMs(extractProcessDurationMs(voteResolution.process, null));
+  const voteRemainingTimeText = formatRemainingTimeFromEndMs(voteResolution.endDateMs);
 
   return (
     <>
@@ -1430,7 +1437,7 @@ export default function VoteRoute() {
           brandId="voteNavbarBrand"
           baseHref={baseUrl}
           logoSrc={withBase('davinci_logo.png')}
-          brandLabel="Ask the World"
+          brandLabel="Ask The World"
         >
           <div className="vote-lifecycle-card vote-lifecycle-header-card vote-navbar-widget" id="voteLifecycleCard" hidden={!voteResolution.processId} data-state={lifecycle.stateKey}>
             <div className="vote-lifecycle-head">
@@ -1500,21 +1507,9 @@ export default function VoteRoute() {
                 </td>
               </tr>
               <tr>
-                <th>Title</th>
+                <th>Duration</th>
                 <td>
-                  <span id="voteProcessTitle">{voteResolution.title || '-'}</span>
-                </td>
-              </tr>
-              <tr>
-                <th>Description</th>
-                <td>
-                  <span id="voteProcessDescription">{voteResolution.description || '-'}</span>
-                </td>
-              </tr>
-              <tr>
-                <th>Remaining time</th>
-                <td>
-                  <strong id="voteProcessRemainingTime">{formatRemainingTimeFromEndMs(voteResolution.endDateMs)}</strong>
+                  <strong id="voteProcessDuration">{voteConfiguredDuration}</strong>
                 </td>
               </tr>
               <tr>
@@ -1786,11 +1781,15 @@ export default function VoteRoute() {
             )}
           </div>
 
-          <div className="row">
+          <div className="vote-submit-row">
             <button id="emitVoteBtn" type="button" className="cta-btn" disabled={!canSubmitVote} onClick={() => void emitVote()}>
               <span className={`btn-icon ${voteButtonIcon}`} aria-hidden="true" />
               <span className="btn-text">{voteButtonLabel}</span>
             </button>
+            <div className="vote-submit-remaining" id="voteRemainingCard">
+              <span className="vote-submit-remaining-label">Time until close</span>
+              <strong id="voteProcessRemainingTime">{voteRemainingTimeText}</strong>
+            </div>
           </div>
 
           <div className="vote-status-guide vote-submit-guide" id="voteStatusGuide" hidden={!hasStoredVoteId}>

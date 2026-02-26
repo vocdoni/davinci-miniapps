@@ -40,7 +40,7 @@ describe('create route model', () => {
     expect(values.scopeSeed).toBe('USA_18_aaaaa');
     expect(values.countries).toEqual(['USA', 'FRA']);
     expect(values.country).toBe('USA');
-    expect(values.startDate.toISOString()).toBe('2026-03-01T10:10:00.000Z');
+    expect(values.startDate.toISOString()).toBe('2026-03-01T10:00:00.000Z');
     expect(values.question).toEqual({
       title: 'Should we approve this budget?',
       description: '',

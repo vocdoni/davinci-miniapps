@@ -1,7 +1,6 @@
 import type { CreateValues } from '../../lib/occ';
 import { isAsciiText, normalizeCountry, normalizeMinAge, normalizeScope, stripNonAscii } from '../../utils/normalization';
 import {
-  CREATE_START_DELAY_MS,
   DEFAULT_DURATION_HOURS,
   DEFAULT_MAX_VOTERS,
   DEFAULT_MIN_AGE,
@@ -180,7 +179,7 @@ export function deriveCreateValuesFromForm(
     choices,
   };
 
-  const startDate = new Date(nowMs + CREATE_START_DELAY_MS);
+  const startDate = new Date(nowMs);
   const scopeSeed = generateScopeSeed(country, minAge, randomIndex);
 
   if (!normalizeScope(scopeSeed) || scopeSeed.length > 31) {

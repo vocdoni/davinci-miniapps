@@ -1,4 +1,4 @@
-# Open Citizen Census Webapp
+# Ask The World - DAVINCI Webapp
 
 Unified frontend for creating and voting in census-gated voting processes using Vocdoni + Self.
 

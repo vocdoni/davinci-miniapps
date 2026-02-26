@@ -18,6 +18,7 @@ describe('timing utils', () => {
   it('converts duration units to milliseconds', () => {
     expect(toDurationMs(60)).toBe(60_000);
     expect(toDurationMs(60_000_000)).toBe(60_000_000);
+    expect(toDurationMs(3_600_000_000_000)).toBe(3_600_000);
     expect(toDurationMs('0')).toBeNull();
   });
 
@@ -33,6 +34,15 @@ describe('timing utils', () => {
         startDate: '2026-03-01T11:00:00Z',
         duration: 3600,
       },
+    };
+
+    expect(extractProcessEndDateMs(process, null)).toBe(new Date('2026-03-01T12:00:00Z').getTime());
+  });
+
+  it('extracts end date from sequencer nanosecond duration payload', () => {
+    const process = {
+      startTime: '2026-03-01T11:00:00Z',
+      duration: 3_600_000_000_000,
     };
 
     expect(extractProcessEndDateMs(process, null)).toBe(new Date('2026-03-01T12:00:00Z').getTime());

@@ -757,6 +757,43 @@ textarea {
   justify-content: center;
 }
 
+#voteView .vote-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 10px;
+}
+
+#voteView .vote-submit-row #emitVoteBtn {
+  flex: 1 1 auto;
+}
+
+#voteView .vote-submit-remaining {
+  display: grid;
+  gap: 2px;
+  min-width: 144px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  background: #f4f8ff;
+  text-align: right;
+}
+
+#voteView .vote-submit-remaining-label {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#voteView .vote-submit-remaining strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
 .vote-submit-result {
   display: flex;
   align-items: flex-start;
@@ -2406,6 +2443,32 @@ button.qr-copy-btn:focus-visible {
   min-width: 0;
 }
 
+#createView .country-query-input {
+  flex: 1 1 110px;
+  min-width: 72px;
+  min-height: 20px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 3px 0;
+}
+
+#createView .country-query-input::placeholder {
+  color: var(--muted);
+}
+
+#createView .country-query-input:focus::placeholder {
+  color: transparent;
+}
+
+#createView .country-query-input:disabled {
+  cursor: not-allowed;
+}
+
 #createView .country-chip-placeholder {
   color: var(--muted);
   font-size: 12px;
@@ -2552,6 +2615,10 @@ button.qr-copy-btn:focus-visible {
   background: rgba(224, 224, 224, 0.76);
 }
 
+#createView .country-dropdown-option.is-active {
+  background: rgba(27, 83, 152, 0.12);
+}
+
 #createView .country-dropdown-option.is-selected {
   border: 1px solid rgba(27, 83, 152, 0.2);
 }
@@ -2570,6 +2637,14 @@ button.qr-copy-btn:focus-visible {
 
 #createView .country-dropdown-label {
   font-size: 12px;
+}
+
+#createView .country-dropdown-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px 8px;
 }
 
 @media (max-width: 760px) {
@@ -2999,6 +3074,77 @@ button.qr-copy-btn:focus-visible {
   border-color: rgba(31, 42, 58, 0.2);
 }
 
+#createView .vote-share-wrapper {
+  margin-top: 14px;
+}
+
+#createView .vote-share-label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+#createView .vote-share-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+#createView .share-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  min-width: 38px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  background: #fff;
+  color: var(--accent);
+  text-decoration: none;
+  transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
+}
+
+#createView .share-link-btn img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+#createView .share-link-btn--x img {
+  width: 16px;
+  height: 16px;
+}
+
+#createView .share-link-inline-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+#createView .share-link-btn:hover {
+  background: #edf3ff;
+  border-color: rgba(31, 42, 58, 0.22);
+}
+
+#createView .share-link-btn:hover img {
+  filter: brightness(0.92);
+}
+
+#createView .share-link-btn--fallback::after {
+  content: attr(data-fallback);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
+  color: #1f2a3a;
+}
+
 #createView .final-details {
   border-top: 1px solid rgba(31, 42, 58, 0.08);
   margin-top: 20px;
@@ -3103,6 +3249,21 @@ button.qr-copy-btn:focus-visible {
   #voteView #emitVoteBtn {
     width: 100%;
     justify-content: center;
+  }
+
+  #voteView .vote-submit-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  #voteView .vote-submit-row #emitVoteBtn {
+    width: auto;
+  }
+
+  #voteView .vote-submit-remaining {
+    min-width: 108px;
+    padding: 6px 8px;
   }
 
   .vote-registration-card {

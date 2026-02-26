@@ -3,7 +3,6 @@ export interface CountryOption {
   label: string;
 }
 
-export const CREATE_START_DELAY_MS = 10 * 60 * 1000;
 export const MIN_OPTIONS = 2;
 export const MAX_OPTIONS = 8;
 export const MAX_NATIONALITIES = 5;

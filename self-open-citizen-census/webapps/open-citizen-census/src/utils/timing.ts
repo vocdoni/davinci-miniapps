@@ -46,7 +46,9 @@ export function toDurationMs(value: unknown): number | null {
   }
 
   if (parsed === null || !Number.isFinite(parsed) || parsed <= 0) return null;
-  if (parsed >= 10_000_000_000_000) return parsed / 1_000_000;
+  // Sequencer duration values are provided in nanoseconds (for example, 1h = 3_600_000_000_000).
+  // Treat this range as nanoseconds to avoid inflating short durations in the vote UI.
+  if (parsed >= 1_000_000_000_000) return parsed / 1_000_000;
   if (parsed >= 10_000_000_000) return parsed / 1_000;
   if (parsed >= 10_000_000) return parsed;
   return parsed * 1000;
