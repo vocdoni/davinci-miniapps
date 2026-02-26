@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { createPendingVoteIntent, evaluateVoteSubmitGate, shouldAutoSubmitPendingVote } from './submitFlow';
+import {
+  buildSingleQuestionBallotValues,
+  createPendingVoteIntent,
+  evaluateVoteSubmitGate,
+  shouldAutoSubmitPendingVote,
+} from './submitFlow';
 
 describe('vote submit flow', () => {
   const baseInput = {
@@ -58,5 +63,17 @@ describe('vote submit flow', () => {
         submitting: false,
       })
     ).toBe(false);
+  });
+
+  it('builds one-hot ballot values for a selected option', () => {
+    expect(buildSingleQuestionBallotValues(2, [0, 1, 2, 3, 4])).toEqual([0, 0, 1, 0, 0]);
+  });
+
+  it('builds one-hot ballot values using question option order', () => {
+    expect(buildSingleQuestionBallotValues(20, [10, 20, 30])).toEqual([0, 1, 0]);
+  });
+
+  it('throws when selected option is not part of available question options', () => {
+    expect(() => buildSingleQuestionBallotValues(4, [0, 1, 2])).toThrow(/Selected option is not valid/i);
   });
 });

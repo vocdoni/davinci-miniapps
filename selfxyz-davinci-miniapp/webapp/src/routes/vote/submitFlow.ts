@@ -94,3 +94,27 @@ export function shouldAutoSubmitPendingVote(params: {
 }): boolean {
   return Boolean(params.pendingVoteIntent && params.modalOpen && params.hasReadiness && !params.submitting);
 }
+
+export function buildSingleQuestionBallotValues(
+  selectedChoice: number,
+  availableChoiceValues: ReadonlyArray<number>
+): number[] {
+  const normalizedSelectedChoice = Number(selectedChoice);
+  if (!Number.isInteger(normalizedSelectedChoice) || normalizedSelectedChoice < 0) {
+    throw new Error('Selected option is not valid for this vote question.');
+  }
+
+  const normalizedChoices = availableChoiceValues
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value >= 0);
+  if (!normalizedChoices.length) {
+    throw new Error('No options available for this vote question.');
+  }
+
+  const selectedChoiceIndex = normalizedChoices.findIndex((value) => value === normalizedSelectedChoice);
+  if (selectedChoiceIndex < 0) {
+    throw new Error('Selected option is not valid for this vote question.');
+  }
+
+  return normalizedChoices.map((_, index) => (index === selectedChoiceIndex ? 1 : 0));
+}
