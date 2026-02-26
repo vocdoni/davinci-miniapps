@@ -298,6 +298,14 @@ export default function CreateRoute() {
 
   const withBase = useCallback((file: string) => buildAssetUrl(file), []);
   const baseUrl = import.meta.env.BASE_URL || '/';
+  const buildAppHref = useCallback(
+    (path: string) => `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`,
+    [baseUrl]
+  );
+  const navbarLinks = useMemo(
+    () => [{ id: 'createExploreLink', href: buildAppHref('/explore'), label: 'Explore' }],
+    [buildAppHref]
+  );
 
   useEffect(() => {
     document.body.classList.toggle('app-blocked', overlayVisible);
@@ -977,7 +985,14 @@ export default function CreateRoute() {
 
   return (
     <section id="createView" className="view create-route">
-      <AppNavbar id="appNavbar" brandId="navbarBrand" baseHref={baseUrl} logoSrc={withBase('davinci_logo.png')} brandLabel="Ask The World">
+      <AppNavbar
+        id="appNavbar"
+        brandId="navbarBrand"
+        baseHref={baseUrl}
+        logoSrc={withBase('davinci_logo.png')}
+        brandLabel="Ask The World"
+        navLinks={navbarLinks}
+      >
         <article
           className="vote-lifecycle-card vote-lifecycle-header-card create-wallet-widget"
           id="createWalletWidget"

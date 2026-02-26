@@ -1952,15 +1952,15 @@ button.qr-copy-btn:focus-visible {
   padding: 24px 24px 96px;
 }
 
-:is(#createView, #voteView) .app-navbar {
+:is(#createView, #voteView, #exploreView) .app-navbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   margin-bottom: 24px;
 }
 
-:is(#createView, #voteView) .navbar-brand {
+:is(#createView, #voteView, #exploreView) .navbar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1970,23 +1970,82 @@ button.qr-copy-btn:focus-visible {
   font-size: 16px;
 }
 
-:is(#createView, #voteView) .navbar-logo {
+:is(#createView, #voteView, #exploreView) .navbar-logo {
   height: 48px;
   width: auto;
 }
 
-:is(#createView, #voteView) .navbar-actions {
+:is(#createView, #voteView, #exploreView) .navbar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  margin-left: 8px;
+  margin-right: auto;
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  position: relative;
+  transition: color 0.16s ease;
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(31, 42, 58, 0.2);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link:hover {
+  color: var(--ink);
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link:hover::after {
+  transform: scaleX(1);
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link.is-active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-link.is-active::after {
+  transform: scaleX(1);
+  background: #4a5aef;
+}
+
+:is(#createView, #voteView, #exploreView) .navbar-actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
 }
 
-:is(#createView, #voteView) .navbar-actions:empty {
+:is(#createView, #voteView, #exploreView) .navbar-actions:empty {
   display: none;
 }
 
-:is(#createView, #voteView) .navbar-wallet-btn {
+:is(#createView, #voteView, #exploreView) .navbar-wallet-btn {
   padding: 8px 18px;
   min-height: 36px;
   font-size: 13px;
@@ -1996,14 +2055,14 @@ button.qr-copy-btn:focus-visible {
   border: 1px solid rgba(31, 42, 58, 0.18);
 }
 
-:is(#createView, #voteView) .navbar-wallet-btn:hover:not(:disabled) {
+:is(#createView, #voteView, #exploreView) .navbar-wallet-btn:hover:not(:disabled) {
   background: rgba(31, 42, 58, 0.06);
   color: var(--ink);
   transform: none;
   box-shadow: none;
 }
 
-:is(#createView, #voteView) .navbar-wallet-address {
+:is(#createView, #voteView, #exploreView) .navbar-wallet-address {
   margin: 5px 0;
   text-align: center;
   width: 100%;
@@ -2013,12 +2072,12 @@ button.qr-copy-btn:focus-visible {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
-:is(#createView, #voteView) .create-header {
+:is(#createView, #voteView, #exploreView) .create-header {
   display: block;
   margin-bottom: 8px;
 }
 
-:is(#createView, #voteView) .create-header h1 {
+:is(#createView, #voteView, #exploreView) .create-header h1 {
   margin: 0;
   font-family: 'Inter', sans-serif;
   font-weight: 800;
@@ -2027,7 +2086,7 @@ button.qr-copy-btn:focus-visible {
   color: var(--ink);
 }
 
-:is(#createView, #voteView) .question-hero-title {
+:is(#createView, #voteView, #exploreView) .question-hero-title {
   margin: 0;
   font-family: 'Inter', sans-serif;
   font-weight: 800;
@@ -2036,13 +2095,13 @@ button.qr-copy-btn:focus-visible {
   color: var(--ink);
 }
 
-:is(#createView, #voteView) .question-hero-header {
+:is(#createView, #voteView, #exploreView) .question-hero-header {
   display: grid;
   gap: 48px;
   align-content: start;
 }
 
-:is(#createView, #voteView) .create-intro {
+:is(#createView, #voteView, #exploreView) .create-intro {
   margin: 8px 0 0;
   font-size: 18px;
   line-height: 1.5;
@@ -2051,7 +2110,7 @@ button.qr-copy-btn:focus-visible {
   font-weight: 400;
 }
 
-:is(#createView, #voteView) .question-hero-helper {
+:is(#createView, #voteView, #exploreView) .question-hero-helper {
   margin: 0;
   max-width: 620px;
   font-size: 18px;
@@ -2064,9 +2123,151 @@ button.qr-copy-btn:focus-visible {
   margin-bottom: 22px;
 }
 
-:is(#createView, #voteView) .create-intro strong {
+:is(#createView, #voteView, #exploreView) .create-intro strong {
   font-weight: 600;
   color: var(--ink);
+}
+
+#exploreView .explore-header {
+  margin-bottom: 18px;
+}
+
+#exploreView .explore-list-wrap {
+  border: 1px solid rgba(31, 42, 58, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 20px 46px rgba(31, 42, 58, 0.08);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+#exploreView .explore-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+#exploreView .explore-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+#exploreView .explore-row {
+  margin: 0;
+}
+
+#exploreView .explore-row-link {
+  display: grid;
+  gap: 6px;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  border: 1px solid rgba(31, 42, 58, 0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+#exploreView .explore-row-link:hover {
+  border-color: rgba(74, 90, 239, 0.45);
+  box-shadow: 0 10px 18px rgba(31, 42, 58, 0.08);
+  transform: translateY(-1px);
+}
+
+#exploreView .explore-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#exploreView .explore-row-question {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+#exploreView .explore-row-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 58, 0.16);
+  padding: 2px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+  background: #fff;
+}
+
+#exploreView .explore-row-status.is-ready {
+  color: #1d5d3a;
+  border-color: rgba(29, 93, 58, 0.36);
+  background: #edf7f1;
+}
+
+#exploreView .explore-row-status.is-ended,
+#exploreView .explore-row-status.is-results {
+  color: #556176;
+  border-color: rgba(85, 97, 118, 0.3);
+  background: #f1f5fb;
+}
+
+#exploreView .explore-row-status.is-paused,
+#exploreView .explore-row-status.is-canceled {
+  color: #8d1e1e;
+  border-color: rgba(141, 30, 30, 0.28);
+  background: #fff1f1;
+}
+
+#exploreView .explore-row-requirements {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+#exploreView .explore-load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+#exploreView .explore-feedback {
+  border: 1px dashed rgba(31, 42, 58, 0.22);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+#exploreView .explore-feedback-error {
+  border-style: solid;
+  border-color: rgba(155, 34, 34, 0.3);
+  background: rgba(255, 241, 241, 0.84);
+  color: #8a1f1f;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+#exploreView .explore-feedback-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
 }
 
 #voteView .vote-navbar-widget {
@@ -3303,18 +3504,23 @@ button.qr-copy-btn:focus-visible {
     margin: 2px 0 4px;
   }
 
-  :is(#createView, #voteView) .app-navbar {
+  :is(#createView, #voteView, #exploreView) .app-navbar {
     margin-bottom: 20px;
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 10px;
   }
 
-  :is(#createView, #voteView) .navbar-brand {
+  :is(#createView, #voteView, #exploreView) .navbar-brand {
     width: 100%;
   }
 
-  :is(#createView, #voteView) .navbar-actions {
+  :is(#createView, #voteView, #exploreView) .navbar-nav {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  :is(#createView, #voteView, #exploreView) .navbar-actions {
     width: 100%;
     align-items: stretch;
   }
@@ -3376,11 +3582,11 @@ button.qr-copy-btn:focus-visible {
     white-space: nowrap;
   }
 
-  :is(#createView, #voteView) .create-header h1 {
+  :is(#createView, #voteView, #exploreView) .create-header h1 {
     font-size: clamp(24px, 7vw, 34px);
   }
 
-  :is(#createView, #voteView) .question-hero-title {
+  :is(#createView, #voteView, #exploreView) .question-hero-title {
     font-size: clamp(24px, 7vw, 34px);
   }
 
@@ -3393,7 +3599,7 @@ button.qr-copy-btn:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  :is(#createView, #voteView) .cta-btn {
+  :is(#createView, #voteView, #exploreView) .cta-btn {
     width: 100%;
     justify-content: center;
   }
@@ -3408,5 +3614,20 @@ button.qr-copy-btn:focus-visible {
 
   .self-qr-actions {
     justify-content: center;
+  }
+
+  #exploreView .explore-list-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #exploreView .explore-row-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  #exploreView .explore-row-requirements {
+    font-size: 11px;
   }
 }

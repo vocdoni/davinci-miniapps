@@ -4,6 +4,7 @@ import { buildAssetUrl } from './utils/assets';
 
 const CreateRoute = lazy(() => import('./routes/CreateRoute'));
 const VoteRoute = lazy(() => import('./routes/VoteRoute'));
+const ExploreRoute = lazy(() => import('./routes/ExploreRoute'));
 
 function RouteLoadingFallback() {
   return (
@@ -79,6 +80,14 @@ export default function App() {
           element={
             <Suspense fallback={<RouteLoadingFallback />}>
               <VoteRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="explore"
+          element={
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <ExploreRoute />
             </Suspense>
           }
         />

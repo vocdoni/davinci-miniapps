@@ -310,6 +310,14 @@ export default function VoteRoute() {
   const params = useParams();
   const baseUrl = import.meta.env.BASE_URL || '/';
   const withBase = useCallback((file: string) => buildAssetUrl(file), []);
+  const buildAppHref = useCallback(
+    (path: string) => `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`,
+    [baseUrl]
+  );
+  const navbarLinks = useMemo(
+    () => [{ id: 'voteExploreLink', href: buildAppHref('/explore'), label: 'Explore' }],
+    [buildAppHref]
+  );
 
   const [contextBlocked, setContextBlocked] = useState(false);
   const [contextMessage, setContextMessage] = useState(
@@ -1438,6 +1446,7 @@ export default function VoteRoute() {
           baseHref={baseUrl}
           logoSrc={withBase('davinci_logo.png')}
           brandLabel="Ask The World"
+          navLinks={navbarLinks}
         >
           <div className="vote-lifecycle-card vote-lifecycle-header-card vote-navbar-widget" id="voteLifecycleCard" hidden={!voteResolution.processId} data-state={lifecycle.stateKey}>
             <div className="vote-lifecycle-head">
