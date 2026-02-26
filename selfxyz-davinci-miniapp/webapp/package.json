@@ -1,0 +1,33 @@
+{
+  "name": "open-citizen-census",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4175",
+    "build": "vite build",
+    "preview": "vite preview --port 4175",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@selfxyz/qrcode": "^1.0.11",
+    "@vocdoni/davinci-sdk": "0.1.3",
+    "@walletconnect/ethereum-provider": "^2.17.5",
+    "ethers": "^6.13.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.0",
+    "vitest": "^4.0.18"
+  }
+}

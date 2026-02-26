@@ -1,3 +1,0 @@
---container-architecture linux/amd64
---platform macos-latest=catthehacker/ubuntu:runner-latest
---secret-file ./app/fastlane/.env.secrets

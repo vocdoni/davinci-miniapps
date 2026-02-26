@@ -1,6 +1,0 @@
-appId: org.reactjs.native.example.SelfDemoApp
----
-- launchApp
-- extendedWaitUntil:
-    visible: "Self Demo App"
-    timeout: ${LAUNCH_WAIT_MS:60000}
