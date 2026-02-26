@@ -41,6 +41,12 @@ export async function fetchProcessMetadata(sdk: any, process: any): Promise<Reco
   }
 }
 
+export async function listProcessesFromSequencer(sdk: any): Promise<string[]> {
+  const list = await sdk?.api?.sequencer?.listProcesses?.();
+  if (!Array.isArray(list)) return [];
+  return list.map((processId) => normalizeProcessId(processId)).filter(Boolean);
+}
+
 export async function fetchSequencerWeight(sdk: any, processId: string, address: string): Promise<bigint> {
   if (!sdk) return 0n;
   const api = sdk.api?.sequencer;

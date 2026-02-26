@@ -13,6 +13,7 @@ The objective is to minimize user friction while preserving clear status visibil
 ## Scope
 ### In scope
 - End-to-end process creation at `/`.
+- Explore page at `/explore` listing compatible processes created with this app metadata conventions.
 - Wallet connection for creation (injected wallet first, WalletConnect fallback).
 - Full creation pipeline with stage-by-stage status.
 - Voting flow at `/vote/:processId`.
@@ -23,10 +24,11 @@ The objective is to minimize user friction while preserving clear status visibil
 ### Out of scope
 - Smart-contract development changes.
 - Backend services added by this app.
-- Generic process browsing/search features.
+- Backend indexing/search endpoints beyond sequencer `listProcesses()`.
 
 ## Route behavior
 - `/` -> create view.
+- `/explore` -> explore compatible processes created with this app metadata shape.
 - `/vote/:processId` -> vote view with required process ID.
 - `/vote` or invalid `/vote/:processId` -> **blocking popup**; app is intentionally unusable until a valid process link is used.
 
@@ -57,6 +59,17 @@ The objective is to minimize user friction while preserving clear status visibil
 - If already registered in sequencer census, registration area is locked/blurred with explicit success messaging.
 - Question options remain disabled until readiness is satisfied.
 - Vote status flow shown when a vote ID exists (with local persistence).
+
+### Explore flow
+- Compact list rows ordered newest-first.
+- Filters processes by `metadata.meta.selfConfig` core fields:
+  - `scope`/`scopeSeed`
+  - `minAge`
+  - `countries` (or legacy `country` fallback)
+- Each row links directly to `/vote/:processId`.
+- Row content includes status, countries, minimum age, and remaining time while status is READY.
+- Pagination uses "Load more" and handles sparse matches.
+- Auto-refresh updates loaded rows every 30 seconds.
 
 ## Creation pipeline stages
 1. `validate_form`
