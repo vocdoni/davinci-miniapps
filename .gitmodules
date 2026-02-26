@@ -1,3 +1,18 @@
-[submodule "self-open-citizen-census/lib/davinci-contracts"]
-	path = self-open-citizen-census/lib/davinci-contracts
+[submodule "selfxyz-davinci-miniapp/contract/lib/davinci-contracts"]
+	path = selfxyz-davinci-miniapp/contract/lib/davinci-contracts
 	url = https://github.com/vocdoni/davinci-contracts
+[submodule "selfxyz-davinci-miniapp/contract/lib/forge-std"]
+	path = selfxyz-davinci-miniapp/contract/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std.git
+[submodule "selfxyz-davinci-miniapp/contract/lib/openzeppelin-contracts"]
+	path = selfxyz-davinci-miniapp/contract/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
+[submodule "selfxyz-davinci-miniapp/contract/lib/self"]
+	path = selfxyz-davinci-miniapp/contract/lib/self
+	url = https://github.com/selfxyz/self.git
+[submodule "selfxyz-davinci-miniapp/contract/lib/zk-kit.solidity"]
+	path = selfxyz-davinci-miniapp/contract/lib/zk-kit.solidity
+	url = https://github.com/zk-kit/zk-kit.solidity.git
+[submodule "selfxyz-davinci-miniapp/contract/lib/poseidon-solidity"]
+	path = selfxyz-davinci-miniapp/contract/lib/poseidon-solidity
+	url = https://github.com/chancehudson/poseidon-solidity.git
