@@ -60,7 +60,12 @@ import {
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
 import { detectRegistrationMobileMode } from './vote/device';
-import { createPendingVoteIntent, evaluateVoteSubmitGate, shouldAutoSubmitPendingVote } from './vote/submitFlow';
+import {
+  buildSingleQuestionBallotValues,
+  createPendingVoteIntent,
+  evaluateVoteSubmitGate,
+  shouldAutoSubmitPendingVote,
+} from './vote/submitFlow';
 import type { PendingVoteIntent, RegistrationModalState } from './vote/types';
 
 interface ManagedWalletSnapshot {
@@ -384,10 +389,11 @@ export default function VoteRoute() {
     }
   }, []);
 
-  const refreshVoteReadiness = useCallback(async () => {
+  const refreshVoteReadiness = useCallback(async (override?: { processId?: string; censusContract?: string; sdk?: any }) => {
     const resolution = resolutionRef.current;
-    const processId = resolution.processId;
-    const contractAddress = resolution.censusContract;
+    const processId = override?.processId ?? resolution.processId;
+    const contractAddress = override?.censusContract ?? resolution.censusContract;
+    const sdk = override?.sdk ?? resolution.sdk;
     const wallet = managedWalletRef.current;
     const managedAddress = wallet?.address || '';
 
@@ -396,9 +402,9 @@ export default function VoteRoute() {
       return;
     }
 
-    if (resolution.sdk) {
+    if (sdk) {
       try {
-        const latestProcess = await getProcessFromSequencer(resolution.sdk, processId);
+        const latestProcess = await getProcessFromSequencer(sdk, processId);
         if (latestProcess && typeof latestProcess === 'object') {
           setVoteResolution((previous) => ({
             ...previous,
@@ -432,7 +438,7 @@ export default function VoteRoute() {
     }
 
     try {
-      const sequencerWeight = await fetchSequencerWeight(resolution.sdk, processId, managedAddress);
+      const sequencerWeight = await fetchSequencerWeight(sdk, processId, managedAddress);
       setVoteResolution((previous) => ({ ...previous, sequencerWeight }));
     } catch {
       setVoteResolution((previous) => ({ ...previous, sequencerWeight: 0n }));
@@ -796,7 +802,11 @@ export default function VoteRoute() {
           }
         }
 
-        await refreshVoteReadiness();
+        await refreshVoteReadiness({
+          processId: normalizedProcessId,
+          censusContract: contractAddress,
+          sdk,
+        });
         await refreshHasVotedFlag();
         startVotePolling();
 
@@ -928,7 +938,7 @@ export default function VoteRoute() {
   }, []);
 
   const submitVoteSnapshot = useCallback(
-    async (choices: number[]): Promise<boolean> => {
+    async (selectedChoices: number[]): Promise<boolean> => {
       if (voteBallotRef.current.submitting) return false;
 
       const resolution = resolutionRef.current;
@@ -955,6 +965,14 @@ export default function VoteRoute() {
         setVoteStatusMessage('Current vote is still processing. Wait until status becomes Settled or Error before overwriting.', true);
         return false;
       }
+      if (!ballot.question) {
+        setVoteStatusMessage('No question available for this process.', true);
+        return false;
+      }
+      if (selectedChoices.length !== 1) {
+        setVoteStatusMessage('Select one option before submitting.', true);
+        return false;
+      }
 
       const censusUrl = trimTrailingSlash(CONFIG.onchainIndexerUrl);
       if (!censusUrl) {
@@ -973,7 +991,18 @@ export default function VoteRoute() {
         });
         await sdk.init();
 
-        const result = await sdk.submitVote({ processId, choices });
+        let ballotValues: number[] = [];
+        try {
+          ballotValues = buildSingleQuestionBallotValues(
+            Number(selectedChoices[0]),
+            ballot.question.choices.map((choice) => Number(choice.value))
+          );
+        } catch (error) {
+          setVoteStatusMessage(error instanceof Error ? error.message : 'Selected option is not valid for this vote question.', true);
+          return false;
+        }
+
+        const result = await sdk.submitVote({ processId, choices: ballotValues });
         const voteId = String(result?.voteId || '');
         const voteStatus = String(result?.status || 'pending');
 
@@ -1063,6 +1092,12 @@ export default function VoteRoute() {
       return;
     }
 
+    await refreshVoteReadiness();
+    if (hasVoteReadiness(resolutionRef.current)) {
+      await submitVoteSnapshot(pendingIntent.choiceSnapshot);
+      return;
+    }
+
     setPendingVoteIntent(pendingIntent);
     setRegistrationModal({
       open: true,
@@ -1075,7 +1110,7 @@ export default function VoteRoute() {
     if (!voteSelfRef.current.link && !voteSelfRef.current.generating) {
       void generateVoteSelfQr(true);
     }
-  }, [pendingVoteIntent, setVoteStatusMessage, submitVoteSnapshot]);
+  }, [pendingVoteIntent, refreshVoteReadiness, setVoteStatusMessage, submitVoteSnapshot]);
 
   const closeRegistrationModal = useCallback(
     (
