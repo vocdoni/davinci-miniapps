@@ -1,8 +1,9 @@
 import { ACTIVE_NETWORK, encodeWeightOf } from '../lib/occ';
+import { COPY } from '../copy';
 
 export async function ethCall(to: string, data: string, rpcUrl = ACTIVE_NETWORK.rpcUrl): Promise<string> {
   if (!rpcUrl) {
-    throw new Error('RPC unavailable for active network.');
+    throw new Error(COPY.readinessService.rpcUnavailable);
   }
 
   const response = await fetch(rpcUrl, {
@@ -18,7 +19,7 @@ export async function ethCall(to: string, data: string, rpcUrl = ACTIVE_NETWORK.
 
   const json = (await response.json()) as { error?: { message?: string }; result?: string };
   if (json.error) {
-    throw new Error(json.error.message || 'eth_call failed');
+    throw new Error(json.error.message || COPY.readinessService.ethCallFailed);
   }
 
   return json.result || '0x0';

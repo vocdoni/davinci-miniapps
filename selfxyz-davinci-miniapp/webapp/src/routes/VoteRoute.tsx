@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import { SelfAppBuilder, SelfQRcodeWrapper } from '@selfxyz/qrcode';
 
+import { COPY } from '../copy';
 import {
   ACTIVE_NETWORK,
   CENSUS_INTERFACE,
@@ -185,19 +186,19 @@ function shouldShowVoteResults(statusCode: number | null): boolean {
 function getClosedProcessMessage(resolution: VoteResolutionState): string {
   const statusCode = normalizeProcessStatus(resolution.statusCode);
   if (statusCode === ProcessStatus.RESULTS) {
-    return 'This process is in results stage. Registration and voting are closed.';
+    return COPY.vote.closedProcess.results;
   }
   if (statusCode === ProcessStatus.ENDED || hasProcessEndedByTime(resolution.endDateMs)) {
-    return 'This process has ended. Registration and voting are closed.';
+    return COPY.vote.closedProcess.ended;
   }
   if (statusCode === ProcessStatus.PAUSED) {
-    return 'This process is paused. Registration and voting are closed.';
+    return COPY.vote.closedProcess.paused;
   }
   if (statusCode === ProcessStatus.CANCELED) {
-    return 'This process was canceled. Registration and voting are closed.';
+    return COPY.vote.closedProcess.canceled;
   }
   if (!resolution.isAcceptingVotes) {
-    return 'This process is not accepting votes yet.';
+    return COPY.vote.closedProcess.notAccepting;
   }
   return '';
 }
@@ -255,22 +256,22 @@ function formatVoteLifecycle(resolution: VoteResolutionState): {
   const endedByTime = hasProcessEndedByTime(resolution.endDateMs);
 
   let stateKey = statusInfo?.key || 'ready';
-  let title = statusInfo?.title || 'Vote Active';
-  let label = statusInfo?.label || 'Active';
-  let description = statusInfo?.description || 'Voting is open while this process remains active.';
+  let title = statusInfo?.title || COPY.vote.lifecycle.defaultTitle;
+  let label = statusInfo?.label || COPY.vote.lifecycle.defaultLabel;
+  let description = statusInfo?.description || COPY.vote.lifecycle.defaultDescription;
 
   if (!statusInfo && !resolution.isAcceptingVotes) {
     stateKey = 'paused';
-    title = 'Vote Pending';
-    label = 'Not started';
-    description = 'This process is not accepting votes yet.';
+    title = COPY.vote.lifecycle.pendingTitle;
+    label = COPY.vote.lifecycle.notStartedLabel;
+    description = COPY.vote.closedProcess.notAccepting;
   }
 
   if (endedByTime && stateKey === 'ready') {
     stateKey = 'ended';
-    title = 'Vote Ended';
-    label = 'Ended';
-    description = 'Voting time has ended. Registration and voting are closed.';
+    title = COPY.vote.lifecycle.endedTitle;
+    label = COPY.vote.lifecycle.endedLabel;
+    description = COPY.vote.lifecycle.endedDescription;
   }
 
   return { stateKey, title, label, description };
@@ -320,14 +321,12 @@ export default function VoteRoute() {
     [baseUrl]
   );
   const navbarLinks = useMemo(
-    () => [{ id: 'voteExploreLink', href: buildAppHref('/explore'), label: 'Explore' }],
+    () => [{ id: 'voteExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
     [buildAppHref]
   );
 
   const [contextBlocked, setContextBlocked] = useState(false);
-  const [contextMessage, setContextMessage] = useState(
-    'A valid process ID is required to use this app. Please request the complete /vote/:processId link from the person or team that shared this app.'
-  );
+  const [contextMessage, setContextMessage] = useState(COPY.vote.context.invalidProcessId);
 
   const [voteResolution, setVoteResolution] = useState<VoteResolutionState>(EMPTY_RESOLUTION);
   const [managedWallet, setManagedWallet] = useState<ManagedWalletSnapshot | null>(null);
@@ -340,7 +339,7 @@ export default function VoteRoute() {
   const [registrationModal, setRegistrationModal] = useState<RegistrationModalState>(EMPTY_REGISTRATION_MODAL);
   const [pendingVoteIntent, setPendingVoteIntent] = useState<PendingVoteIntent | null>(null);
   const [voteStatusDetailsOpen, setVoteStatusDetailsOpen] = useState(false);
-  const [copyVoteIdLabel, setCopyVoteIdLabel] = useState('Copy');
+  const [copyVoteIdLabel, setCopyVoteIdLabel] = useState(COPY.shared.copy);
 
   const votePollRef = useRef<number | null>(null);
   const pendingAutoSubmitRef = useRef(false);
@@ -546,12 +545,12 @@ export default function VoteRoute() {
     setRegistrationModal(EMPTY_REGISTRATION_MODAL);
     setVoteDetailsOpen(false);
     setVoteIdentityOpen(false);
-    setVoteStatusMessage('Resolve process and managed wallet before generating Self QR.');
+    setVoteStatusMessage(COPY.vote.status.resolveProcessAndWallet);
   }, [clearVoteBallot, setVoteStatusMessage, stopVotePolling]);
 
   const loadVoteQuestions = useCallback(
     async (process: any, metadata: any) => {
-      clearVoteBallot('Loading process question...');
+      clearVoteBallot(COPY.vote.status.loadingQuestion);
       setVoteBallot((previous) => ({ ...previous, loading: true }));
 
       try {
@@ -571,16 +570,16 @@ export default function VoteRoute() {
         }));
 
         if (!singleQuestion) {
-          setVoteStatusMessage('No vote question was found in this process.', true);
+          setVoteStatusMessage(COPY.vote.status.noQuestionFound, true);
           return;
         }
 
         if (resolvedQuestions.length > 1) {
-          setVoteStatusMessage('This app supports one question only. Showing the first question.');
+          setVoteStatusMessage(COPY.vote.status.oneQuestionOnly);
         }
       } catch (error) {
-        clearVoteBallot(error instanceof Error ? error.message : 'Failed to load process question.');
-        setVoteStatusMessage(error instanceof Error ? error.message : 'Failed to load process question.', true);
+        clearVoteBallot(error instanceof Error ? error.message : COPY.vote.status.failedLoadQuestion);
+        setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedLoadQuestion, true);
       } finally {
         setVoteBallot((previous) => ({ ...previous, loading: false }));
       }
@@ -603,7 +602,7 @@ export default function VoteRoute() {
     try {
       const alreadyVoted = await sdk.hasAddressVoted(processId, managedAddress);
       if (alreadyVoted && canOverwriteVote(voteBallotRef.current)) {
-        setVoteStatusMessage('This identity wallet already has a vote in sequencer. You can submit again to overwrite it.');
+        setVoteStatusMessage(COPY.vote.status.alreadyVotedOverwrite);
       }
     } catch {
       // Ignore remote voted flag errors.
@@ -625,7 +624,7 @@ export default function VoteRoute() {
           persistVoteSubmission(processId, voterAddress, { voteId, status: nextStatus });
 
           const statusLabel = formatVoteStatusLabel(nextStatus);
-          setVoteStatusMessage(`Vote submitted. Current status: ${statusLabel}.`);
+          setVoteStatusMessage(COPY.vote.status.voteStatusUpdate(statusLabel));
 
           const normalized = String(nextStatus || '').toLowerCase();
           if (normalized === 'settled' || normalized === 'error') {
@@ -679,7 +678,7 @@ export default function VoteRoute() {
       const normalizedProcessId = normalizeProcessId(processId);
       if (!normalizedProcessId) {
         resetVoteResolution();
-        setVoteStatusMessage('Enter a process ID to resolve it.');
+        setVoteStatusMessage(COPY.vote.status.enterProcessId);
         return;
       }
 
@@ -697,10 +696,10 @@ export default function VoteRoute() {
         countries: [],
         country: '',
       }));
-      clearVoteBallot('Resolving process...');
+      clearVoteBallot(COPY.vote.status.resolvingProcess);
 
       if (!silent) {
-        setVoteStatusMessage('Resolving process from sequencer...');
+        setVoteStatusMessage(COPY.vote.status.resolvingFromSequencer);
       }
 
       try {
@@ -811,12 +810,12 @@ export default function VoteRoute() {
         startVotePolling();
 
         if (!silent) {
-          setVoteStatusMessage('Process resolved. Readiness checks are active.');
+          setVoteStatusMessage(COPY.vote.status.processResolved);
         }
       } catch (error) {
         console.error('[OpenCitizenCensus] Failed to resolve process', error);
         resetVoteResolution();
-        setVoteStatusMessage(error instanceof Error ? error.message : 'Failed to resolve process.', true);
+        setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedResolveProcess, true);
       }
     },
     [
@@ -856,15 +855,15 @@ export default function VoteRoute() {
       return;
     }
     if (!processId || !contractAddress || !managedAddress) {
-      setVoteStatusMessage('Resolve process and managed wallet before generating Self QR.', true);
+      setVoteStatusMessage(COPY.vote.status.resolveProcessAndWallet, true);
       return;
     }
     if (!scopeSeed) {
-      setVoteStatusMessage('Scope seed is required to generate Self QR.', true);
+      setVoteStatusMessage(COPY.vote.status.scopeSeedRequired, true);
       return;
     }
     if (!/^[\x00-\x7F]+$/.test(scopeSeed) || scopeSeed.length > 31) {
-      setVoteStatusMessage('Scope seed must be ASCII and up to 31 characters.', true);
+      setVoteStatusMessage(COPY.vote.status.scopeSeedAscii, true);
       return;
     }
 
@@ -874,7 +873,7 @@ export default function VoteRoute() {
 
     try {
       if (!auto) {
-        setVoteStatusMessage('Generating Self QR...');
+        setVoteStatusMessage(COPY.vote.status.generatingSelfQr);
       }
 
       let minAge = self.minAge;
@@ -891,7 +890,7 @@ export default function VoteRoute() {
       };
 
       const selfApp = new SelfAppBuilder({
-        appName: CONFIG.selfAppName || 'Ask The World - DAVINCI',
+        appName: CONFIG.selfAppName || COPY.brand.documentTitle,
         scope: scopeSeed,
         endpoint: String(contractAddress).toLowerCase(),
         endpointType: toSelfEndpointType(resolution.network),
@@ -910,10 +909,10 @@ export default function VoteRoute() {
       }));
 
       if (!auto) {
-        setVoteStatusMessage('Self QR ready. Complete verification in Self and wait for readiness to turn Yes.');
+        setVoteStatusMessage(COPY.vote.status.selfQrReady);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to generate Self QR.';
+      const message = error instanceof Error ? error.message : COPY.vote.status.failedGenerateSelfQr;
       setVoteStatusMessage(message, true);
     } finally {
       setVoteSelf((previous) => ({ ...previous, generating: false }));
@@ -925,9 +924,9 @@ export default function VoteRoute() {
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      setVoteStatusMessage('Self link copied to clipboard.');
+      setVoteStatusMessage(COPY.vote.status.selfLinkCopied);
     } catch {
-      setVoteStatusMessage('Failed to copy Self link.', true);
+      setVoteStatusMessage(COPY.vote.status.failedCopySelfLink, true);
     }
   }, [setVoteStatusMessage]);
 
@@ -947,7 +946,7 @@ export default function VoteRoute() {
       const processId = resolution.processId;
 
       if (!processId || !wallet?.privateKey) {
-        setVoteStatusMessage('Resolve process and managed wallet before submitting vote.', true);
+        setVoteStatusMessage(COPY.vote.status.resolveBeforeSubmit, true);
         return false;
       }
       if (isVoteProcessClosed(resolution)) {
@@ -956,33 +955,33 @@ export default function VoteRoute() {
       }
       if (!hasVoteReadiness(resolution)) {
         const message = isOnchainReadinessRequired(resolution)
-          ? 'Registration still pending. Wait until Onchain and Sequencer readiness are both Yes.'
-          : 'Registration still pending. Wait until Sequencer readiness is Yes.';
+          ? COPY.vote.status.registrationPendingBoth
+          : COPY.vote.status.registrationPendingSequencer;
         setVoteStatusMessage(message, true);
         return false;
       }
       if (!canOverwriteVote(ballot)) {
-        setVoteStatusMessage('Current vote is still processing. Wait until status becomes Settled or Error before overwriting.', true);
+        setVoteStatusMessage(COPY.vote.status.voteInProgressOverwrite, true);
         return false;
       }
       if (!ballot.question) {
-        setVoteStatusMessage('No question available for this process.', true);
+        setVoteStatusMessage(COPY.vote.status.noQuestionAvailable, true);
         return false;
       }
       if (selectedChoices.length !== 1) {
-        setVoteStatusMessage('Select one option before submitting.', true);
+        setVoteStatusMessage(COPY.vote.status.selectOneOption, true);
         return false;
       }
 
       const censusUrl = trimTrailingSlash(CONFIG.onchainIndexerUrl);
       if (!censusUrl) {
-        setVoteStatusMessage('Missing census URL config for vote proof generation.', true);
+        setVoteStatusMessage(COPY.vote.status.missingCensusConfig, true);
         return false;
       }
 
       try {
         setVoteBallot((previous) => ({ ...previous, submitting: true }));
-        setVoteStatusMessage('Submitting vote...');
+        setVoteStatusMessage(COPY.vote.status.submittingVote);
 
         const sdk = createSequencerSdk({
           signer: new Wallet(wallet.privateKey),
@@ -998,7 +997,7 @@ export default function VoteRoute() {
             ballot.question.choices.map((choice) => Number(choice.value))
           );
         } catch (error) {
-          setVoteStatusMessage(error instanceof Error ? error.message : 'Selected option is not valid for this vote question.', true);
+          setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.invalidOptionForQuestion, true);
           return false;
         }
 
@@ -1018,14 +1017,14 @@ export default function VoteRoute() {
           voteId,
           status: voteStatus,
         });
-        setVoteStatusMessage('Vote submitted successfully.');
+        setVoteStatusMessage(COPY.vote.status.voteSubmitted);
 
         const watcherToken = voteBallotRef.current.statusWatcherToken + 1;
         setVoteBallot((previous) => ({ ...previous, statusWatcherToken: watcherToken }));
         void trackVoteSubmissionStatus(sdk, processId, voteId, watcherToken, wallet.address);
         return true;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to submit vote.';
+        const message = error instanceof Error ? error.message : COPY.vote.status.failedSubmitVote;
         if (voteBallotRef.current.submissionId) {
           setVoteBallot((previous) => ({ ...previous, hasVoted: false, submissionStatus: 'error' }));
           persistVoteSubmission(processId, wallet.address, {
@@ -1083,7 +1082,7 @@ export default function VoteRoute() {
     try {
       pendingIntent = createPendingVoteIntent(processId, walletAddress, [ballot.choice]);
     } catch (error) {
-      setVoteStatusMessage(error instanceof Error ? error.message : 'Select one option before submitting.', true);
+      setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.selectOneOption, true);
       return;
     }
 
@@ -1105,7 +1104,7 @@ export default function VoteRoute() {
       isMobile: detectRegistrationMobileMode(),
       status: 'waiting',
     });
-    setVoteStatusMessage('Registration required. Complete Self verification and your vote will submit automatically.');
+    setVoteStatusMessage(COPY.vote.status.registrationRequired);
 
     if (!voteSelfRef.current.link && !voteSelfRef.current.generating) {
       void generateVoteSelfQr(true);
@@ -1137,7 +1136,7 @@ export default function VoteRoute() {
 
   const closeContextGatePopup = useCallback(() => {
     setContextBlocked(false);
-    setVoteStatusMessage('A valid /vote/:processId link is required to continue.', true);
+    setVoteStatusMessage(COPY.vote.context.requiredToContinue, true);
   }, [setVoteStatusMessage]);
 
   useEffect(() => {
@@ -1148,7 +1147,7 @@ export default function VoteRoute() {
     const rawSegment = decodeURIComponent(String(params.processId || '')).trim();
 
     if (!rawSegment) {
-      const message = 'Missing process ID in URL. Open the complete /vote/:processId link shared for this process.';
+      const message = COPY.vote.context.missingInUrl;
       setContextBlocked(true);
       setContextMessage(message);
       resetVoteResolution();
@@ -1158,7 +1157,7 @@ export default function VoteRoute() {
 
     const normalized = normalizeProcessId(rawSegment);
     if (!isValidProcessId(normalized)) {
-      const message = 'Invalid process ID in URL. Open a valid /vote/:processId link to use this app.';
+      const message = COPY.vote.context.invalidInUrl;
       setContextBlocked(true);
       setContextMessage(message);
       resetVoteResolution();
@@ -1239,7 +1238,7 @@ export default function VoteRoute() {
     const activeProcessId = normalizeProcessId(voteResolution.processId);
     if (!activeProcessId || pendingVoteIntent.processId !== activeProcessId) {
       closeRegistrationModal('process_changed', {
-        statusMessage: 'Process changed while registration was pending. Submit vote again for this process.',
+        statusMessage: COPY.vote.status.registrationProcessChanged,
       });
     }
   }, [closeRegistrationModal, pendingVoteIntent, voteResolution.processId]);
@@ -1249,7 +1248,7 @@ export default function VoteRoute() {
     const activeWalletAddress = String(managedWallet?.address || '').toLowerCase();
     if (!activeWalletAddress || pendingVoteIntent.walletAddress.toLowerCase() !== activeWalletAddress) {
       closeRegistrationModal('wallet_changed', {
-        statusMessage: 'Managed wallet changed while registration was pending. Submit vote again.',
+        statusMessage: COPY.vote.status.registrationWalletChanged,
       });
     }
   }, [closeRegistrationModal, managedWallet?.address, pendingVoteIntent]);
@@ -1292,7 +1291,7 @@ export default function VoteRoute() {
 
       setPendingVoteIntent(null);
       setRegistrationModal((previous) => ({ ...previous, status: 'error' }));
-      setVoteStatusMessage('Vote was not submitted after registration. Review the error and click submit vote again.', true);
+      setVoteStatusMessage(COPY.vote.status.autoSubmitFailed, true);
       pendingAutoSubmitRef.current = false;
     })();
   }, [
@@ -1332,16 +1331,16 @@ export default function VoteRoute() {
     !pendingVoteIntent;
 
   const voteButtonLabel = voteBallot.submitting
-    ? 'Submitting vote...'
+    ? COPY.vote.buttons.submittingVote
     : processClosed
-      ? 'Voting closed'
+      ? COPY.vote.buttons.votingClosed
       : pendingVoteIntent
-        ? 'Waiting for registration...'
+        ? COPY.vote.buttons.waitingForRegistration
         : hasStoredVoteId && isVoteStatusTerminal(voteBallot.submissionStatus)
-          ? 'Submit vote again'
+          ? COPY.vote.buttons.submitVoteAgain
           : hasStoredVoteId
-            ? 'Vote in progress'
-            : 'Submit vote';
+            ? COPY.vote.buttons.voteInProgress
+            : COPY.vote.buttons.submitVote;
 
   const voteButtonIcon =
     voteBallot.submitting || pendingVoteIntent
@@ -1372,8 +1371,8 @@ export default function VoteRoute() {
     if (onchainRequired) {
       steps.push({
         id: 'onchain',
-        label: 'Onchain census inclusion',
-        description: 'After Self verification, this step completes when onchain weight is greater than zero.',
+        label: COPY.vote.registration.progressSteps.onchainLabel,
+        description: COPY.vote.registration.progressSteps.onchainDescription,
         done: onchainReady,
       });
     }
@@ -1381,14 +1380,14 @@ export default function VoteRoute() {
     steps.push(
       {
         id: 'sequencer',
-        label: 'Sequencer census inclusion',
-        description: 'This step completes when sequencer weight is greater than zero.',
+        label: COPY.vote.registration.progressSteps.sequencerLabel,
+        description: COPY.vote.registration.progressSteps.sequencerDescription,
         done: sequencerReady,
       },
       {
         id: 'ready',
-        label: 'Ready to submit',
-        description: 'Vote submission unlocks as soon as readiness checks pass.',
+        label: COPY.vote.registration.progressSteps.readyLabel,
+        description: COPY.vote.registration.progressSteps.readyDescription,
         done: readyToVote,
       }
     );
@@ -1427,16 +1426,16 @@ export default function VoteRoute() {
     const isErrorStatus = normalizedStatus === 'error';
     const isSettledStatus = normalizedStatus === 'settled';
 
-    let title = 'Vote successfully received';
-    let description = 'Your vote is secured and being finalized.';
+    let title = COPY.vote.submitResult.receivedTitle;
+    let description = COPY.vote.submitResult.receivedDescription;
     let iconClass = 'iconoir-check-circle';
 
     if (isSettledStatus) {
-      title = 'Vote finalized successfully';
-      description = 'Your vote has been fully settled.';
+      title = COPY.vote.submitResult.finalizedTitle;
+      description = COPY.vote.submitResult.finalizedDescription;
     } else if (isErrorStatus) {
-      title = 'Vote processing failed';
-      description = 'Processing failed for this vote. Expand the panel for details and try again if needed.';
+      title = COPY.vote.submitResult.failedTitle;
+      description = COPY.vote.submitResult.failedDescription;
       iconClass = 'iconoir-warning-circle';
     }
 
@@ -1452,19 +1451,19 @@ export default function VoteRoute() {
   const voteHeaderQuestionTitle = (() => {
     const questionTitle = String(voteBallot.question?.title || '').trim();
     if (questionTitle) return questionTitle;
-    if (voteBallot.loading) return 'Loading question...';
-    return 'Choose an option';
+    if (voteBallot.loading) return COPY.vote.header.loadingQuestion;
+    return COPY.vote.header.chooseOption;
   })();
 
   const voteHeaderHelpText = voteResultsVisible ? (
-    'Results are available for this process.'
+    COPY.vote.header.resultsAvailable
   ) : (
     <>
-      Choose an option, register with the{' '}
+      {COPY.vote.header.helpBeforeSelf}{' '}
       <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
         Self.xyz
       </a>{' '}
-      app to join the census, and then submit your vote.
+      {COPY.vote.header.helpAfterSelf}
     </>
   );
   const voteSelfCountriesText =
@@ -1480,7 +1479,7 @@ export default function VoteRoute() {
           brandId="voteNavbarBrand"
           baseHref={baseUrl}
           logoSrc={withBase('davinci_logo.png')}
-          brandLabel="Ask The World"
+          brandLabel={COPY.brand.appName}
           navLinks={navbarLinks}
         >
           <div className="vote-lifecycle-card vote-lifecycle-header-card vote-navbar-widget" id="voteLifecycleCard" hidden={!voteResolution.processId} data-state={lifecycle.stateKey}>
@@ -1503,7 +1502,7 @@ export default function VoteRoute() {
                 onClick={() => setVoteDetailsOpen(true)}
               >
                 <span className="btn-icon iconoir-info-circle" aria-hidden="true" />
-                <span className="btn-text">Details</span>
+                <span className="btn-text">{COPY.vote.buttons.details}</span>
               </button>
               <button
                 id="showIdentityInfoBtn"
@@ -1513,7 +1512,7 @@ export default function VoteRoute() {
                 onClick={() => setVoteIdentityOpen(true)}
               >
                 <span className="btn-icon iconoir-user" aria-hidden="true" />
-                <span className="btn-text">Identity</span>
+                <span className="btn-text">{COPY.vote.buttons.identity}</span>
               </button>
             </div>
           </div>
@@ -1531,19 +1530,19 @@ export default function VoteRoute() {
         <PopupModal
           id="voteDetailsDialog"
           open={voteDetailsOpen}
-          title="Process Details"
+          title={COPY.vote.dialogs.processDetailsTitle}
           titleId="voteDetailsDialogTitle"
           className="vote-popup vote-details-popup"
           cardClassName="vote-popup-card vote-details-popup-card"
           bodyClassName="vote-popup-body"
           closeButtonId="closeVoteDetailsBtn"
-          closeLabel="Close process details popup"
+          closeLabel={COPY.vote.dialogs.processDetailsClose}
           onClose={() => setVoteDetailsOpen(false)}
         >
           <table className="details-table">
             <tbody>
               <tr>
-                <th>Process ID</th>
+                <th>{COPY.vote.dialogs.processId}</th>
                 <td>
                   <code id="voteProcessId" className="output-scroll details-url-scroll">
                     {voteResolution.processId || '-'}
@@ -1551,13 +1550,13 @@ export default function VoteRoute() {
                 </td>
               </tr>
               <tr>
-                <th>Duration</th>
+                <th>{COPY.vote.dialogs.duration}</th>
                 <td>
                   <strong id="voteProcessDuration">{voteConfiguredDuration}</strong>
                 </td>
               </tr>
               <tr>
-                <th>Census contract</th>
+                <th>{COPY.vote.dialogs.censusContract}</th>
                 <td>
                   <code id="voteCensusContract" className="output-scroll details-url-scroll">
                     {voteResolution.censusContract || '-'}
@@ -1565,7 +1564,7 @@ export default function VoteRoute() {
                 </td>
               </tr>
               <tr>
-                <th>Census URI</th>
+                <th>{COPY.vote.dialogs.censusUri}</th>
                 <td>
                   <span id="voteCensusUri" className="output-scroll details-url-scroll">
                     {voteResolution.censusUri || '-'}
@@ -1573,7 +1572,7 @@ export default function VoteRoute() {
                 </td>
               </tr>
               <tr>
-                <th>Sequencer</th>
+                <th>{COPY.vote.dialogs.sequencer}</th>
                 <td>
                   <span id="voteSequencerUrl" className="output-scroll details-url-scroll">
                     {CONFIG.davinciSequencerUrl || '-'}
@@ -1587,21 +1586,21 @@ export default function VoteRoute() {
         <PopupModal
           id="voteIdentityDialog"
           open={voteIdentityOpen}
-          title="Managed Identity Wallet"
+          title={COPY.vote.dialogs.managedIdentityTitle}
           titleId="voteIdentityDialogTitle"
           className="vote-popup vote-identity-popup"
           cardClassName="vote-popup-card vote-identity-popup-card"
           bodyClassName="vote-popup-body vote-identity-popup-body"
           closeButtonId="closeVoteIdentityBtn"
-          closeLabel="Close identity popup"
+          closeLabel={COPY.vote.dialogs.managedIdentityClose}
           onClose={() => setVoteIdentityOpen(false)}
         >
           <div className="identity-dialog-content">
             <p>
-              Address: <code id="walletAddress">{managedWallet?.address || '-'}</code>
+              {COPY.vote.dialogs.walletAddress}: <code id="walletAddress">{managedWallet?.address || '-'}</code>
             </p>
             <p>
-              Source: <span id="walletSource">{managedWallet?.source || '-'}</span>
+              {COPY.vote.dialogs.walletSource}: <span id="walletSource">{managedWallet?.source || '-'}</span>
             </p>
 
             <div className="row">
@@ -1612,14 +1611,16 @@ export default function VoteRoute() {
                 onClick={() => {
                   if (!managedWallet) return;
                   if (!privateVisible) {
-                    const confirmed = window.confirm('Revealing this key exposes signing authority. Continue?');
+                    const confirmed = window.confirm(COPY.vote.dialogs.revealKeyConfirm);
                     if (!confirmed) return;
                   }
                   setPrivateVisible((previous) => !previous);
                 }}
               >
                 <span className="btn-icon iconoir-eye" aria-hidden="true" />
-                <span className="btn-text">{privateVisible ? 'Hide private key' : 'Reveal private key'}</span>
+                <span className="btn-text">
+                  {privateVisible ? COPY.vote.buttons.hidePrivateKey : COPY.vote.buttons.revealPrivateKey}
+                </span>
               </button>
               <button
                 id="copyKeyBtn"
@@ -1630,30 +1631,30 @@ export default function VoteRoute() {
                   if (!managedWallet || !privateVisible) return;
                   try {
                     await navigator.clipboard.writeText(managedWallet.privateKey);
-                    setVoteStatusMessage('Private key copied to clipboard.');
+                    setVoteStatusMessage(COPY.vote.dialogs.privateKeyCopied);
                   } catch {
-                    setVoteStatusMessage('Failed to copy private key.', true);
+                    setVoteStatusMessage(COPY.vote.dialogs.failedCopyPrivateKey, true);
                   }
                 }}
               >
                 <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                <span className="btn-text">Copy private key</span>
+                <span className="btn-text">{COPY.vote.buttons.copyPrivateKey}</span>
               </button>
             </div>
 
             <div id="walletSecretBox" hidden={!privateVisible || !managedWallet}>
-              <code id="walletPrivateKey">{privateVisible && managedWallet ? managedWallet.privateKey : 'hidden'}</code>
+              <code id="walletPrivateKey">{privateVisible && managedWallet ? managedWallet.privateKey : COPY.shared.hidden}</code>
             </div>
 
             <label>
-              Import private key
+              {COPY.vote.dialogs.importPrivateKeyLabel}
               <input
                 id="importKeyInput"
                 name="import_private_key"
                 spellCheck={false}
                 autoComplete="off"
                 type="password"
-                placeholder="0xabc…"
+                placeholder={COPY.vote.dialogs.importPrivateKeyPlaceholder}
                 value={importKey}
                 onChange={(event) => setImportKey(event.target.value)}
               />
@@ -1667,7 +1668,7 @@ export default function VoteRoute() {
                 onClick={() => {
                   const processId = resolutionRef.current.processId;
                   if (!processId) {
-                    setVoteStatusMessage('Open /vote/:processId before importing a key.', true);
+                    setVoteStatusMessage(COPY.vote.dialogs.importBeforeProcess, true);
                     return;
                   }
 
@@ -1675,16 +1676,16 @@ export default function VoteRoute() {
                   try {
                     normalizedKey = String(importKey || '').trim();
                     if (!/^0x[a-fA-F0-9]{64}$/.test(normalizedKey)) {
-                      throw new Error('Private key must be 0x-prefixed 64 hex chars.');
+                      throw new Error(COPY.vote.dialogs.privateKeyFormatError);
                     }
                     // eslint-disable-next-line no-new
                     new Wallet(normalizedKey);
                   } catch (error) {
-                    setVoteStatusMessage(error instanceof Error ? error.message : 'Invalid private key.', true);
+                    setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.dialogs.invalidPrivateKey, true);
                     return;
                   }
 
-                  const confirmed = window.confirm('Importing this key will replace the derived key for this process. Continue?');
+                  const confirmed = window.confirm(COPY.vote.dialogs.importKeyConfirm);
                   if (!confirmed) return;
 
                   setWalletOverride(processId, normalizedKey);
@@ -1692,11 +1693,11 @@ export default function VoteRoute() {
                   bootstrapVoteManagedWallet(processId);
                   void refreshVoteReadiness();
                   void refreshHasVotedFlag();
-                  setVoteStatusMessage('Imported key applied for this process.');
+                  setVoteStatusMessage(COPY.vote.dialogs.importedKeyApplied);
                 }}
               >
                 <span className="btn-icon iconoir-key" aria-hidden="true" />
-                <span className="btn-text">Import key</span>
+                <span className="btn-text">{COPY.vote.buttons.importKey}</span>
               </button>
 
               <button
@@ -1706,7 +1707,7 @@ export default function VoteRoute() {
                 onClick={() => {
                   const processId = resolutionRef.current.processId;
                   if (!processId) {
-                    setVoteStatusMessage('Open /vote/:processId before resetting key.', true);
+                    setVoteStatusMessage(COPY.vote.dialogs.resetBeforeProcess, true);
                     return;
                   }
 
@@ -1714,43 +1715,43 @@ export default function VoteRoute() {
                   bootstrapVoteManagedWallet(processId);
                   void refreshVoteReadiness();
                   void refreshHasVotedFlag();
-                  setVoteStatusMessage('Derived key restored for this process.');
+                  setVoteStatusMessage(COPY.vote.dialogs.derivedKeyRestored);
                 }}
               >
                 <span className="btn-icon iconoir-refresh" aria-hidden="true" />
-                <span className="btn-text">Use derived key</span>
+                <span className="btn-text">{COPY.vote.buttons.useDerivedKey}</span>
               </button>
             </div>
 
-            <p className="muted danger">Warning: revealing or importing keys exposes signing authority for this process context.</p>
+            <p className="muted danger">{COPY.vote.dialogs.warningKeyExposure}</p>
           </div>
         </PopupModal>
 
         <article className="card vote-results-card" id="voteResultsCard" hidden={!voteResultsVisible}>
           <div className="vote-results-body">
             <section className="panel vote-results-summary">
-              <p className="label">Vote Summary</p>
+              <p className="label">{COPY.vote.results.summaryTitle}</p>
               <div className="grid two vote-results-summary-grid">
                 <div>
                   <p id="voteResultsTotalVotes" className="vote-results-summary-value">
                     {voteResultsModel.totalVotes}
                   </p>
-                  <p className="muted">Total votes</p>
+                  <p className="muted">{COPY.vote.results.totalVotes}</p>
                 </div>
                 <div>
                   <p id="voteResultsChoicesWithVotes" className="vote-results-summary-value">
                     {voteResultsModel.choicesWithVotes}
                   </p>
-                  <p className="muted">Choices with votes</p>
+                  <p className="muted">{COPY.vote.results.choicesWithVotes}</p>
                 </div>
               </div>
             </section>
 
             <section className="panel vote-results-detail">
               <div className="vote-results-detail-head">
-                <h4>Detailed Results</h4>
+                <h4>{COPY.vote.results.detailedResults}</h4>
                 <p id="voteResultsTotalVotesLabel" className="muted">
-                  Total: {voteResultsModel.totalVotes} vote{voteResultsModel.totalVotes === 1 ? '' : 's'}
+                  {COPY.vote.results.totalLabel(voteResultsModel.totalVotes)}
                 </p>
               </div>
 
@@ -1758,12 +1759,12 @@ export default function VoteRoute() {
                 {!voteResultsModel.hasComputedResults && (
                   <div className="vote-results-empty">
                     <span className="timeline-spinner" aria-hidden="true" />
-                    <span>Computing results</span>
+                    <span>{COPY.vote.results.computing}</span>
                   </div>
                 )}
 
                 {voteResultsModel.hasComputedResults && !voteResultsModel.choices.length && (
-                  <div className="vote-results-empty">No question metadata available for this process.</div>
+                  <div className="vote-results-empty">{COPY.vote.results.noMetadata}</div>
                 )}
 
                 {voteResultsModel.hasComputedResults && voteResultsModel.choices.length > 0 && (
@@ -1775,8 +1776,10 @@ export default function VoteRoute() {
                           <p className="vote-results-choice-votes">{choice.votes}</p>
                         </div>
                         <div className="vote-results-choice-meta">
-                          <p className="muted">{formatVotePercent(choice.votes, voteResultsModel.totalVotes)} of total votes</p>
-                          <p className="muted">Rank #{choice.rank}</p>
+                          <p className="muted">
+                            {formatVotePercent(choice.votes, voteResultsModel.totalVotes)} {COPY.vote.results.ofTotalVotes}
+                          </p>
+                          <p className="muted">{COPY.vote.results.rank(choice.rank)}</p>
                         </div>
                         <div className="vote-results-bar">
                           <span style={{ width: `${choice.percentage.toFixed(1)}%` }} />
@@ -1793,12 +1796,16 @@ export default function VoteRoute() {
         <article className="card vote-focus-card" id="voteBallotCard" hidden={voteResultsVisible}>
           <div id="voteQuestions" className="vote-questions">
             {!voteBallot.question && (
-              <p className="muted">{voteBallot.loading ? 'Loading process question...' : 'No question available for this process.'}</p>
+              <p className="muted">
+                {voteBallot.loading ? COPY.vote.status.loadingQuestion : COPY.vote.status.noQuestionAvailable}
+              </p>
             )}
 
             {voteBallot.question && (
               <fieldset className="vote-question-card">
-                <legend className="vote-question-legend-hidden">{voteBallot.question.title || 'Question'}</legend>
+                <legend className="vote-question-legend-hidden">
+                  {voteBallot.question.title || COPY.vote.ballot.questionLegendFallback}
+                </legend>
 
                 {voteBallot.question.choices.map((choice, choiceIndex) => {
                   const checked = voteBallot.choice !== null && Number(voteBallot.choice) === Number(choice.value);
@@ -1831,7 +1838,7 @@ export default function VoteRoute() {
               <span className="btn-text">{voteButtonLabel}</span>
             </button>
             <div className="vote-submit-remaining" id="voteRemainingCard">
-              <span className="vote-submit-remaining-label">Time until close</span>
+              <span className="vote-submit-remaining-label">{COPY.vote.ballot.timeUntilClose}</span>
               <strong id="voteProcessRemainingTime">{voteRemainingTimeText}</strong>
             </div>
           </div>
@@ -1860,16 +1867,16 @@ export default function VoteRoute() {
                 }}
               >
                 <span className="vote-status-details-label-wrap">
-                  <span className="vote-status-details-label">Track vote status</span>
+                  <span className="vote-status-details-label">{COPY.vote.ballot.trackVoteStatus}</span>
                   <span id="voteStatusDetailsMeta" className="muted vote-status-details-meta">
-                    {voteSubmitResult?.statusLabel || 'Pending'}
+                    {voteSubmitResult?.statusLabel || COPY.shared.pending}
                   </span>
                 </span>
               </summary>
 
               <div className="vote-status-details-body">
                 <div id="voteStatusFlowIdLine" className="vote-status-id-row" hidden={!hasStoredVoteId}>
-                  <p className="label">Vote ID</p>
+                  <p className="label">{COPY.vote.ballot.voteId}</p>
                   <div className="vote-status-id-actions">
                     <code id="voteStatusFlowVoteId" className="output-scroll">
                       {voteBallot.submissionId || '-'}
@@ -1884,16 +1891,25 @@ export default function VoteRoute() {
                         if (!voteId) return;
                         try {
                           await navigator.clipboard.writeText(voteId);
-                          setCopyVoteIdLabel('Copied');
+                          setCopyVoteIdLabel(COPY.shared.copied);
                         } catch {
-                          setCopyVoteIdLabel('Error');
+                          setCopyVoteIdLabel(COPY.shared.error);
                         }
                         window.setTimeout(() => {
-                          setCopyVoteIdLabel('Copy');
+                          setCopyVoteIdLabel(COPY.shared.copy);
                         }, 1200);
                       }}
                     >
-                      <span className={`btn-icon ${copyVoteIdLabel === 'Error' ? 'iconoir-warning-circle' : copyVoteIdLabel === 'Copied' ? 'iconoir-check' : 'iconoir-copy'}`} aria-hidden="true" />
+                      <span
+                        className={`btn-icon ${
+                          copyVoteIdLabel === COPY.shared.error
+                            ? 'iconoir-warning-circle'
+                            : copyVoteIdLabel === COPY.shared.copied
+                              ? 'iconoir-check'
+                              : 'iconoir-copy'
+                        }`}
+                        aria-hidden="true"
+                      />
                       <span className="btn-text">{copyVoteIdLabel}</span>
                     </button>
                   </div>
@@ -1935,19 +1951,19 @@ export default function VoteRoute() {
       <PopupModal
         id="voteRegistrationPopup"
         open={registrationModal.open}
-        title="Complete Self verification to continue"
+        title={COPY.vote.registration.popupTitle}
         titleId="voteRegistrationPopupTitle"
         className="vote-popup vote-registration-popup"
         cardClassName="vote-popup-card vote-registration-card"
         bodyClassName="vote-popup-body vote-registration-popup-body"
-        closeLabel="Close registration popup"
-        eyebrow="Registration required"
+        closeLabel={COPY.vote.registration.popupClose}
+        eyebrow={COPY.vote.registration.popupEyebrow}
         onClose={
           registrationManualCloseBlocked
             ? undefined
             : () =>
                 closeRegistrationModal('close', {
-                  statusMessage: 'Registration popup closed. Click submit vote again when you are ready.',
+                  statusMessage: COPY.vote.status.popupClosed,
                 })
         }
         backdropClosable={!registrationManualCloseBlocked}
@@ -1956,7 +1972,7 @@ export default function VoteRoute() {
           {!registrationModal.isMobile && (
             <div className="vote-registration-qr-column">
               <div id="voteSelfQrWrap" className="self-qr-wrap" hidden={!voteSelf.selfApp}>
-                <div id="voteSelfQrRoot" className="self-qr-root" aria-label="Self registration QR code">
+                <div id="voteSelfQrRoot" className="self-qr-root" aria-label={COPY.vote.registration.qrAria}>
                   {voteSelf.selfApp ? (
                     <SelfQRcodeWrapper
                       key={`${voteResolution.processId}-${voteSelf.link}`}
@@ -1964,16 +1980,16 @@ export default function VoteRoute() {
                       type="deeplink"
                       size={280}
                       onSuccess={() => {
-                        setVoteStatusMessage('Self verification completed. Waiting for onchain/sequencer readiness.');
+                        setVoteStatusMessage(COPY.vote.status.selfVerificationCompleted);
                         void refreshVoteReadiness();
                       }}
                       onError={(data: any = {}) => {
                         const reason = String(data.reason || data.error_code || '').trim();
-                        setVoteStatusMessage(reason ? `Self QR error: ${reason}` : 'Self verification failed.', true);
+                        setVoteStatusMessage(COPY.vote.status.selfQrError(reason), true);
                       }}
                     />
                   ) : (
-                    <p className="muted">Preparing Self QR...</p>
+                    <p className="muted">{COPY.vote.registration.preparingQr}</p>
                   )}
                 </div>
 
@@ -1981,27 +1997,27 @@ export default function VoteRoute() {
                   id="copyVoteSelfLinkBtn"
                   type="button"
                   className="cta-btn secondary qr-copy-btn"
-                  aria-label="Copy Self link"
-                  title="Copy Self link"
+                  aria-label={COPY.vote.registration.copySelfLinkAria}
+                  title={COPY.vote.registration.copySelfLinkTitle}
                   disabled={!voteSelf.link || processClosed}
                   onClick={() => void copyVoteSelfLink()}
                 >
                   <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                  <span className="btn-text">Copy link</span>
+                  <span className="btn-text">{COPY.vote.buttons.copyLink}</span>
                 </button>
               </div>
 
               <div className="vote-registration-requirements">
-                <p className="label">Requirements to vote</p>
+                <p className="label">{COPY.vote.registration.requirementsToVote}</p>
                 <div className="vote-registration-requirements-grid">
                   <div className="vote-registration-requirement">
-                    <p className="label">Minimum age</p>
+                    <p className="label">{COPY.vote.registration.minimumAge}</p>
                     <p className="value" id="voteSelfMinAgeInfo">
                       {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
                     </p>
                   </div>
                   <div className="vote-registration-requirement">
-                    <p className="label">Countries</p>
+                    <p className="label">{COPY.vote.registration.countries}</p>
                     <p className="value" id="voteCountryInfo">
                       {voteSelfCountriesText}
                     </p>
@@ -2012,18 +2028,20 @@ export default function VoteRoute() {
           )}
 
           <aside className="panel self-steps-panel">
-            <p className="label">Quick steps</p>
+            <p className="label">{COPY.vote.registration.quickSteps}</p>
             <ol className={`self-registration-steps ${registrationModal.isMobile ? 'is-mobile' : ''}`}>
               <li>
-                <p className="self-registration-step-title">{registrationModal.isMobile ? 'Open Self app' : 'Install Self app'}</p>
+                <p className="self-registration-step-title">
+                  {registrationModal.isMobile ? COPY.vote.registration.openSelfApp : COPY.vote.registration.installSelfApp}
+                </p>
                 <p className="self-step-helper">
                   {registrationModal.isMobile ? (
                     <>
-                      Get it on{' '}
+                      {COPY.vote.registration.mobileInstallHelpBeforeIos}{' '}
                       <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">
                         iOS
                       </a>{' '}
-                      or{' '}
+                      {COPY.vote.registration.mobileInstallHelpBetween}{' '}
                       <a
                         href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1"
                         target="_blank"
@@ -2035,11 +2053,11 @@ export default function VoteRoute() {
                     </>
                   ) : (
                     <>
-                      Available on{' '}
+                      {COPY.vote.registration.desktopInstallHelpBeforeIos}{' '}
                       <a href="https://apps.apple.com/pl/app/self-zk-passport-identity/id6478563710" target="_blank" rel="noreferrer">
                         iOS
                       </a>{' '}
-                      and{' '}
+                      {COPY.vote.registration.desktopInstallHelpBetween}{' '}
                       <a
                         href="https://play.google.com/store/apps/details?id=com.proofofpassportapp&hl=en&pli=1"
                         target="_blank"
@@ -2054,22 +2072,22 @@ export default function VoteRoute() {
               </li>
               <li>
                 <p className="self-registration-step-title">
-                  {registrationModal.isMobile ? 'Verify your ID or passport' : 'Use a valid ID or passport'}
+                  {registrationModal.isMobile ? COPY.vote.registration.verifyMobile : COPY.vote.registration.verifyDesktop}
                 </p>
                 <p className="self-step-helper">
                   {registrationModal.isMobile
-                    ? 'Complete verification in Self to join the census.'
-                    : 'Complete identity verification in Self to be added to the census.'}
+                    ? COPY.vote.registration.verifyMobileHelper
+                    : COPY.vote.registration.verifyDesktopHelper}
                 </p>
               </li>
               <li>
                 <p className="self-registration-step-title">
-                  {registrationModal.isMobile ? 'Finish in Self and return here' : 'Finish this registration request'}
+                  {registrationModal.isMobile ? COPY.vote.registration.finishMobile : COPY.vote.registration.finishDesktop}
                 </p>
                 <p className="self-step-helper">
                   {registrationModal.isMobile
-                    ? 'Tap "Open in Self app" below and complete verification.'
-                    : 'Scan the QR (or open the deep-link) and wait for readiness.'}
+                    ? COPY.vote.registration.finishMobileHelper
+                    : COPY.vote.registration.finishDesktopHelper}
                 </p>
               </li>
             </ol>
@@ -2084,23 +2102,23 @@ export default function VoteRoute() {
                   onClick={openVoteSelfLink}
                 >
                   <span className="btn-icon iconoir-link" aria-hidden="true" />
-                  <span className="btn-text">Open in Self app</span>
+                  <span className="btn-text">{COPY.vote.buttons.openInSelfApp}</span>
                 </button>
               </div>
             )}
 
             {registrationModal.isMobile && (
               <div className="vote-registration-requirements">
-                <p className="label">Requirements to vote</p>
+                <p className="label">{COPY.vote.registration.requirementsToVote}</p>
                 <div className="vote-registration-requirements-grid">
                   <div className="vote-registration-requirement">
-                    <p className="label">Minimum age</p>
+                    <p className="label">{COPY.vote.registration.minimumAge}</p>
                     <p className="value" id="voteSelfMinAgeInfo">
                       {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
                     </p>
                   </div>
                   <div className="vote-registration-requirement">
-                    <p className="label">Countries</p>
+                    <p className="label">{COPY.vote.registration.countries}</p>
                     <p className="value" id="voteCountryInfo">
                       {voteSelfCountriesText}
                     </p>
@@ -2110,7 +2128,7 @@ export default function VoteRoute() {
             )}
 
             <div className="vote-status-guide registration-status-guide" id="registrationStatusGuide">
-              <p className="label">Registration progress</p>
+              <p className="label">{COPY.vote.registration.registrationProgress}</p>
               <ol id="registrationStatusTimeline" className="vote-status-timeline">
                 {registrationSteps.map((step, index) => {
                   const isComplete = step.done;
@@ -2134,7 +2152,7 @@ export default function VoteRoute() {
         {showRegistrationSubmittingNotice && (
           <p className="vote-registration-submit-note" role="status" aria-live="polite">
             <span className="timeline-spinner" aria-hidden="true" />
-            <span>Registration completed. Your vote is being submitted...</span>
+            <span>{COPY.vote.registration.registrationCompletedSubmitting}</span>
           </p>
         )}
       </PopupModal>
@@ -2143,14 +2161,14 @@ export default function VoteRoute() {
         id="voteContextGatePopup"
         open={contextBlocked}
         role="alertdialog"
-        title="This voting link is incomplete"
+        title={COPY.vote.context.popupTitle}
         titleId="voteContextGatePopupTitle"
         descriptionId="voteContextGatePopupMessage"
         className="vote-popup vote-context-popup"
         cardClassName="vote-popup-card vote-context-popup-card"
         bodyClassName="vote-popup-body vote-context-popup-body"
-        closeLabel="Close context popup"
-        eyebrow="Process ID required"
+        closeLabel={COPY.vote.context.popupClose}
+        eyebrow={COPY.vote.context.popupEyebrow}
         onClose={closeContextGatePopup}
       >
         <p id="voteContextGatePopupMessage">{contextMessage}</p>
