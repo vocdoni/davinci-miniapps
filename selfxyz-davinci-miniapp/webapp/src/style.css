@@ -2119,6 +2119,10 @@ button.qr-copy-btn:focus-visible {
   font-weight: 400;
 }
 
+:is(#createView, #voteView, #exploreView) p.create-intro.question-hero-helper {
+  white-space: pre-line;
+}
+
 #createView .question-hero-header {
   margin-bottom: 22px;
 }
@@ -2540,7 +2544,7 @@ button.qr-copy-btn:focus-visible {
 
 #createView .setting-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(240px, 1.2fr);
   gap: 14px;
   margin-bottom: 32px;
 }
@@ -2562,6 +2566,14 @@ button.qr-copy-btn:focus-visible {
 
 #createView .setting-card.setting-card-countries {
   grid-column: 1 / -1;
+}
+
+#createView .setting-card.setting-card-min-age {
+  min-width: 0;
+}
+
+#createView .setting-card.setting-card-duration {
+  min-width: 0;
 }
 
 #createView .setting-label {
@@ -2879,6 +2891,51 @@ button.qr-copy-btn:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+#createView .setting-value-row.setting-value-row-duration {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#createView .setting-stepper-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+#createView .setting-stepper-group .setting-step-btn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+}
+
+#createView .setting-stepper-group .setting-step-btn:hover:not(:disabled) {
+  background: #edf3ff;
+  border-color: transparent;
+}
+
+#createView .setting-stepper-group .setting-value-input {
+  width: 3ch;
+  min-width: 3ch;
+}
+
+#createView .setting-value-divider {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+#createView .setting-value-row-duration .setting-value-suffix {
+  margin-right: 2px;
 }
 
 #createView .setting-value-input {

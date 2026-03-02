@@ -2,6 +2,7 @@ import { AbiCoder, Interface, Wallet, keccak256, randomBytes, sha256 } from 'eth
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
 
 import artifact from '../artifacts/OpenCitizenCensus.json';
+import { COPY } from '../copy';
 import { isAsciiText, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { toDateFromUnknown, toDurationMs, toRfc3339Timestamp } from '../utils/timing';
 
@@ -41,7 +42,7 @@ export const CONFIG = {
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
-  selfAppName: String(env.VITE_SELF_APP_NAME || 'Ask The World - DAVINCI').trim(),
+  selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
 };
 
 export const ACTIVE_NETWORK = NETWORKS[CONFIG.network] || NETWORKS.celo;
@@ -56,9 +57,9 @@ export const VOTE_SUBMISSION_STORAGE_PREFIX = 'occ.voteSubmission.v1';
 export const INTERNAL_RPC_RETRY_MAX_ATTEMPTS = 4;
 export const INTERNAL_RPC_RETRY_DELAY_MS = 1_500;
 
-export const DEFAULT_DOCUMENT_TITLE = 'Ask The World - DAVINCI';
-export const CREATE_HEADER_TITLE = 'Official-ID Voting Process Creator';
-export const VOTE_HEADER_TITLE = 'Official-ID Voting Process';
+export const DEFAULT_DOCUMENT_TITLE = COPY.brand.documentTitle;
+export const CREATE_HEADER_TITLE = COPY.occ.createHeaderTitle;
+export const VOTE_HEADER_TITLE = COPY.occ.voteHeaderTitle;
 
 export const CENSUS_MEMBERS_QUERY = `
   query GetWeightChangeEvents($first: Int!, $skip: Int!) {
@@ -98,22 +99,22 @@ export interface PipelineStageState {
 }
 
 export const PIPELINE_STAGES: PipelineStageDef[] = [
-  { id: 'validate_form', label: 'Validate form' },
-  { id: 'connect_creator_wallet_walletconnect', label: 'Connect creator browser wallet' },
-  { id: 'ensure_self_config_registered', label: 'Ensure Self config registered' },
-  { id: 'deploy_census_contract', label: 'Deploy census contract' },
-  { id: 'start_indexer', label: 'Start indexer' },
-  { id: 'wait_indexer_ready', label: 'Wait indexer ready' },
-  { id: 'create_davinci_process', label: 'Create Davinci process' },
-  { id: 'wait_process_ready_in_sequencer', label: 'Wait process ready in sequencer' },
-  { id: 'done', label: 'Done' },
+  { id: 'validate_form', label: COPY.occ.pipelineStages.validateForm },
+  { id: 'connect_creator_wallet_walletconnect', label: COPY.occ.pipelineStages.connectCreatorWallet },
+  { id: 'ensure_self_config_registered', label: COPY.occ.pipelineStages.ensureSelfConfigRegistered },
+  { id: 'deploy_census_contract', label: COPY.occ.pipelineStages.deployCensusContract },
+  { id: 'start_indexer', label: COPY.occ.pipelineStages.startIndexer },
+  { id: 'wait_indexer_ready', label: COPY.occ.pipelineStages.waitIndexerReady },
+  { id: 'create_davinci_process', label: COPY.occ.pipelineStages.createDavinciProcess },
+  { id: 'wait_process_ready_in_sequencer', label: COPY.occ.pipelineStages.waitProcessReadyInSequencer },
+  { id: 'done', label: COPY.occ.pipelineStages.done },
 ];
 
 export function newPipelineState(): PipelineStageState[] {
   return PIPELINE_STAGES.map((stage) => ({
     id: stage.id,
     status: 'pending',
-    message: 'Pending',
+    message: COPY.shared.pending,
   }));
 }
 
@@ -122,28 +123,28 @@ export type VoteStatusKey = (typeof VOTE_STATUS_FLOW)[number] | 'error';
 
 export const VOTE_STATUS_INFO: Record<VoteStatusKey, { label: string; description: string }> = {
   pending: {
-    label: 'Pending',
-    description: 'Vote was received and queued by the sequencer.',
+    label: COPY.occ.voteStatusInfo.pending.label,
+    description: COPY.occ.voteStatusInfo.pending.description,
   },
   verified: {
-    label: 'Verified',
-    description: 'Vote proof was verified correctly.',
+    label: COPY.occ.voteStatusInfo.verified.label,
+    description: COPY.occ.voteStatusInfo.verified.description,
   },
   aggregated: {
-    label: 'Aggregated',
-    description: 'Vote was merged into the current aggregation batch.',
+    label: COPY.occ.voteStatusInfo.aggregated.label,
+    description: COPY.occ.voteStatusInfo.aggregated.description,
   },
   processed: {
-    label: 'Processed',
-    description: 'Vote was processed and is ready for settlement.',
+    label: COPY.occ.voteStatusInfo.processed.label,
+    description: COPY.occ.voteStatusInfo.processed.description,
   },
   settled: {
-    label: 'Settled',
-    description: 'Vote was fully settled.',
+    label: COPY.occ.voteStatusInfo.settled.label,
+    description: COPY.occ.voteStatusInfo.settled.description,
   },
   error: {
-    label: 'Error',
-    description: 'Vote processing failed. Check the emit status message.',
+    label: COPY.occ.voteStatusInfo.error.label,
+    description: COPY.occ.voteStatusInfo.error.description,
   },
 };
 
@@ -158,37 +159,37 @@ export interface ProcessStatusInfo {
 export const PROCESS_STATUS_INFO: Record<number, ProcessStatusInfo> = {
   [ProcessStatus.READY]: {
     key: 'ready',
-    label: 'Active',
-    title: 'Vote Active',
-    description: 'Voting is open while this process remains active.',
+    label: COPY.occ.processStatusInfo.ready.label,
+    title: COPY.occ.processStatusInfo.ready.title,
+    description: COPY.occ.processStatusInfo.ready.description,
     closed: false,
   },
   [ProcessStatus.ENDED]: {
     key: 'ended',
-    label: 'Ended',
-    title: 'Vote Ended',
-    description: 'Voting is closed. Results are not available yet.',
+    label: COPY.occ.processStatusInfo.ended.label,
+    title: COPY.occ.processStatusInfo.ended.title,
+    description: COPY.occ.processStatusInfo.ended.description,
     closed: true,
   },
   [ProcessStatus.CANCELED]: {
     key: 'canceled',
-    label: 'Canceled',
-    title: 'Vote Canceled',
-    description: 'This process was canceled. Registration and voting are disabled.',
+    label: COPY.occ.processStatusInfo.canceled.label,
+    title: COPY.occ.processStatusInfo.canceled.title,
+    description: COPY.occ.processStatusInfo.canceled.description,
     closed: true,
   },
   [ProcessStatus.PAUSED]: {
     key: 'paused',
-    label: 'Paused',
-    title: 'Vote Paused',
-    description: 'This process is paused. Registration and voting are disabled.',
+    label: COPY.occ.processStatusInfo.paused.label,
+    title: COPY.occ.processStatusInfo.paused.title,
+    description: COPY.occ.processStatusInfo.paused.description,
     closed: true,
   },
   [ProcessStatus.RESULTS]: {
     key: 'results',
-    label: 'Results',
-    title: 'Vote Results',
-    description: 'Results are available. Registration and voting are closed.',
+    label: COPY.occ.processStatusInfo.results.label,
+    title: COPY.occ.processStatusInfo.results.title,
+    description: COPY.occ.processStatusInfo.results.description,
     closed: true,
   },
 };
@@ -279,7 +280,7 @@ export function formatVotePercent(numerator: number, denominator: number): strin
 export function formatRemainingTimeFromEndMs(endDateMs: number | null): string {
   if (!Number.isFinite(Number(endDateMs))) return '-';
   const remainingMs = Number(endDateMs) - Date.now();
-  if (remainingMs <= 0) return 'Ended';
+  if (remainingMs <= 0) return COPY.occ.format.ended;
 
   const totalMinutes = Math.floor(remainingMs / 60_000);
   const days = Math.floor(totalMinutes / (24 * 60));
@@ -289,7 +290,7 @@ export function formatRemainingTimeFromEndMs(endDateMs: number | null): string {
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m`;
-  return '<1m';
+  return COPY.occ.format.lessThanOneMinute;
 }
 
 export function formatDurationMs(durationMs: number | null): string {
@@ -303,7 +304,7 @@ export function formatDurationMs(durationMs: number | null): string {
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m`;
-  return '<1m';
+  return COPY.occ.format.lessThanOneMinute;
 }
 
 export function formatReadinessCheckTime(timestampMs: number | null): string {
@@ -334,7 +335,7 @@ export function wait(ms: number): Promise<void> {
 
 export function ensureAsciiField(value: unknown, label: string): void {
   if (!isAsciiText(value)) {
-    throw new Error(`${label} accepts ASCII characters only. Check browser console for technical details.`);
+    throw new Error(COPY.occ.errors.asciiField(label));
   }
 }
 
@@ -839,12 +840,12 @@ export function normalizeVoteQuestions(rawQuestions: unknown): Array<{
   return rawQuestions
     .map((question, questionIndex) => {
       const q = question as Record<string, unknown>;
-      const title = String(getLocalizedText(q.title) || `Question ${questionIndex + 1}`).trim();
+      const title = String(getLocalizedText(q.title) || COPY.occ.errors.questionFallback(questionIndex)).trim();
       const description = String(getLocalizedText(q.description) || '').trim();
       const rawChoices = Array.isArray(q.choices) ? q.choices : [];
       const choices = rawChoices.map((choice, choiceIndex) => {
         const c = choice as Record<string, unknown>;
-        const titleValue = String(getLocalizedText(c.title) || `Choice ${choiceIndex + 1}`).trim();
+        const titleValue = String(getLocalizedText(c.title) || COPY.occ.errors.choiceFallback(choiceIndex)).trim();
         const parsedValue = Number(c.value);
         const value = Number.isInteger(parsedValue) ? parsedValue : choiceIndex;
         return { value, title: titleValue };
@@ -853,7 +854,7 @@ export function normalizeVoteQuestions(rawQuestions: unknown): Array<{
       return {
         title,
         description,
-        choices: choices.length ? choices : [{ value: 0, title: 'Option 1' }],
+        choices: choices.length ? choices : [{ value: 0, title: COPY.occ.errors.optionFallback }],
       };
     })
     .filter((question) => question.choices.length > 0);
@@ -1038,7 +1039,7 @@ export function hasProcessEndedByTime(endDateMs: number | null): boolean {
 export function encodeWeightOf(address: string): string {
   const normalized = String(address || '').toLowerCase().replace(/^0x/, '');
   if (!/^[a-f0-9]{40}$/.test(normalized)) {
-    throw new Error('Invalid address format for weightOf query.');
+    throw new Error(COPY.occ.errors.invalidWeightAddress);
   }
   return WEIGHT_OF_SELECTOR + normalized.padStart(64, '0');
 }

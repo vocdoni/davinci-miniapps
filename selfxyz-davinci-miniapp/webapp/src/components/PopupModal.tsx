@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { COPY } from '../copy';
 
 interface PopupModalProps {
   id: string;
@@ -33,7 +34,7 @@ export default function PopupModal({
   bodyClassName,
   titleId,
   descriptionId,
-  closeLabel = 'Close popup',
+  closeLabel = COPY.popup.closePopup,
   closeButtonId,
   eyebrow,
   role = 'dialog',
@@ -71,7 +72,7 @@ export default function PopupModal({
       <button
         type="button"
         className="app-popup-backdrop"
-        aria-label={allowBackdropClose ? closeLabel : 'Modal backdrop'}
+        aria-label={allowBackdropClose ? closeLabel : COPY.popup.modalBackdrop}
         aria-hidden={!allowBackdropClose}
         disabled={!allowBackdropClose}
         tabIndex={allowBackdropClose ? 0 : -1}

@@ -2,6 +2,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
+import { COPY } from '../copy';
 import { CONFIG } from '../lib/occ';
 import { listProcessesFromSequencer, createSequencerSdk, fetchProcessMetadata, getProcessFromSequencer } from '../services/sequencer';
 import { buildAssetUrl } from '../utils/assets';
@@ -27,7 +28,7 @@ interface MetadataCacheEntry {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
-  return 'Failed to load processes from sequencer.';
+  return COPY.explore.loadingError;
 }
 
 function statusClassName(statusCode: number | null): string {
@@ -68,7 +69,7 @@ export default function ExploreRoute() {
   );
 
   const navLinks = useMemo(
-    () => [{ id: 'navExploreLink', href: buildAppHref('/explore'), label: 'Explore' }],
+    () => [{ id: 'navExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
     [buildAppHref]
   );
 
@@ -76,7 +77,7 @@ export default function ExploreRoute() {
     if (sdkRef.current) return sdkRef.current;
     const sequencerUrl = String(CONFIG.davinciSequencerUrl || '').trim();
     if (!sequencerUrl) {
-      throw new Error('Missing VITE_DAVINCI_SEQUENCER_URL.');
+      throw new Error(COPY.explore.missingSequencerUrl);
     }
     const sdk = createSequencerSdk({ sequencerUrl });
     sdkRef.current = sdk;
@@ -305,27 +306,27 @@ export default function ExploreRoute() {
         brandId="exploreNavbarBrand"
         baseHref={baseUrl}
         logoSrc={withBase('davinci_logo.png')}
-        brandLabel="Ask The World"
+        brandLabel={COPY.brand.appName}
         navLinks={navLinks}
       />
 
       <header className="app-header create-header question-hero-header explore-header" id="exploreHeader">
         <h1 id="exploreHeaderTitle" className="question-hero-title">
-          Explore processes
+          {COPY.explore.headerTitle}
         </h1>
         <p id="exploreHeaderText" className="create-intro question-hero-helper">
-          Browse processes created with this app. The list only includes voting processes compatible with{' '}
+          {COPY.explore.headerTextBeforeSelf}{' '}
           <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
             Self.xyz
           </a>{' '}
-          identification flow and links directly to each voting page.
+          {COPY.explore.headerTextAfterSelf}
         </p>
       </header>
 
       <section className="explore-list-wrap">
         <div className="explore-list-head">
           <p className="muted" id="exploreStatsText">
-            Showing {state.rows.length} compatible process{state.rows.length === 1 ? '' : 'es'}
+            {COPY.explore.statsShowing(state.rows.length)}
           </p>
         </div>
 
@@ -333,7 +334,7 @@ export default function ExploreRoute() {
           <div className="explore-feedback explore-feedback-error" role="alert">
             <p>{state.error}</p>
             <button type="button" className="secondary" onClick={() => void loadInitial()}>
-              Retry
+              {COPY.explore.retry}
             </button>
           </div>
         )}
@@ -341,13 +342,13 @@ export default function ExploreRoute() {
         {state.loading && (
           <div className="explore-feedback explore-feedback-loading" id="exploreLoading">
             <span className="timeline-spinner" aria-hidden="true" />
-            <span>Loading processes...</span>
+            <span>{COPY.explore.loading}</span>
           </div>
         )}
 
         {!state.loading && !state.error && state.rows.length === 0 && (
           <div className="explore-feedback" id="exploreEmptyState">
-            No compatible processes found.
+            {COPY.explore.emptyState}
           </div>
         )}
 
@@ -364,8 +365,9 @@ export default function ExploreRoute() {
                         <span className={`explore-row-status is-${statusClassName(row.statusCode)}`}>{row.statusLabel}</span>
                       </div>
                       <p className="explore-row-requirements">
-                        Countries: {row.countries.join(', ')} | Minimum age: {row.minAge}
-                        {showRemaining ? ` | Closes in: ${row.readyTimeRemainingLabel}` : ''}
+                        {COPY.explore.requirementsPrefix} {row.countries.join(', ')} | {COPY.explore.requirementsMinAge}{' '}
+                        {row.minAge}
+                        {showRemaining ? ` | ${COPY.explore.requirementsClosesIn} ${row.readyTimeRemainingLabel}` : ''}
                       </p>
                     </a>
                   </li>
@@ -383,7 +385,7 @@ export default function ExploreRoute() {
                   onClick={() => void handleLoadMore()}
                 >
                   <span className={`btn-icon ${loadingMore ? 'iconoir-refresh' : 'iconoir-more-horiz'}`} aria-hidden="true" />
-                  <span>{loadingMore ? 'Loading...' : 'Load more'}</span>
+                  <span>{loadingMore ? COPY.explore.loadingMore : COPY.explore.loadMore}</span>
                 </button>
               </div>
             )}

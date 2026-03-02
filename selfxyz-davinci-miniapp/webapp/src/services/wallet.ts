@@ -1,6 +1,7 @@
 import { BrowserProvider, type Eip1193Provider, type JsonRpcSigner, Wallet } from 'ethers';
 import EthereumProvider from '@walletconnect/ethereum-provider';
 
+import { COPY } from '../copy';
 import { ACTIVE_NETWORK, CONFIG, NETWORKS } from '../lib/occ';
 
 export interface OCCProvider extends Eip1193Provider {
@@ -47,9 +48,9 @@ export function getInjectedProvider(): OCCProvider | null {
   return ethereum;
 }
 
-export function getWalletSourceLabel(provider: OCCProvider, fallback = 'WalletConnect'): string {
-  if (provider?.isMetaMask) return 'MetaMask';
-  if (provider?.isCoinbaseWallet) return 'Coinbase Wallet';
+export function getWalletSourceLabel(provider: OCCProvider, fallback = COPY.walletService.walletConnectFallbackSource): string {
+  if (provider?.isMetaMask) return COPY.walletService.metaMask;
+  if (provider?.isCoinbaseWallet) return COPY.walletService.coinbaseWallet;
   return fallback;
 }
 
@@ -67,7 +68,7 @@ export async function ensureProviderChain(provider: OCCProvider, chainHex = ACTI
 
 export async function createWalletConnectProvider(): Promise<OCCProvider> {
   if (!CONFIG.walletConnectProjectId) {
-    throw new Error('Missing VITE_WALLETCONNECT_PROJECT_ID.');
+    throw new Error(COPY.walletService.missingProjectId);
   }
 
   const requiredChains = [1];
@@ -82,8 +83,8 @@ export async function createWalletConnectProvider(): Promise<OCCProvider> {
     optionalChains,
     showQrModal: true,
     metadata: {
-      name: 'Ask The World - DAVINCI',
-      description: 'Create and vote on census-based processes',
+      name: COPY.brand.documentTitle,
+      description: COPY.walletService.appDescription,
       url: window.location.origin,
       icons: [],
     },
@@ -105,7 +106,7 @@ export async function createWalletConnectProvider(): Promise<OCCProvider> {
 export async function connectInjectedWallet(provider: OCCProvider): Promise<CreatorWalletConnection> {
   const accounts = await provider.request({ method: 'eth_requestAccounts' });
   if (!Array.isArray(accounts) || !accounts.length) {
-    throw new Error('No wallet account selected.');
+    throw new Error(COPY.walletService.noWalletAccount);
   }
 
   await ensureProviderChain(provider);
@@ -119,7 +120,7 @@ export async function connectInjectedWallet(provider: OCCProvider): Promise<Crea
     browserProvider,
     signer,
     address,
-    sourceLabel: getWalletSourceLabel(provider, 'Browser wallet'),
+    sourceLabel: getWalletSourceLabel(provider, COPY.walletService.browserWallet),
   };
 }
 
@@ -142,7 +143,7 @@ export async function connectWalletConnect(existingProvider?: OCCProvider | null
     browserProvider,
     signer,
     address,
-    sourceLabel: 'WalletConnect',
+    sourceLabel: COPY.walletService.walletConnectFallbackSource,
   };
 }
 

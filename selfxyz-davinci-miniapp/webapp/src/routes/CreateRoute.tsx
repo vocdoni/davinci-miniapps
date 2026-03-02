@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { OnchainCensus } from '@vocdoni/davinci-sdk';
 
+import { COPY } from '../copy';
 import {
   ACTIVE_NETWORK,
   CENSUS_MEMBERS_QUERY,
@@ -100,7 +101,7 @@ interface ShareTarget {
 }
 
 const CREATOR_WALLET_STATUS_DEFAULT =
-  'Connect MetaMask or another browser wallet. WalletConnect is used when no extension wallet is detected.';
+  COPY.create.walletStatusDefault;
 
 const EMPTY_OUTPUTS: CreateOutputs = {
   censusContract: '',
@@ -118,7 +119,7 @@ function hasAnyOutputs(outputs: CreateOutputs): boolean {
 }
 
 function hasPipelineActivity(pipeline: PipelineStageState[]): boolean {
-  return pipeline.some((stage) => stage.status !== 'pending' || stage.message !== 'Pending');
+  return pipeline.some((stage) => stage.status !== 'pending' || stage.message !== COPY.shared.pending);
 }
 
 function hasPipelineError(pipeline: PipelineStageState[]): boolean {
@@ -129,7 +130,7 @@ function timelineRows(pipeline: PipelineStageState[]) {
   const stages = PIPELINE_STAGES.map((stage, index) => ({
     stage,
     index,
-    status: pipeline.find((item) => item.id === stage.id) || { status: 'pending' as const, message: 'Pending' },
+    status: pipeline.find((item) => item.id === stage.id) || { status: 'pending' as const, message: COPY.shared.pending },
   }));
 
   const runningIndex = stages.findIndex((entry) => entry.status.status === 'running');
@@ -170,6 +171,7 @@ export default function CreateRoute() {
   const createTimelineRef = useRef<HTMLDetailsElement | null>(null);
   const countriesSelectRef = useRef<HTMLDivElement | null>(null);
   const countryQueryInputRef = useRef<HTMLInputElement | null>(null);
+  const optionInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
     walletRef.current = creatorWallet;
@@ -178,7 +180,7 @@ export default function CreateRoute() {
   useEffect(() => {
     const missing = [] as string[];
     if (!CONFIG.walletConnectProjectId && !getInjectedProvider()) {
-      missing.push('VITE_WALLETCONNECT_PROJECT_ID (needed when no browser extension wallet is detected)');
+      missing.push(COPY.create.missingWalletConnectHint);
     }
     if (!CONFIG.onchainIndexerUrl) missing.push('VITE_ONCHAIN_CENSUS_INDEXER_URL');
     if (!CONFIG.davinciSequencerUrl) missing.push('VITE_DAVINCI_SEQUENCER_URL');
@@ -189,7 +191,7 @@ export default function CreateRoute() {
   }, []);
 
   useEffect(() => {
-    document.title = 'Ask The World - DAVINCI';
+    document.title = COPY.brand.documentTitle;
   }, []);
 
   useEffect(() => {
@@ -218,13 +220,20 @@ export default function CreateRoute() {
   const formLocked = createSubmitting;
   const selectedCountriesCount = form.countries.length;
   const countriesLimitReached = selectedCountriesCount >= MAX_NATIONALITIES;
+  const parsedDurationHours = Number(form.durationHours);
+  const durationHoursTotal = Number.isFinite(parsedDurationHours)
+    ? Math.max(1, Math.trunc(parsedDurationHours))
+    : Number(DEFAULT_DURATION_HOURS);
+  const durationDays = Math.floor(durationHoursTotal / 24);
+  const durationHoursRemainder = durationHoursTotal % 24;
+  const showDurationDaysInput = durationHoursTotal > 24;
   const shareTargets = useMemo<ShareTarget[]>(() => {
     const voteUrl = String(outputs.voteUrl || '').trim();
     if (!voteUrl) return [];
 
     const encodedUrl = encodeURIComponent(voteUrl);
-    const shareText = encodeURIComponent('Join this vote on Ask The World - DAVINCI');
-    const shareTextWithUrl = encodeURIComponent(`Join this vote on Ask The World - DAVINCI ${voteUrl}`);
+    const shareText = encodeURIComponent(COPY.create.shareSocialText);
+    const shareTextWithUrl = encodeURIComponent(`${COPY.create.shareSocialText} ${voteUrl}`);
 
     const simpleIconsBase = 'https://cdn.jsdelivr.net/npm/simple-icons@v16/icons';
     const simpleIconsFallbackBase = 'https://cdn.simpleicons.org';
@@ -303,7 +312,7 @@ export default function CreateRoute() {
     [baseUrl]
   );
   const navbarLinks = useMemo(
-    () => [{ id: 'createExploreLink', href: buildAppHref('/explore'), label: 'Explore' }],
+    () => [{ id: 'createExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
     [buildAppHref]
   );
 
@@ -374,13 +383,13 @@ export default function CreateRoute() {
 
   const runStage = useCallback(
     async <T,>(stageId: string, task: () => Promise<T>): Promise<T> => {
-      updateStage(stageId, { status: 'running', message: 'Running' });
+      updateStage(stageId, { status: 'running', message: COPY.shared.running });
       for (let attempt = 1; attempt <= INTERNAL_RPC_RETRY_MAX_ATTEMPTS; attempt += 1) {
         try {
           const result = await task();
           updateStage(stageId, {
             status: 'success',
-            message: typeof result === 'string' ? result : 'Completed',
+            message: typeof result === 'string' ? result : COPY.shared.completed,
           });
           return result;
         } catch (error) {
@@ -388,7 +397,7 @@ export default function CreateRoute() {
           if (canRetry) {
             updateStage(stageId, {
               status: 'running',
-              message: `Internal wallet RPC error. Retrying (${attempt + 1}/${INTERNAL_RPC_RETRY_MAX_ATTEMPTS})...`,
+              message: COPY.create.status.internalWalletRpcRetry(attempt + 1, INTERNAL_RPC_RETRY_MAX_ATTEMPTS),
             });
             await wait(INTERNAL_RPC_RETRY_DELAY_MS);
             continue;
@@ -397,7 +406,7 @@ export default function CreateRoute() {
           const stageLabel = PIPELINE_STAGES.find((stage) => stage.id === stageId)?.label || stageId;
           updateStage(stageId, {
             status: 'error',
-            message: `Could not complete "${stageLabel}". Check browser console for technical details.`,
+            message: COPY.create.status.stageFailed(stageLabel),
           });
           throw error;
         }
@@ -410,7 +419,7 @@ export default function CreateRoute() {
 
   const applyWalletConnection = useCallback((connection: CreatorWalletConnection) => {
     setCreatorWallet(connection);
-    setCreatorWalletStatus(`Connected with ${connection.sourceLabel} on ${ACTIVE_NETWORK.label}.`);
+    setCreatorWalletStatus(COPY.create.navbar.connectWalletSource(connection.sourceLabel, ACTIVE_NETWORK.label));
   }, []);
 
   const resetWalletState = useCallback(() => {
@@ -426,12 +435,12 @@ export default function CreateRoute() {
 
   const connectCreatorWallet = useCallback(async () => {
     try {
-      setCreatorWalletStatus('Connecting browser wallet...');
+      setCreatorWalletStatus(COPY.create.connectingWallet);
       const connection = await connectBrowserWallet(walletRef.current.provider);
       applyWalletConnection(connection);
     } catch (error) {
       const messages = collectErrorMessages(error);
-      const message = messages[0] || (error instanceof Error ? error.message : 'Failed to connect creator wallet.');
+      const message = messages[0] || (error instanceof Error ? error.message : COPY.create.failedConnectWallet);
       setCreatorWalletStatus(message);
     }
   }, [applyWalletConnection]);
@@ -466,6 +475,56 @@ export default function CreateRoute() {
     }));
     setCreateFormDirty(true);
   }, []);
+
+  const setOptionInputRef = useCallback((index: number, node: HTMLInputElement | null) => {
+    optionInputRefs.current[index] = node;
+  }, []);
+
+  const handleOptionInputKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>, optionIndex: number) => {
+      if (formLocked) return;
+
+      if (event.key === 'Backspace') {
+        const optionTitle = String(form.options[optionIndex]?.title || '');
+        const canRemove = form.options.length > MIN_OPTIONS;
+        if (optionTitle.trim().length > 0 || !canRemove) return;
+
+        event.preventDefault();
+        const previousIndex = Math.max(0, optionIndex - 1);
+        removeOptionRow(optionIndex);
+        window.requestAnimationFrame(() => {
+          optionInputRefs.current[previousIndex]?.focus();
+        });
+        return;
+      }
+
+      if (event.key !== 'Enter') return;
+
+      event.preventDefault();
+      if (event.shiftKey) {
+        const totalOptions = form.options.length;
+        if (totalOptions < 1) return;
+        const previousIndex = optionIndex === 0 ? totalOptions - 1 : optionIndex - 1;
+        optionInputRefs.current[previousIndex]?.focus();
+        return;
+      }
+
+      const isLastOption = optionIndex === form.options.length - 1;
+      if (!isLastOption) {
+        optionInputRefs.current[optionIndex + 1]?.focus();
+        return;
+      }
+
+      if (form.options.length >= MAX_OPTIONS) return;
+
+      const nextIndex = form.options.length;
+      addOptionRow();
+      window.requestAnimationFrame(() => {
+        optionInputRefs.current[nextIndex]?.focus();
+      });
+    },
+    [addOptionRow, formLocked, form.options, removeOptionRow]
+  );
 
   const updateOptionRow = useCallback((optionIndex: number, value: string) => {
     setForm((previous) => ({
@@ -588,12 +647,52 @@ export default function CreateRoute() {
     setForm((previous) => {
       const parsed = Number(previous.durationHours);
       const fallback = Number(DEFAULT_DURATION_HOURS);
-      const base = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+      const base = Number.isFinite(parsed) ? Math.max(1, Math.trunc(parsed)) : fallback;
       const next = Math.max(1, base + delta);
       return { ...previous, durationHours: String(next) };
     });
     setCreateFormDirty(true);
   }, []);
+
+  const adjustDurationDays = useCallback((delta: number) => {
+    setForm((previous) => {
+      const parsed = Number(previous.durationHours);
+      const fallback = Number(DEFAULT_DURATION_HOURS);
+      const base = Number.isFinite(parsed) ? Math.max(1, Math.trunc(parsed)) : fallback;
+      const currentDays = Math.floor(base / 24);
+      const remainderHours = base % 24;
+      const nextDays = Math.max(0, currentDays + delta);
+      const nextTotalHours = Math.max(1, nextDays * 24 + remainderHours);
+      return { ...previous, durationHours: String(nextTotalHours) };
+    });
+    setCreateFormDirty(true);
+  }, []);
+
+  const handleDurationHoursInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      if (!showDurationDaysInput) {
+        updateForm({ durationHours: value });
+        return;
+      }
+
+      const parsed = Number(value);
+      const nextExtraHours = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+      const nextTotalHours = Math.max(1, durationDays * 24 + nextExtraHours);
+      updateForm({ durationHours: String(nextTotalHours) });
+    },
+    [durationDays, showDurationDaysInput, updateForm]
+  );
+
+  const handleDurationDaysInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const parsed = Number(event.target.value);
+      const nextDays = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+      const nextTotalHours = Math.max(1, nextDays * 24 + durationHoursRemainder);
+      updateForm({ durationHours: String(nextTotalHours) });
+    },
+    [durationHoursRemainder, updateForm]
+  );
 
   const getCountryLabel = useCallback((code: string) => {
     return COUNTRY_OPTIONS.find((option) => option.code === code)?.label || code;
@@ -636,7 +735,7 @@ export default function CreateRoute() {
   const ensureSelfConfigRegistered = useCallback(
     async (ctx: PipelineContext) => {
       if (!ctx.provider || !ctx.signer || !ctx.values || !ctx.browserProvider) {
-        throw new Error('Missing wallet context for Self config registration.');
+        throw new Error(COPY.create.errors.missingWalletContextSelfConfig);
       }
 
       const configId = computeConfigId(ctx.values.minAge);
@@ -676,7 +775,7 @@ export default function CreateRoute() {
   const deployCensusContract = useCallback(
     async (ctx: PipelineContext) => {
       if (!ctx.values || !ctx.signer || !ctx.browserProvider) {
-        throw new Error('Missing wallet context for contract deployment.');
+        throw new Error(COPY.create.errors.missingWalletContextDeployment);
       }
 
       const data = buildDeployData({
@@ -692,7 +791,7 @@ export default function CreateRoute() {
 
       const receipt = await waitForTransaction(ctx.browserProvider, tx.hash);
       if (!receipt.contractAddress) {
-        throw new Error('Contract address was not found in deployment receipt.');
+        throw new Error(COPY.create.errors.missingContractAddress);
       }
 
       const contractAddress = String(receipt.contractAddress || '');
@@ -707,10 +806,10 @@ export default function CreateRoute() {
 
   const startIndexer = useCallback(async (ctx: PipelineContext) => {
     if (!CONFIG.onchainIndexerUrl) {
-      throw new Error('Missing VITE_ONCHAIN_CENSUS_INDEXER_URL.');
+      throw new Error(COPY.create.errors.missingIndexerUrl);
     }
     if (!ctx.values) {
-      throw new Error('Missing process values for indexer bootstrap.');
+      throw new Error(COPY.create.errors.missingProcessValuesIndexer);
     }
 
     const expiresAt = computeIndexerExpiresAt(ctx.values);
@@ -731,7 +830,7 @@ export default function CreateRoute() {
       throw new Error(`Indexer bootstrap failed (${response.status}) ${text}`.trim());
     }
 
-    return 'Indexer accepted contract';
+    return COPY.create.status.indexerAcceptedContract;
   }, []);
 
   const waitIndexerReady = useCallback(async (ctx: PipelineContext) => {
@@ -758,14 +857,14 @@ export default function CreateRoute() {
           const json = (await response.json()) as { errors?: Array<{ message?: string }> };
           if (json && !json.errors) {
             ctx.censusUri = censusUri;
-            return 'Census query endpoint is ready';
+            return COPY.create.status.censusEndpointReady;
           }
-          lastError = json?.errors?.[0]?.message || 'GraphQL returned errors';
+          lastError = json?.errors?.[0]?.message || COPY.create.status.graphQlReturnedErrors;
         } else {
           lastError = `HTTP ${response.status}`;
         }
       } catch (error) {
-        lastError = error instanceof Error ? error.message : 'Indexer readiness failed';
+        lastError = error instanceof Error ? error.message : COPY.create.status.indexerReadinessFailed;
       }
 
       await wait(4_000);
@@ -776,10 +875,10 @@ export default function CreateRoute() {
 
   const createDavinciProcess = useCallback(async (ctx: PipelineContext) => {
     if (!CONFIG.davinciSequencerUrl) {
-      throw new Error('Missing VITE_DAVINCI_SEQUENCER_URL.');
+      throw new Error(COPY.create.errors.missingSequencerUrl);
     }
     if (!ctx.values || !ctx.signer) {
-      throw new Error('Missing signer or process values for sequencer process creation.');
+      throw new Error(COPY.create.errors.missingSignerOrValues);
     }
 
     const sdk = createSequencerSdk({
@@ -790,7 +889,7 @@ export default function CreateRoute() {
 
     const sequencerCensusUri = toSequencerCensusUri(ctx.censusUri);
     if (!sequencerCensusUri) {
-      throw new Error('Missing census URI for sequencer process creation.');
+      throw new Error(COPY.create.errors.missingCensusUri);
     }
 
     const question = ctx.values.question;
@@ -842,7 +941,7 @@ export default function CreateRoute() {
 
     const result = await sdk.createProcess(processConfig);
     const processId = normalizeProcessId(result.processId);
-    if (!processId) throw new Error('Process creation did not return a process ID.');
+    if (!processId) throw new Error(COPY.create.errors.missingProcessId);
 
     ctx.sdk = sdk;
     ctx.processId = processId;
@@ -867,11 +966,11 @@ export default function CreateRoute() {
         if (process && process.isAcceptingVotes === true) {
           const voteUrl = buildVoteUrl(ctx.processId);
           setOutputs((previous) => ({ ...previous, voteUrl }));
-          return 'Process is ready in sequencer';
+          return COPY.create.status.processReadyInSequencer;
         }
-        lastError = 'Process is not accepting votes yet';
+        lastError = COPY.create.status.processNotAcceptingVotesYet;
       } catch (error) {
-        lastError = error instanceof Error ? error.message : 'Sequencer lookup failed';
+        lastError = error instanceof Error ? error.message : COPY.create.status.sequencerLookupFailed;
       }
       await wait(3_000);
     }
@@ -930,7 +1029,7 @@ export default function CreateRoute() {
       try {
         await runStage('validate_form', async () => {
           ctx.values = collectCreateFormValues();
-          return 'Form validated';
+          return COPY.create.status.formValidated;
         });
 
         await runStage('connect_creator_wallet_walletconnect', () => ensureCreatorWalletForPipeline(ctx));
@@ -940,7 +1039,7 @@ export default function CreateRoute() {
         await runStage('wait_indexer_ready', () => waitIndexerReady(ctx));
         await runStage('create_davinci_process', () => createDavinciProcess(ctx));
         await runStage('wait_process_ready_in_sequencer', () => waitProcessReadyInSequencer(ctx));
-        await runStage('done', async () => 'Completed');
+        await runStage('done', async () => COPY.shared.completed);
 
         if (ctx.values && ctx.processId) {
           persistProcessMeta(ctx.processId, {
@@ -990,7 +1089,7 @@ export default function CreateRoute() {
         brandId="navbarBrand"
         baseHref={baseUrl}
         logoSrc={withBase('davinci_logo.png')}
-        brandLabel="Ask The World"
+        brandLabel={COPY.brand.appName}
         navLinks={navbarLinks}
       >
         <article
@@ -1002,15 +1101,15 @@ export default function CreateRoute() {
             <div className="create-wallet-summary">
               <div className="vote-lifecycle-left">
                 <span className="vote-lifecycle-dot" aria-hidden="true" />
-                <strong id="createWalletWidgetTitle">Creator Wallet</strong>
+                <strong id="createWalletWidgetTitle">{COPY.create.navbar.walletTitle}</strong>
               </div>
               <p
                 id="creatorWalletNavbarAddress"
                 className="create-wallet-address"
                 data-connected={creatorConnected ? 'true' : 'false'}
-                title={creatorConnected ? creatorWallet.address : 'Disconnected'}
+                title={creatorConnected ? creatorWallet.address : COPY.create.navbar.disconnected}
               >
-                {creatorConnected ? creatorWallet.address : 'Disconnected'}
+                {creatorConnected ? creatorWallet.address : COPY.create.navbar.disconnected}
               </p>
             </div>
           </div>
@@ -1023,7 +1122,7 @@ export default function CreateRoute() {
                 onClick={() => void handleCreatorWalletButton()}
               >
                 <span className="btn-icon iconoir-log-out" aria-hidden="true" />
-                <span>Disconnect</span>
+                <span>{COPY.create.navbar.disconnect}</span>
               </button>
             </div>
           )}
@@ -1032,22 +1131,23 @@ export default function CreateRoute() {
 
       <header className={`app-header create-header question-hero-header ${overlayVisible ? 'form-blurred' : ''}`} id="appHeader">
         <h1 id="appHeaderTitle" className="question-hero-title">
-          What do you want to ask?
+          {COPY.create.header.title}
         </h1>
         <p className="create-intro question-hero-helper">
-          Ask a question to one or more countries. Citizens who match your criteria can authenticate with their ID or
-          passport and vote immediately, using{' '}
+          {COPY.create.header.introParagraph1}
+          {'\n\n'}
+          {COPY.create.header.introParagraph2BeforeSelf}{' '}
           <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
             <strong>Self.xyz</strong>
-          </a>{' '}
-          app.
-          <br />
-          The{' '}
+          </a>
+          {COPY.create.header.introParagraph2BetweenLinks}{' '}
           <a className="field-link" href="https://davinci.vote" target="_blank" rel="noreferrer">
-            <strong>DAVINCI</strong>
-          </a>{' '}
-          Protocol makes every vote anonymous, verifiable from end to end, and protected against censorship, coercion,
-          and bribery.
+            <strong>DAVINCI Protocol</strong>
+          </a>
+          {'.\n\n'}
+          {COPY.create.header.introParagraph3}
+          {'\n'}
+          {COPY.create.header.introParagraph4}
         </p>
       </header>
 
@@ -1062,7 +1162,7 @@ export default function CreateRoute() {
           className="hero-input"
           autoComplete="off"
           type="text"
-          placeholder="Type your question here..."
+          placeholder={COPY.create.form.processPlaceholder}
           required
           disabled={formLocked}
           value={form.processTitle}
@@ -1070,24 +1170,26 @@ export default function CreateRoute() {
         />
 
         <section className="options-section">
-          <h2 className="options-title">The options</h2>
+          <h2 className="options-title">{COPY.create.form.optionsTitle}</h2>
           <div id="questionList" className="options-list">
             {form.options.map((option, index) => (
               <div className="option-row" key={`option-${index}`}>
                 <input
+                  ref={(node) => setOptionInputRef(index, node)}
                   type="text"
                   className="option-input"
                   autoComplete="off"
-                  placeholder={`Option ${index + 1}`}
+                  placeholder={COPY.create.form.optionPlaceholder(index)}
                   disabled={formLocked}
                   value={option.title}
                   onChange={(event) => updateOptionRow(index, event.target.value)}
+                  onKeyDown={(event) => handleOptionInputKeyDown(event, index)}
                 />
                 <button
                   type="button"
                   className="option-remove-btn"
                   data-action="remove-option"
-                  title="Remove"
+                  title={COPY.create.form.removeOptionTitle}
                   disabled={formLocked || form.options.length <= MIN_OPTIONS}
                   onClick={() => removeOptionRow(index)}
                 >
@@ -1103,16 +1205,16 @@ export default function CreateRoute() {
             disabled={formLocked || form.options.length >= MAX_OPTIONS}
             onClick={addOptionRow}
           >
-            + Add a new option
+            {COPY.create.form.addOption}
           </button>
         </section>
 
         <h2 className="options-title">
-          Who can vote and for how long?
+          {COPY.create.form.eligibilityTitle}
           <span
             className="tooltip-icon"
             data-tooltip={ELIGIBILITY_TOOLTIP}
-            aria-label="Eligibility information"
+            aria-label={COPY.create.form.eligibilityInfoAria}
             tabIndex={0}
             role="button"
           >
@@ -1134,10 +1236,10 @@ export default function CreateRoute() {
         </h2>
 
         <div className="setting-cards">
-          <div className="setting-card setting-card-countries" title="Select up to five countries allowed to vote">
-            <span className="setting-label">Country</span>
+          <div className="setting-card setting-card-countries" title={COPY.create.form.countryCardTitle}>
+            <span className="setting-label">{COPY.create.form.countryLabel}</span>
             <p className="setting-country-helper">
-              Select up to {MAX_NATIONALITIES} countries ({selectedCountriesCount}/{MAX_NATIONALITIES})
+              {COPY.create.form.selectedCountriesHelper(selectedCountriesCount, MAX_NATIONALITIES)}
             </p>
             <div
               ref={countriesSelectRef}
@@ -1161,7 +1263,7 @@ export default function CreateRoute() {
                       <button
                         type="button"
                         className="country-chip-remove"
-                        aria-label={`Remove ${getCountryLabel(code)}`}
+                        aria-label={COPY.create.form.removeCountryAria(getCountryLabel(code))}
                         disabled={formLocked}
                         onClick={(event) => {
                           event.preventDefault();
@@ -1180,14 +1282,14 @@ export default function CreateRoute() {
                     type="text"
                     autoComplete="off"
                     role="combobox"
-                    aria-label="Choose allowed countries"
+                    aria-label={COPY.create.form.chooseCountriesAria}
                     aria-haspopup="listbox"
                     aria-expanded={countriesMenuOpen}
                     aria-controls="countryList"
                     aria-activedescendant={activeCountryOptionId}
                     aria-disabled={formLocked}
                     disabled={formLocked}
-                    placeholder="Type to search countries..."
+                    placeholder={COPY.create.form.countrySearchPlaceholder}
                     value={countryQuery}
                     onChange={handleCountryQueryChange}
                     onFocus={() => {
@@ -1202,10 +1304,16 @@ export default function CreateRoute() {
                 </span>
               </div>
 
-              <div id="countryList" className="country-dropdown" role="listbox" aria-label="Allowed countries" aria-multiselectable="true">
+              <div
+                id="countryList"
+                className="country-dropdown"
+                role="listbox"
+                aria-label={COPY.create.form.allowedCountriesAria}
+                aria-multiselectable="true"
+              >
                 {filteredCountryOptions.length === 0 ? (
                   <div className="country-dropdown-empty" role="status" aria-live="polite">
-                    No countries found
+                    {COPY.create.form.noCountriesFound}
                   </div>
                 ) : (
                   filteredCountryOptions.map((option, optionIndex) => {
@@ -1238,77 +1346,120 @@ export default function CreateRoute() {
             </div>
           </div>
 
-          <div className="setting-card" title="Minimum age required to vote">
-            <span className="setting-label">Minimum age to vote</span>
+          <div className="setting-card setting-card-min-age" title={COPY.create.form.minAgeCardTitle}>
+            <span className="setting-label">{COPY.create.form.minAgeLabel}</span>
             <div className="setting-value-row">
-              <button
-                type="button"
-                className="setting-step-btn"
-                aria-label="Decrease minimum age"
-                disabled={formLocked}
-                onClick={() => adjustMinAge(-1)}
-              >
-                −
-              </button>
-              <input
-                id="minAge"
-                name="min_age"
-                className="setting-value-input"
-                autoComplete="off"
-                type="number"
-                min={1}
-                max={99}
-                required
-                disabled={formLocked}
-                value={form.minAge}
-                onChange={(event) => updateForm({ minAge: event.target.value })}
-              />
-              <button
-                type="button"
-                className="setting-step-btn"
-                aria-label="Increase minimum age"
-                disabled={formLocked}
-                onClick={() => adjustMinAge(1)}
-              >
-                +
-              </button>
+              <div className="setting-stepper-group">
+                <button
+                  type="button"
+                  className="setting-step-btn"
+                  aria-label={COPY.create.form.decreaseMinAge}
+                  disabled={formLocked}
+                  onClick={() => adjustMinAge(-1)}
+                >
+                  −
+                </button>
+                <input
+                  id="minAge"
+                  name="min_age"
+                  className="setting-value-input"
+                  autoComplete="off"
+                  type="number"
+                  min={1}
+                  max={99}
+                  required
+                  disabled={formLocked}
+                  value={form.minAge}
+                  onChange={(event) => updateForm({ minAge: event.target.value })}
+                />
+                <button
+                  type="button"
+                  className="setting-step-btn"
+                  aria-label={COPY.create.form.increaseMinAge}
+                  disabled={formLocked}
+                  onClick={() => adjustMinAge(1)}
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="setting-card" title="How long the voting process will remain open">
-            <span className="setting-label">Vote duration</span>
-            <div className="setting-value-row">
-              <button
-                type="button"
-                className="setting-step-btn"
-                aria-label="Decrease vote duration"
-                disabled={formLocked}
-                onClick={() => adjustDurationHours(-1)}
-              >
-                −
-              </button>
-              <input
-                id="durationHours"
-                name="duration_hours"
-                className="setting-value-input"
-                autoComplete="off"
-                type="number"
-                min={1}
-                required
-                disabled={formLocked}
-                value={form.durationHours}
-                onChange={(event) => updateForm({ durationHours: event.target.value })}
-              />
-              <button
-                type="button"
-                className="setting-step-btn"
-                aria-label="Increase vote duration"
-                disabled={formLocked}
-                onClick={() => adjustDurationHours(1)}
-              >
-                +
-              </button>
-              <span className="setting-value-suffix">Hours</span>
+          <div className="setting-card setting-card-duration" title={COPY.create.form.durationCardTitle}>
+            <span className="setting-label">{COPY.create.form.durationLabel}</span>
+            <div className="setting-value-row setting-value-row-duration">
+              {showDurationDaysInput && (
+                <>
+                  <div className="setting-stepper-group">
+                    <button
+                      type="button"
+                      className="setting-step-btn"
+                      aria-label={COPY.create.form.decreaseDurationDays}
+                      disabled={formLocked}
+                      onClick={() => adjustDurationDays(-1)}
+                    >
+                      −
+                    </button>
+                    <input
+                      id="durationDays"
+                      name="duration_days"
+                      className="setting-value-input"
+                      autoComplete="off"
+                      type="number"
+                      min={0}
+                      disabled={formLocked}
+                      value={String(durationDays)}
+                      onChange={handleDurationDaysInputChange}
+                    />
+                    <button
+                      type="button"
+                      className="setting-step-btn"
+                      aria-label={COPY.create.form.increaseDurationDays}
+                      disabled={formLocked}
+                      onClick={() => adjustDurationDays(1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span className="setting-value-suffix">{COPY.create.form.durationDaysUnit}</span>
+                  <span className="setting-value-divider" aria-hidden="true">
+                    •
+                  </span>
+                </>
+              )}
+              <div className="setting-stepper-group">
+                <button
+                  type="button"
+                  className="setting-step-btn"
+                  aria-label={COPY.create.form.decreaseDuration}
+                  disabled={formLocked}
+                  onClick={() => adjustDurationHours(-1)}
+                >
+                  −
+                </button>
+                <input
+                  id="durationHours"
+                  name="duration_hours"
+                  className="setting-value-input"
+                  autoComplete="off"
+                  type="number"
+                  min={showDurationDaysInput ? 0 : 1}
+                  required
+                  disabled={formLocked}
+                  value={showDurationDaysInput ? String(durationHoursRemainder) : form.durationHours}
+                  onChange={handleDurationHoursInputChange}
+                />
+                <button
+                  type="button"
+                  className="setting-step-btn"
+                  aria-label={COPY.create.form.increaseDuration}
+                  disabled={formLocked}
+                  onClick={() => adjustDurationHours(1)}
+                >
+                  +
+                </button>
+              </div>
+              <span className="setting-value-suffix">{COPY.create.form.durationUnit}</span>
             </div>
           </div>
         </div>
@@ -1317,10 +1468,10 @@ export default function CreateRoute() {
         <input id="startDate" type="hidden" name="start_datetime" value="" readOnly />
 
         <details className="advanced-details" id="advancedDetails">
-          <summary className="advanced-summary">▾ Advanced Settings</summary>
+          <summary className="advanced-summary">{COPY.create.form.advancedSettings}</summary>
           <div className="advanced-body">
             <div className="advanced-field">
-              <span className="advanced-field-label">Maximum voters</span>
+              <span className="advanced-field-label">{COPY.create.form.maxVotersLabel}</span>
               <input
                 id="maxVoters"
                 name="max_voters"
@@ -1333,7 +1484,7 @@ export default function CreateRoute() {
                 value={form.maxVoters}
                 onChange={(event) => updateForm({ maxVoters: event.target.value })}
               />
-              <span className="advanced-field-helper">Limit the number of participants.</span>
+              <span className="advanced-field-helper">{COPY.create.form.maxVotersHelper}</span>
             </div>
           </div>
         </details>
@@ -1342,7 +1493,7 @@ export default function CreateRoute() {
           {creatorConnected ? (
             <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked}>
               <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-check-circle'}`} aria-hidden="true" />
-              <span>{createSubmitting ? 'Creating process...' : 'Create the voting process'}</span>
+              <span>{createSubmitting ? COPY.create.form.creatingButton : COPY.create.form.createButton}</span>
             </button>
           ) : (
             <button
@@ -1353,7 +1504,7 @@ export default function CreateRoute() {
               onClick={() => void handleCreatorWalletButton()}
             >
               <span className="btn-icon iconoir-wallet" aria-hidden="true" />
-              <span>Connect wallet to create</span>
+              <span>{COPY.create.navbar.connectWalletToCreate}</span>
             </button>
           )}
         </div>
@@ -1369,13 +1520,19 @@ export default function CreateRoute() {
       <PopupModal
         id="createOverlay"
         open={overlayVisible}
-        title={hasSuccessOutput ? 'Process created' : spinnerActive ? 'Creating process...' : 'Process creation status'}
+        title={
+          hasSuccessOutput
+            ? COPY.create.overlay.successTitle
+            : spinnerActive
+              ? COPY.create.overlay.loadingTitle
+              : COPY.create.overlay.statusTitle
+        }
         titleId="createOverlayTitle"
         className="create-overlay"
         cardClassName={hasSuccessOutput ? 'create-overlay-card create-success-popup-card' : 'create-overlay-card create-timeline-popup-card'}
         bodyClassName="create-overlay-body"
         closeButtonId="createTimelineCloseBtn"
-        closeLabel="Close creation popup"
+        closeLabel={COPY.create.overlay.closeLabel}
         onClose={canDismissOverlay ? closeCreateOverlay : undefined}
         backdropClosable={canDismissOverlay}
       >
@@ -1384,14 +1541,16 @@ export default function CreateRoute() {
             <div className="create-timeline-summary-main">
               <p className="timeline-popup-status">
                 <span id="createSpinner" className="timeline-spinner" aria-hidden="true" hidden={!spinnerActive} />
-                <span id="createTimelineSummaryText">{spinnerActive ? 'Creating process...' : 'Process creation status'}</span>
+                <span id="createTimelineSummaryText">
+                  {spinnerActive ? COPY.create.overlay.loadingTitle : COPY.create.overlay.statusTitle}
+                </span>
               </p>
               <span className="create-timeline-chevron" aria-hidden="true">
                 ▾
               </span>
             </div>
             <p className="timeline-popup-subtitle" hidden={!spinnerActive}>
-              Keep your wallet open. You will be prompted to confirm transactions and sign messages during setup.
+              {COPY.create.overlay.walletKeepOpen}
             </p>
           </summary>
           <div className="create-timeline-body">
@@ -1412,7 +1571,7 @@ export default function CreateRoute() {
                     <span className="timeline-marker" aria-hidden="true" />
                     <div className="timeline-content">
                       <p className="timeline-label">{entry.stage.label}</p>
-                      <p className="timeline-meta">{entry.status.message || 'Running'}</p>
+                      <p className="timeline-meta">{entry.status.message || COPY.shared.running}</p>
                       {entry.stage.id === 'done' && entry.status.status === 'success' && Boolean(outputs.voteUrl) && (
                         <div id="timelineVoteUrlWrap" className="timeline-vote-url">
                           <div className="output-link-actions">
@@ -1427,7 +1586,7 @@ export default function CreateRoute() {
                             </a>
                             <button id="copyVoteUrlBtn" type="button" className="ghost" onClick={() => void handleCopyVoteUrl()}>
                               <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                              <span className="btn-text">Copy link</span>
+                              <span className="btn-text">{COPY.create.overlay.copyLink}</span>
                             </button>
                           </div>
                         </div>
@@ -1444,11 +1603,11 @@ export default function CreateRoute() {
         <article className="success-card" id="createOutputsCard" hidden={!hasSuccessOutput}>
           <div className="success-header">
             <span className="iconoir-check-circle success-icon" aria-hidden="true" />
-            <h2>Your voting process is live and ready for the world.</h2>
+            <h2>{COPY.create.success.title}</h2>
           </div>
 
           <div className="vote-link-wrapper">
-            <label className="vote-link-label">Share this link to start collecting votes</label>
+            <label className="vote-link-label">{COPY.create.success.shareLinkLabel}</label>
             <div className="vote-link-box">
               <a
                 id="outVoteUrlSuccess"
@@ -1459,13 +1618,19 @@ export default function CreateRoute() {
               >
                 {outputs.voteUrl || '-'}
               </a>
-              <button id="copyVoteUrlBtnSuccess" type="button" className="icon-btn" title="Copy link" onClick={() => void handleCopyVoteUrl()}>
+              <button
+                id="copyVoteUrlBtnSuccess"
+                type="button"
+                className="icon-btn"
+                title={COPY.create.success.copyLinkTitle}
+                onClick={() => void handleCopyVoteUrl()}
+              >
                 <span className="iconoir-copy" aria-hidden="true" />
               </button>
             </div>
 
             <div className="vote-share-wrapper" id="createShareLinks" hidden={shareTargets.length === 0}>
-              <span className="vote-share-label">Share on social networks</span>
+              <span className="vote-share-label">{COPY.create.success.shareSocialLabel}</span>
               <div className="vote-share-grid">
                 {shareTargets.map((target) => (
                   <a
@@ -1475,8 +1640,8 @@ export default function CreateRoute() {
                     href={target.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`Share on ${target.label}`}
-                    title={`Share on ${target.label}`}
+                    aria-label={COPY.create.success.shareAria(target.label)}
+                    title={COPY.create.success.shareAria(target.label)}
                     data-fallback={target.fallbackText}
                   >
                     {target.id === 'linkedin' ? (
@@ -1521,34 +1686,34 @@ export default function CreateRoute() {
           </div>
 
           <details className="final-details">
-            <summary>Advanced Details</summary>
+            <summary>{COPY.shared.advancedDetails}</summary>
             <dl className="outputs" hidden={!outputsVisible}>
               <div id="outputContractItem" className="output-item" hidden={!outputs.censusContract}>
-                <dt>Census contract</dt>
+                <dt>{COPY.create.outputs.censusContract}</dt>
                 <dd id="outContract" className="output-scroll">
                   {outputs.censusContract || '-'}
                 </dd>
               </div>
               <div id="outputDeployTxItem" className="output-item" hidden={!outputs.deploymentTxHash}>
-                <dt>Deployment tx</dt>
+                <dt>{COPY.create.outputs.deploymentTx}</dt>
                 <dd id="outDeployTx" className="output-scroll">
                   {outputs.deploymentTxHash || '-'}
                 </dd>
               </div>
               <div id="outputCensusUriItem" className="output-item" hidden={!outputs.censusUri}>
-                <dt>Census URI</dt>
+                <dt>{COPY.create.outputs.censusUri}</dt>
                 <dd id="outCensusUri" className="output-scroll">
                   {outputs.censusUri || '-'}
                 </dd>
               </div>
               <div id="outputProcessIdItem" className="output-item" hidden={!outputs.processId}>
-                <dt>Process ID</dt>
+                <dt>{COPY.create.outputs.processId}</dt>
                 <dd id="outProcessId" className="output-scroll">
                   {outputs.processId || '-'}
                 </dd>
               </div>
               <div id="outputProcessTxItem" className="output-item" hidden={!outputs.processTxHash}>
-                <dt>Process tx</dt>
+                <dt>{COPY.create.outputs.processTx}</dt>
                 <dd id="outProcessTx" className="output-scroll">
                   {outputs.processTxHash || '-'}
                 </dd>

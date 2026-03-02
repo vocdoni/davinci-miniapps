@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { buildAssetUrl } from './utils/assets';
+import { COPY } from './copy';
 
 const CreateRoute = lazy(() => import('./routes/CreateRoute'));
 const VoteRoute = lazy(() => import('./routes/VoteRoute'));
@@ -10,7 +11,7 @@ function RouteLoadingFallback() {
   return (
     <section className="view">
       <article className="card">
-        <p className="muted">Loading route...</p>
+        <p className="muted">{COPY.app.routeLoading}</p>
       </article>
     </section>
   );
@@ -31,16 +32,16 @@ function AppLayout() {
 
       <footer className="app-footer">
         <div className="footer-row">
-          <span>Powered by</span>
-          <img className="logo-davinci" src={withBase('davinci_logo.png')} alt="Davinci logo" />
-          <span>and</span>
-          <img src={withBase('self_logo.png')} alt="Self logo" />
+          <span>{COPY.brand.poweredBy}</span>
+          <img className="logo-davinci" src={withBase('davinci_logo.png')} alt={COPY.brand.davinciLogoAlt} />
+          <span>{COPY.brand.and}</span>
+          <img src={withBase('self_logo.png')} alt={COPY.brand.selfLogoAlt} />
         </div>
         <div className="footer-row">
-          <span>Made with</span>
+          <span>{COPY.brand.madeWith}</span>
           <span className="heart">❤️</span>
-          <span>by</span>
-          <img src={withBase('vocdoni_logo.png')} alt="Vocdoni logo" />
+          <span>{COPY.brand.by}</span>
+          <img src={withBase('vocdoni_logo.png')} alt={COPY.brand.vocdoniLogoAlt} />
         </div>
       </footer>
     </>

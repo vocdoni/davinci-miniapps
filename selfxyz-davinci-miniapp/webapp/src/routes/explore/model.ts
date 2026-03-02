@@ -1,4 +1,5 @@
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
+import { COPY } from '../../copy';
 
 import {
   extractProcessEndDateMs,
@@ -130,7 +131,7 @@ export function mapExploreProcessRow(input: MapExploreRowInput): ExploreProcessR
   const rawStatusCode = normalizeProcessStatus((input.process as Record<string, unknown> | null)?.status ?? null);
   const statusCode =
     rawStatusCode === ProcessStatus.READY && hasProcessEndedByTime(endDateMs) ? ProcessStatus.ENDED : rawStatusCode;
-  const statusLabel = getProcessStatusInfo(statusCode)?.label || 'Unknown';
+  const statusLabel = getProcessStatusInfo(statusCode)?.label || COPY.shared.unknown;
   const readyTimeRemainingLabel = statusCode === ProcessStatus.READY ? formatRemainingTimeFromEndMs(endDateMs) : '-';
 
   const questionTitle =

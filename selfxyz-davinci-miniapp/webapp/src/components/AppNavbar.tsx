@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { COPY } from '../copy';
 
 export interface AppNavbarLink {
   id?: string;
@@ -37,7 +38,7 @@ export default function AppNavbar({ id, brandId, baseHref, logoSrc, brandLabel, 
   return (
     <nav className="app-navbar" id={id}>
       <a href={baseHref} className="navbar-brand" id={brandId}>
-        <img className="navbar-logo" src={logoSrc} alt="Davinci logo" />
+        <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
         <span>{brandLabel}</span>
       </a>
       {navLinks.length > 0 && (
