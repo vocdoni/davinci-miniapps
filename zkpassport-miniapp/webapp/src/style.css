@@ -1,0 +1,164 @@
+:root {
+  color-scheme: light;
+  font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+  line-height: 1.45;
+  background: radial-gradient(circle at 0% 0%, #fff4ea 0%, #f9f6f1 42%, #f1f5f9 100%);
+  color: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+}
+
+.card {
+  width: min(560px, 100%);
+  border: 1px solid #d6d3d1;
+  border-radius: 18px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: #334155;
+}
+
+.form {
+  margin-top: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.status-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  text-transform: capitalize;
+}
+
+.status-line--stack {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+}
+
+.label {
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.value {
+  font-weight: 600;
+}
+
+.value--identifier {
+  width: 100%;
+  max-width: 100%;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.qr-section {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #f4a363;
+  background: #fff8f2;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.qr-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  padding: 11px 16px;
+  cursor: pointer;
+}
+
+.primary {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ghost {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.link {
+  color: #0f766e;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 14px;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  h1 {
+    font-size: 1.45rem;
+  }
+}
