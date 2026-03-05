@@ -200,4 +200,18 @@ describe('CreateRoute country selector', () => {
 
     expect(screen.getByText('No countries found')).toBeInTheDocument();
   });
+
+  it('removes the last selected country on Backspace when query is empty', () => {
+    render(<CreateRoute />);
+
+    selectCountry('Argentina', 'ARG');
+    selectCountry('Australia', 'AUS');
+
+    const input = getCountryInput();
+    expect(input).toHaveValue('');
+    fireEvent.keyDown(input, { key: 'Backspace', code: 'Backspace' });
+
+    expect(screen.queryByRole('button', { name: /remove australia/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /remove argentina/i })).toBeInTheDocument();
+  });
 });

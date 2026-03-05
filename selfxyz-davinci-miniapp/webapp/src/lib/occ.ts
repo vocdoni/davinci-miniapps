@@ -3,7 +3,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 
 import artifact from '../artifacts/OpenCitizenCensus.json';
 import { COPY } from '../copy';
-import { isAsciiText, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
+import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { toDateFromUnknown, toDurationMs, toRfc3339Timestamp } from '../utils/timing';
 
 const env = import.meta.env;
@@ -640,10 +640,10 @@ export function buildDeployData(input: {
   ensureValidHexBytecode(linkedBytecode);
 
   const countries = Array.isArray(input.countries)
-    ? input.countries.map((country) => normalizeCountry(country)).filter((country) => /^[A-Z]{2,3}$/.test(country))
+    ? input.countries.map((country) => normalizeCountry(country)).filter((country) => isValidCountryCode(country))
     : [];
   const fallbackCountry = normalizeCountry(input.country);
-  const targetCountries = countries.length ? countries : /^[A-Z]{2,3}$/.test(fallbackCountry) ? [fallbackCountry] : [];
+  const targetCountries = countries.length ? countries : isValidCountryCode(fallbackCountry) ? [fallbackCountry] : [];
   if (!targetCountries.length) {
     throw new Error('At least one country is required to deploy the census contract.');
   }
@@ -1012,12 +1012,12 @@ export function extractVoteContextFromMetadata(metadata: Record<string, any> | n
   const countries: string[] = [];
   for (const rawCountry of rawCountries) {
     const country = normalizeCountry(rawCountry);
-    if (!/^[A-Z]{2,3}$/.test(country)) continue;
+    if (!isValidCountryCode(country)) continue;
     if (countries.includes(country)) continue;
     countries.push(country);
   }
   const legacyCountry = normalizeCountry(selfConfig.country || '');
-  if (!countries.length && /^[A-Z]{2,3}$/.test(legacyCountry)) {
+  if (!countries.length && isValidCountryCode(legacyCountry)) {
     countries.push(legacyCountry);
   }
   const network = String(meta.network || '').trim();

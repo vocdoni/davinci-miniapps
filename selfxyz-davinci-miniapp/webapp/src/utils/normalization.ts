@@ -9,7 +9,21 @@ export function isValidProcessId(value: unknown): boolean {
 }
 
 export function normalizeCountry(value: unknown): string {
-  return String(value || '').trim().toUpperCase();
+  const normalized = String(value || '').trim().toUpperCase();
+  // Canonicalize Germany to the Self SDK special code used in passport flows.
+  if (normalized === 'DEU') {
+    return 'D<<';
+  }
+  // German passports can use D<< (or variants with <); collapse to the canonical token.
+  if (normalized.startsWith('D') && normalized.includes('<')) {
+    return 'D<<';
+  }
+  return normalized;
+}
+
+export function isValidCountryCode(value: unknown): boolean {
+  const normalized = normalizeCountry(value);
+  return normalized === 'D<<' || /^[A-Z]{2,3}$/.test(normalized);
 }
 
 export function normalizeScope(value: unknown): string {

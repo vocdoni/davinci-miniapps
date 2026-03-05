@@ -50,7 +50,7 @@ import {
 } from '../lib/occ';
 import { getUniversalLink } from '../selfApp';
 import { buildAssetUrl } from '../utils/assets';
-import { isValidProcessId, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
+import { isValidCountryCode, isValidProcessId, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { ethCall, fetchOnchainWeight } from '../services/readiness';
 import {
   createSequencerSdk,
@@ -234,7 +234,7 @@ function normalizeCountries(value: unknown): string[] {
   const normalized: string[] = [];
   for (const rawCountry of value) {
     const country = normalizeCountry(rawCountry);
-    if (!/^[A-Z]{2,3}$/.test(country)) continue;
+    if (!isValidCountryCode(country)) continue;
     if (normalized.includes(country)) continue;
     normalized.push(country);
   }
@@ -651,7 +651,7 @@ export default function VoteRoute() {
 
       const metaCountries = normalizeCountries(meta?.countries);
       const metaCountry = normalizeCountry(meta?.country || '');
-      const fallbackMetaCountries = /^[A-Z]{2,3}$/.test(metaCountry) ? [metaCountry] : [];
+      const fallbackMetaCountries = isValidCountryCode(metaCountry) ? [metaCountry] : [];
       const resolvedMetaCountries = contractMatches ? (metaCountries.length ? metaCountries : fallbackMetaCountries) : [];
       const metaMinAge = Number(meta?.minAge);
       const resolvedMetaMinAge = contractMatches && Number.isFinite(metaMinAge) && metaMinAge > 0 ? Math.trunc(metaMinAge) : null;

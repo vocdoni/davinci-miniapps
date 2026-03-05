@@ -53,8 +53,8 @@ describe('extractVoteContextFromMetadata', () => {
       },
     });
 
-    expect(context.countries).toEqual(['DEU', 'ITA']);
-    expect(context.country).toBe('DEU');
+    expect(context.countries).toEqual(['D<<', 'ITA']);
+    expect(context.country).toBe('D<<');
   });
 
   it('filters invalid country codes safely', () => {

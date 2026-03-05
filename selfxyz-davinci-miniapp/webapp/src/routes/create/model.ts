@@ -1,5 +1,5 @@
 import type { CreateValues } from '../../lib/occ';
-import { isAsciiText, normalizeCountry, normalizeMinAge, normalizeScope, stripNonAscii } from '../../utils/normalization';
+import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeScope, stripNonAscii } from '../../utils/normalization';
 import {
   DEFAULT_DURATION_HOURS,
   DEFAULT_MAX_VOTERS,
@@ -127,7 +127,7 @@ export function parseCountries(countries: string[]): string[] {
 
   for (const rawCountry of countries) {
     const country = normalizeCountry(rawCountry);
-    if (!/^[A-Z]{2,3}$/.test(country)) {
+    if (!isValidCountryCode(country)) {
       throw new Error('Each country must use a valid country code.');
     }
     if (!deduped.includes(country)) {

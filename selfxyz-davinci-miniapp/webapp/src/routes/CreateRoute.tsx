@@ -28,7 +28,7 @@ import {
   type CreateValues,
   type PipelineStageState,
 } from '../lib/occ';
-import { normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
+import { isValidCountryCode, normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
 import { buildAssetUrl } from '../utils/assets';
 import { createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
 import {
@@ -540,7 +540,7 @@ export default function CreateRoute() {
     (countryCode: string) => {
       if (formLocked) return;
       const normalizedCode = normalizeCountry(countryCode);
-      if (!/^[A-Z]{2,3}$/.test(normalizedCode)) return;
+      if (!isValidCountryCode(normalizedCode)) return;
 
       setForm((previous) => {
         const exists = previous.countries.includes(normalizedCode);
@@ -586,6 +586,15 @@ export default function CreateRoute() {
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (formLocked) return;
 
+      if (event.key === 'Backspace' && !countryQuery.trim() && form.countries.length > 0) {
+        event.preventDefault();
+        const lastCountry = form.countries[form.countries.length - 1];
+        if (lastCountry) {
+          toggleCountrySelection(lastCountry);
+        }
+        return;
+      }
+
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         if (!countriesMenuOpen) {
@@ -629,7 +638,17 @@ export default function CreateRoute() {
         closeCountriesMenu();
       }
     },
-    [activeCountryIndex, closeCountriesMenu, countriesMenuOpen, filteredCountryOptions, formLocked, handleCountrySelect]
+    [
+      activeCountryIndex,
+      closeCountriesMenu,
+      countriesMenuOpen,
+      countryQuery,
+      filteredCountryOptions,
+      form.countries,
+      formLocked,
+      handleCountrySelect,
+      toggleCountrySelection,
+    ]
   );
 
   const adjustMinAge = useCallback((delta: number) => {

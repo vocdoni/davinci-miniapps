@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isValidCountryCode,
   isAsciiText,
   isValidProcessId,
   normalizeCountry,
@@ -22,7 +23,16 @@ describe('normalization utils', () => {
 
   it('normalizes country and scope', () => {
     expect(normalizeCountry(' es ')).toBe('ES');
+    expect(normalizeCountry(' d<< ')).toBe('D<<');
+    expect(normalizeCountry('deu')).toBe('D<<');
     expect(normalizeScope('  scoped  ')).toBe('scoped');
+  });
+
+  it('validates country codes including Germany special case', () => {
+    expect(isValidCountryCode('USA')).toBe(true);
+    expect(isValidCountryCode('d<<')).toBe(true);
+    expect(isValidCountryCode('DEU')).toBe(true);
+    expect(isValidCountryCode('USAA')).toBe(false);
   });
 
   it('normalizes min age with limits', () => {
