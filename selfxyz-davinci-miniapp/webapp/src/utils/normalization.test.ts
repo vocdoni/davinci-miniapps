@@ -13,7 +13,7 @@ import {
 
 describe('normalization utils', () => {
   it('normalizes and validates process ids', () => {
-    const raw = 'ab'.repeat(32);
+    const raw = 'ab'.repeat(31);
     const normalized = normalizeProcessId(raw);
 
     expect(normalized).toBe(`0x${raw}`);

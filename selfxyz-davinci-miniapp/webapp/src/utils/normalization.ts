@@ -5,7 +5,7 @@ export function normalizeProcessId(value: unknown): string {
 }
 
 export function isValidProcessId(value: unknown): boolean {
-  return /^0x[a-fA-F0-9]{64}$/.test(String(value || '').trim());
+  return /^0x[a-fA-F0-9]{62}$/.test(String(value || '').trim());
 }
 
 export function normalizeCountry(value: unknown): string {

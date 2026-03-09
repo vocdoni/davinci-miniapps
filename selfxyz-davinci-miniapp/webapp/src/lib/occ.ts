@@ -1053,7 +1053,7 @@ export function encodeBasePath(path: string): string {
 
 export function buildVoteUrl(processId: string): string {
   const normalized = normalizeProcessId(processId);
-  if (!normalized || !/^0x[a-fA-F0-9]{64}$/.test(normalized)) {
+  if (!normalized || !/^0x[a-fA-F0-9]{62}$/.test(normalized)) {
     return `${window.location.origin}${encodeBasePath('/vote')}`;
   }
   return `${window.location.origin}${encodeBasePath(`/vote/${encodeURIComponent(normalized)}`)}`;
