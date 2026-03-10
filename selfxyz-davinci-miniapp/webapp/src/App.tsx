@@ -1,11 +1,16 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { buildAssetUrl } from './utils/assets';
 import { COPY } from './copy';
+import SupportPopup from './components/SupportPopup';
 
 const CreateRoute = lazy(() => import('./routes/CreateRoute'));
 const VoteRoute = lazy(() => import('./routes/VoteRoute'));
 const ExploreRoute = lazy(() => import('./routes/ExploreRoute'));
+
+function shouldShowSupportPopup(pathname: string): boolean {
+  return pathname === '/' || /^\/create(?:\/|$)/.test(pathname) || /^\/vote(?:\/|$)/.test(pathname);
+}
 
 function RouteLoadingFallback() {
   return (
@@ -20,7 +25,9 @@ function RouteLoadingFallback() {
 function AppLayout() {
   const location = useLocation();
   const inVoteView = /^\/vote(?:\/|$)/.test(location.pathname);
+  const [supportOpen, setSupportOpen] = useState(true);
   const withBase = (file: string) => buildAssetUrl(file);
+  const showSupportPopup = shouldShowSupportPopup(location.pathname);
 
   return (
     <>
@@ -29,6 +36,8 @@ function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <SupportPopup open={showSupportPopup && supportOpen} onDismiss={() => setSupportOpen(false)} />
 
       <footer className="app-footer">
         <div className="footer-row">

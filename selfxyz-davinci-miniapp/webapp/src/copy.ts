@@ -18,6 +18,14 @@ export const COPY = {
   app: {
     routeLoading: 'Loading route...',
   },
+  support: {
+    eyebrow: 'Support',
+    title: 'Need help?',
+    description: 'Questions or problems? Get in touch with the Vocdoni team and we’ll help you out.',
+    discord: 'Discord',
+    telegram: 'Telegram',
+    dismiss: 'Dismiss support popup',
+  },
   shared: {
     explore: 'Explore',
     copy: 'Copy',
