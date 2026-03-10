@@ -1815,6 +1815,18 @@ button.qr-copy-btn:focus-visible {
   margin-bottom: 20px;
 }
 
+.footer-logo-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.footer-logo-link:focus-visible {
+  outline: 2px solid rgba(31, 42, 58, 0.32);
+  outline-offset: 4px;
+}
+
 .app-footer img {
   height: 20px;
   vertical-align: middle;

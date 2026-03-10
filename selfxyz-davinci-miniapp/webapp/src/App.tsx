@@ -42,15 +42,21 @@ function AppLayout() {
       <footer className="app-footer">
         <div className="footer-row">
           <span>{COPY.brand.poweredBy}</span>
-          <img className="logo-davinci" src={withBase('davinci_logo.png')} alt={COPY.brand.davinciLogoAlt} />
+          <a className="footer-logo-link" href="https://davinci.vote" target="_blank" rel="noreferrer">
+            <img className="logo-davinci" src={withBase('davinci_logo.png')} alt={COPY.brand.davinciLogoAlt} />
+          </a>
           <span>{COPY.brand.and}</span>
-          <img src={withBase('self_logo.png')} alt={COPY.brand.selfLogoAlt} />
+          <a className="footer-logo-link" href="https://self.xyz" target="_blank" rel="noreferrer">
+            <img src={withBase('self_logo.png')} alt={COPY.brand.selfLogoAlt} />
+          </a>
         </div>
         <div className="footer-row">
           <span>{COPY.brand.madeWith}</span>
           <span className="heart">❤️</span>
           <span>{COPY.brand.by}</span>
-          <img src={withBase('vocdoni_logo.png')} alt={COPY.brand.vocdoniLogoAlt} />
+          <a className="footer-logo-link" href="https://vocdoni.io" target="_blank" rel="noreferrer">
+            <img src={withBase('vocdoni_logo.png')} alt={COPY.brand.vocdoniLogoAlt} />
+          </a>
         </div>
       </footer>
     </>
