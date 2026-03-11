@@ -17,6 +17,7 @@ describe('explore metadata eligibility', () => {
   it('accepts metadata with valid selfConfig core fields', () => {
     const result = isExploreEligibleMetadata({
       meta: {
+        listInExplore: 'true',
         selfConfig: {
           scope: 'ESP_18_abcde',
           minAge: 18,
@@ -28,9 +29,39 @@ describe('explore metadata eligibility', () => {
     expect(result).toEqual({ accepted: true, reason: 'ok' });
   });
 
+  it('rejects metadata when listInExplore is missing', () => {
+    const result = isExploreEligibleMetadata({
+      meta: {
+        selfConfig: {
+          scope: 'ESP_18_abcde',
+          minAge: 18,
+          countries: ['ESP'],
+        },
+      },
+    });
+
+    expect(result).toEqual({ accepted: false, reason: 'not_listed' });
+  });
+
+  it('rejects metadata when listInExplore is false', () => {
+    const result = isExploreEligibleMetadata({
+      meta: {
+        listInExplore: 'false',
+        selfConfig: {
+          scope: 'ESP_18_abcde',
+          minAge: 18,
+          countries: ['ESP'],
+        },
+      },
+    });
+
+    expect(result).toEqual({ accepted: false, reason: 'not_listed' });
+  });
+
   it('rejects metadata when scope is missing', () => {
     const result = isExploreEligibleMetadata({
       meta: {
+        listInExplore: 'true',
         selfConfig: {
           minAge: 18,
           countries: ['ESP'],
@@ -44,6 +75,7 @@ describe('explore metadata eligibility', () => {
   it('rejects metadata when minAge is invalid', () => {
     const result = isExploreEligibleMetadata({
       meta: {
+        listInExplore: 'true',
         selfConfig: {
           scope: 'ESP_18_abcde',
           minAge: 0,
@@ -58,6 +90,7 @@ describe('explore metadata eligibility', () => {
   it('rejects metadata when both countries and legacy country are missing', () => {
     const result = isExploreEligibleMetadata({
       meta: {
+        listInExplore: 'true',
         selfConfig: {
           scope: 'ESP_18_abcde',
           minAge: 18,
@@ -71,6 +104,7 @@ describe('explore metadata eligibility', () => {
   it('accepts legacy single-country fallback', () => {
     const result = isExploreEligibleMetadata({
       meta: {
+        listInExplore: 'true',
         selfConfig: {
           scope: 'ESP_18_abcde',
           minAge: 18,
@@ -111,6 +145,7 @@ describe('explore row mapping', () => {
           },
         ],
         meta: {
+          listInExplore: true,
           selfConfig: {
             scope: 'ESP_18_abcde',
             minAge: 18,
@@ -140,6 +175,7 @@ describe('explore row mapping', () => {
       metadata: {
         title: { default: 'Metadata title' },
         meta: {
+          listInExplore: true,
           selfConfig: {
             scope: 'ESP_18_abcde',
             minAge: 18,

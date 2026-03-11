@@ -62,6 +62,7 @@ export function createInitialFormState(): CreateFormState {
     minAge: DEFAULT_MIN_AGE,
     durationHours: DEFAULT_DURATION_HOURS,
     maxVoters: DEFAULT_MAX_VOTERS,
+    listInExplore: true,
   };
 }
 
@@ -199,6 +200,7 @@ export function deriveCreateValuesFromForm(
     maxVoters: Math.trunc(maxVoters),
     duration: Math.round(durationHours * 3600),
     startDate,
+    listInExplore: form.listInExplore !== false,
     question,
     ballot: buildBallotFromChoices(choices.length),
   };

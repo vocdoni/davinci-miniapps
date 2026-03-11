@@ -61,11 +61,32 @@ function readSelfConfig(metadata: Record<string, unknown> | null): Record<string
   return selfConfig as Record<string, unknown>;
 }
 
+function readProcessMeta(metadata: Record<string, unknown> | null): Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object') return {};
+  const rawMeta = metadata.meta;
+  return rawMeta && typeof rawMeta === 'object' ? (rawMeta as Record<string, unknown>) : {};
+}
+
 function isAsciiSafe(value: string): boolean {
   return /^[\x00-\x7F]+$/.test(value);
 }
 
+function isTruthyMetadataFlag(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  if (typeof value === 'number') return value === 1;
+  return false;
+}
+
 export function isExploreEligibleMetadata(metadata: Record<string, unknown> | null): ExploreFilterResult {
+  const rawMeta = readProcessMeta(metadata);
+  if (!isTruthyMetadataFlag(rawMeta.listInExplore)) {
+    return { accepted: false, reason: 'not_listed' };
+  }
+
   const selfConfig = readSelfConfig(metadata);
   const rawScope = selfConfig.scope ?? selfConfig.scopeSeed;
   const scopeProvided = rawScope !== undefined && rawScope !== null && String(rawScope).trim() !== '';

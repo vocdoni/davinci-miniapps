@@ -215,6 +215,7 @@ export interface CreateValues {
   maxVoters: number;
   duration: number;
   startDate: Date;
+  listInExplore: boolean;
   question: CreateQuestion;
   ballot: {
     numFields: number;
@@ -237,6 +238,7 @@ export interface ProcessMetaSnapshot {
   country?: string;
   minAge?: number;
   network?: string;
+  listInExplore?: boolean;
   updatedAt?: string;
 }
 

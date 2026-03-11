@@ -213,7 +213,7 @@ describe('VoteRoute identity popup', () => {
     const addressInput = document.getElementById('walletAddressInput') as HTMLInputElement;
     expect(addressInput.value).toMatch(/^0x[a-fA-F0-9]{40}$/);
     expect(addressInput).toHaveAttribute('readonly');
-    expect(document.getElementById('walletSource')).toHaveTextContent('Derived');
+    expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
     expect(screen.getByRole('button', { name: 'Copy private key' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect browser wallet' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use derived key' })).not.toBeInTheDocument();
@@ -279,7 +279,7 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(restoreLocalWalletButton);
 
     await waitFor(() => {
-      expect(document.getElementById('walletSource')).toHaveTextContent('Derived');
+      expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
       expect(screen.getByRole('button', { name: 'Connect browser wallet' })).toBeInTheDocument();
     });
 
@@ -438,7 +438,7 @@ describe('VoteRoute identity popup', () => {
     );
   });
 
-  it('shows a clickable wallet widget in the registration popup', async () => {
+  it('shows a wallet widget without helper copy when registration already uses a connected wallet', async () => {
     const connectedAddress = '0x2222222222222222222222222222222222222222';
     mockConnectBrowserWallet.mockResolvedValue({
       provider: { request: vi.fn() },
@@ -470,17 +470,43 @@ describe('VoteRoute identity popup', () => {
       expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
     });
 
-    const registrationWalletWidget = document.getElementById('registrationWalletWidget') as HTMLButtonElement;
+    const registrationWalletWidget = document.getElementById('registrationWalletWidget') as HTMLDivElement;
     expect(registrationWalletWidget).toBeInTheDocument();
+    expect(registrationWalletWidget.tagName).toBe('DIV');
     expect(registrationWalletWidget).toHaveTextContent('Connected');
     expect(registrationWalletWidget).toHaveTextContent('0x222222...2222');
+    expect(screen.queryByText("Want to use your own identity?")).not.toBeInTheDocument();
+    expect(screen.queryByText("Early users won't be forgotten. Your vote stays anonymous.")).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Connect your wallet here.' })).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(registrationWalletWidget);
+  it('shows the registration helper link for ephemeral identities and opens the identity popup', async () => {
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+    });
+
+    const registrationWalletWidget = document.getElementById('registrationWalletWidget') as HTMLDivElement;
+    expect(registrationWalletWidget).toBeInTheDocument();
+    expect(registrationWalletWidget.tagName).toBe('DIV');
+    expect(registrationWalletWidget).toHaveTextContent('Ephemeral Identity');
+    expect(screen.getByText("Want to use your own identity?")).toBeInTheDocument();
+    expect(screen.getByText("Early users won't be forgotten. Your vote stays anonymous.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Connect your wallet here.' }));
 
     await waitFor(() => {
       expect(document.getElementById('voteRegistrationPopup')).not.toBeVisible();
       expect(screen.getByRole('dialog', { name: 'Identity Wallet' })).toBeInTheDocument();
-      expect((document.getElementById('walletAddressInput') as HTMLInputElement).value).toBe(connectedAddress);
+      expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
     });
   });
 

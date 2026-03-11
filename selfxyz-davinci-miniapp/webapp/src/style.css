@@ -2291,8 +2291,9 @@ button.qr-copy-btn:focus-visible {
 }
 
 .vote-registration-footer {
-  display: flex;
-  justify-content: flex-start;
+  display: grid;
+  gap: 8px;
+  justify-items: flex-start;
 }
 
 .registration-wallet-widget {
@@ -2306,32 +2307,32 @@ button.qr-copy-btn:focus-visible {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .registration-wallet-widget .identity-source-tag {
   max-width: 100%;
   flex-wrap: wrap;
   gap: 8px;
-  transition: box-shadow 0.2s ease;
 }
 
-.registration-wallet-widget:hover:not(:disabled) {
-  transform: none;
-  box-shadow: none;
+.registration-wallet-helper {
+  display: grid;
+  gap: 2px;
+  max-width: 380px;
 }
 
-.registration-wallet-widget:hover:not(:disabled) .identity-source-tag {
-  box-shadow: 0 8px 16px rgba(31, 42, 58, 0.08);
+.registration-wallet-helper-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
-.registration-wallet-widget:focus-visible {
-  outline: 2px solid rgba(74, 90, 239, 0.32);
-  outline-offset: 3px;
-  border-radius: 999px;
-}
-
-.registration-wallet-widget:disabled {
+.registration-identity-link.is-disabled {
+  color: var(--muted);
+  text-decoration: none;
+  pointer-events: none;
   cursor: default;
 }
 
@@ -3492,9 +3493,61 @@ button.qr-copy-btn:focus-visible {
   margin-top: 6px;
 }
 
+#createView .advanced-field-checkbox {
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 20px;
+}
+
+#createView .advanced-field-checkbox-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+#createView .advanced-field-checkbox-input {
+  margin: 2px 0 0;
+  width: 18px;
+  height: 18px;
+  accent-color: #4a5aef;
+}
+
+#createView .advanced-field-checkbox-copy {
+  min-width: 0;
+}
+
+#createView .advanced-field-checkbox .advanced-field-label {
+  margin-bottom: 0;
+}
+
+#createView .advanced-field-checkbox .advanced-field-helper {
+  margin-top: 4px;
+}
+
 #createView .create-actions {
   display: grid;
   gap: 12px;
+}
+
+#createView .create-wallet-balance-note {
+  margin: 0;
+  text-align: left;
+}
+
+#createView .create-wallet-connect-note {
+  margin: -2px 0 0;
+}
+
+#createView .create-wallet-connect-note strong {
+  color: var(--ink);
+}
+
+#createView .create-wallet-balance-note a {
+  font-weight: 600;
 }
 
 :is(#createView, #voteView) .cta-btn {
@@ -3648,6 +3701,29 @@ button.qr-copy-btn:focus-visible {
 
 #createView .create-timeline-body {
   margin-top: 12px;
+}
+
+#createView .timeline-status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+#createView .timeline-status-row .timeline-meta {
+  margin: 2px 0 0;
+}
+
+#createView .timeline-retry-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+#createView .timeline-retry-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: 0 8px 14px rgba(31, 42, 58, 0.12);
 }
 
 #createView .timeline-popup-status {

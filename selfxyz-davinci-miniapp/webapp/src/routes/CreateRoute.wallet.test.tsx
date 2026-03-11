@@ -63,7 +63,7 @@ describe('CreateRoute creator wallet persistence', () => {
     const connectedAddress = '0x8888888888888888888888888888888888888888';
     const connectedWallet = {
       provider: { request: vi.fn() },
-      browserProvider: {},
+      browserProvider: { getBalance: vi.fn().mockResolvedValue(1n) },
       signer: { signMessage: vi.fn() },
       address: connectedAddress,
       sourceLabel: 'MetaMask',
@@ -99,5 +99,30 @@ describe('CreateRoute creator wallet persistence', () => {
       expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(connectedAddress);
       expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
     });
+  });
+
+  it('disables creation and shows the CELO faucet when the connected wallet has no balance', async () => {
+    const connectedAddress = '0x9999999999999999999999999999999999999999';
+    mockConnectBrowserWallet.mockResolvedValue({
+      provider: { request: vi.fn() },
+      browserProvider: { getBalance: vi.fn().mockResolvedValue(0n) },
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+      connectorType: 'injected' as const,
+    });
+
+    render(<CreateRoute />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(connectedAddress);
+      expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeDisabled();
+      expect(screen.getByText(/almost there! creating a vote requires a tiny bit of celo/i)).toBeInTheDocument();
+    });
+
+    const faucetLink = screen.getByRole('link', { name: 'here' });
+    expect(faucetLink).toHaveAttribute('href', 'https://stakely.io/faucet/celo-celo');
   });
 });

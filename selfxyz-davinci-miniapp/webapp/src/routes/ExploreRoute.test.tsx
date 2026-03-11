@@ -53,6 +53,7 @@ function makeMetadata(questionTitle: string, countries: string[] = ['ESP']) {
       },
     ],
     meta: {
+      listInExplore: true,
       selfConfig: {
         scope: 'ESP_18_abcde',
         minAge: 18,
@@ -140,6 +141,30 @@ describe('ExploreRoute', () => {
     await waitFor(() => {
       expect(screen.getByText('No compatible processes found.')).toBeInTheDocument();
     });
+  });
+
+  it('skips processes without the explicit explore listing flag', async () => {
+    const id = processIdFrom(1);
+    mockListProcessesFromSequencer.mockResolvedValue([id]);
+    mockGetProcessFromSequencer.mockResolvedValue(makeProcess(id));
+    mockFetchProcessMetadata.mockResolvedValue({
+      title: { default: 'Legacy process' },
+      meta: {
+        selfConfig: {
+          scope: 'ESP_18_abcde',
+          minAge: 18,
+          countries: ['ESP'],
+        },
+      },
+    });
+
+    render(<ExploreRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No compatible processes found.')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Legacy process')).not.toBeInTheDocument();
   });
 
   it('shows error state and retry action on sequencer failure', async () => {

@@ -1933,6 +1933,7 @@ export default function VoteRoute() {
   const voteRemainingTimeText = formatRemainingTimeFromEndMs(voteResolution.endDateMs);
   const showCopyPrivateKey = Boolean(managedWallet && managedWallet.source !== 'connected' && managedWallet.privateKey);
   const showRegistrationWalletAddress = Boolean(managedWallet && managedWallet.source !== 'derived' && managedWallet.address);
+  const showRegistrationIdentityPrompt = Boolean(managedWallet && managedWallet.source !== 'connected');
   const registrationWalletAddressLabel = showRegistrationWalletAddress ? shortenRegistrationWalletAddress(managedWallet?.address || '') : '';
   const connectWalletButtonLabel = walletConnectPending
     ? COPY.vote.buttons.connectingBrowserWallet
@@ -2107,7 +2108,6 @@ export default function VoteRoute() {
             <div className="identity-dialog-copy">
               <p>{COPY.vote.dialogs.identityIntroPrimary}</p>
               <p>{COPY.vote.dialogs.identityIntroSecondary}</p>
-              <p>{COPY.vote.dialogs.identityIntroRisks}</p>
             </div>
 
             <section className="identity-wallet-panel" aria-labelledby="walletAddressLabel">
@@ -2664,15 +2664,7 @@ export default function VoteRoute() {
         </div>
         {managedWallet && (
           <div className="vote-registration-footer">
-            <button
-              id="registrationWalletWidget"
-              type="button"
-              className="registration-wallet-widget"
-              aria-controls="voteIdentityDialog"
-              aria-haspopup="dialog"
-              disabled={registrationManualCloseBlocked}
-              onClick={openIdentityFromRegistration}
-            >
+            <div id="registrationWalletWidget" className="registration-wallet-widget">
               <span className="identity-source-tag" data-source={managedWalletSourceMeta.key}>
                 <span className={`identity-source-icon ${managedWalletSourceMeta.iconClass}`} aria-hidden="true" />
                 <span>{managedWalletSourceMeta.label}</span>
@@ -2682,7 +2674,30 @@ export default function VoteRoute() {
                   </code>
                 )}
               </span>
-            </button>
+            </div>
+            {showRegistrationIdentityPrompt && (
+              <div className="registration-wallet-helper">
+                <p className="registration-wallet-helper-line">
+                  {COPY.vote.registration.identityPromptLead}{' '}
+                  <a
+                    id="registrationIdentityLink"
+                    className={`field-link registration-identity-link${registrationManualCloseBlocked ? ' is-disabled' : ''}`}
+                    href="#voteIdentityDialog"
+                    aria-controls="voteIdentityDialog"
+                    aria-haspopup="dialog"
+                    aria-disabled={registrationManualCloseBlocked}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (registrationManualCloseBlocked) return;
+                      openIdentityFromRegistration();
+                    }}
+                  >
+                    {COPY.vote.registration.identityPromptLink}
+                  </a>
+                </p>
+                <p className="registration-wallet-helper-line">{COPY.vote.registration.identityPromptFootnote}</p>
+              </div>
+            )}
           </div>
         )}
         {showRegistrationSubmittingNotice && (

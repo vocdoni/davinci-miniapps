@@ -104,6 +104,8 @@ interface ShareTarget {
   fallbackText: string;
 }
 
+type CreatorWalletBalanceState = 'idle' | 'checking' | 'funded' | 'insufficient' | 'unknown';
+
 const CREATOR_WALLET_STATUS_DEFAULT =
   COPY.create.walletStatusDefault;
 const CREATE_WALLET_PREFERENCE_ID = 'create';
@@ -151,12 +153,29 @@ function timelineRows(pipeline: PipelineStageState[]) {
   return stages.filter((entry) => entry.index <= visibleUntil);
 }
 
+function createEmptyPipelineContext(): PipelineContext {
+  return {
+    values: null,
+    configId: '',
+    provider: null,
+    browserProvider: null,
+    signer: null,
+    creatorAddress: '',
+    contractAddress: '',
+    deploymentBlock: 0,
+    censusUri: '',
+    sdk: null,
+    processId: '',
+  };
+}
+
 export default function CreateRoute() {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createFormDirty, setCreateFormDirty] = useState(false);
   const [overlayState, setOverlayState] = useState<CreateOverlayState>(createInitialOverlayState);
 
   const [creatorWalletStatus, setCreatorWalletStatus] = useState<string>(CREATOR_WALLET_STATUS_DEFAULT);
+  const [creatorWalletBalanceState, setCreatorWalletBalanceState] = useState<CreatorWalletBalanceState>('idle');
   const [creatorWallet, setCreatorWallet] = useState<CreatorWalletState>({
     provider: null,
     browserProvider: null,
@@ -174,6 +193,7 @@ export default function CreateRoute() {
   const [activeCountryIndex, setActiveCountryIndex] = useState(-1);
 
   const walletRef = useRef(creatorWallet);
+  const pipelineContextRef = useRef<PipelineContext>(createEmptyPipelineContext());
   const createTimelineRef = useRef<HTMLDetailsElement | null>(null);
   const countriesSelectRef = useRef<HTMLDivElement | null>(null);
   const countryQueryInputRef = useRef<HTMLInputElement | null>(null);
@@ -214,6 +234,8 @@ export default function CreateRoute() {
   }, [createFormDirty, createSubmitting]);
 
   const creatorConnected = Boolean(creatorWallet.address);
+  const creatorWalletFundingBlocked =
+    creatorWalletBalanceState === 'checking' || creatorWalletBalanceState === 'insufficient';
   const timelineEntries = useMemo(() => timelineRows(pipeline), [pipeline]);
   const hasSuccessOutput = Boolean(String(outputs.voteUrl || '').trim());
   const hasError = useMemo(() => hasPipelineError(pipeline), [pipeline]);
@@ -429,12 +451,14 @@ export default function CreateRoute() {
       sourceLabel: connection.sourceLabel,
       connectorType: connection.connectorType,
     });
+    setCreatorWalletBalanceState('checking');
     setCreatorWallet(connection);
     setCreatorWalletStatus(COPY.create.navbar.connectWalletSource(connection.sourceLabel, ACTIVE_NETWORK.label));
   }, []);
 
   const resetWalletState = useCallback(() => {
     clearConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID);
+    setCreatorWalletBalanceState('idle');
     setCreatorWallet({
       provider: null,
       browserProvider: null,
@@ -470,6 +494,36 @@ export default function CreateRoute() {
       ignore = true;
     };
   }, [applyWalletConnection]);
+
+  useEffect(() => {
+    let ignore = false;
+    const walletAddress = creatorWallet.address;
+    const browserProvider = creatorWallet.browserProvider;
+
+    if (!walletAddress || !browserProvider) {
+      setCreatorWalletBalanceState('idle');
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setCreatorWalletBalanceState('checking');
+
+    void (async () => {
+      try {
+        const balance = await browserProvider.getBalance(walletAddress);
+        if (ignore) return;
+        setCreatorWalletBalanceState(balance > 0n ? 'funded' : 'insufficient');
+      } catch {
+        if (ignore) return;
+        setCreatorWalletBalanceState('unknown');
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [creatorWallet.address, creatorWallet.browserProvider]);
 
   const connectCreatorWallet = useCallback(async () => {
     try {
@@ -979,6 +1033,7 @@ export default function CreateRoute() {
           minAge: ctx.values.minAge,
           country: normalizeCountry(ctx.values.country),
         },
+        listInExplore: ctx.values.listInExplore,
         network: CONFIG.network,
       }),
     };
@@ -1050,11 +1105,133 @@ export default function CreateRoute() {
     setOverlayState({ dismissed: true });
   }, [createSubmitting]);
 
+  const completeCreatePipeline = useCallback(
+    (ctx: PipelineContext) => {
+      if (ctx.values && ctx.processId) {
+        persistProcessMeta(ctx.processId, {
+          contractAddress: ctx.contractAddress,
+          censusUri: ctx.censusUri,
+          title: ctx.values.title,
+          scopeSeed: ctx.values.scopeSeed,
+          countries: ctx.values.countries,
+          country: ctx.values.country,
+          minAge: ctx.values.minAge,
+          network: CONFIG.network,
+          listInExplore: ctx.values.listInExplore,
+          updatedAt: new Date().toISOString(),
+        });
+        persistVoteScopeSeed(ctx.processId, ctx.values.scopeSeed);
+      }
+
+      setForm(createInitialFormState());
+      setCountryQuery('');
+      closeCountriesMenu();
+      setCreateFormDirty(false);
+    },
+    [closeCountriesMenu]
+  );
+
+  const runCreatePipelineFrom = useCallback(
+    async (startStageId: string) => {
+      const startIndex = PIPELINE_STAGES.findIndex((stage) => stage.id === startStageId);
+      if (startIndex < 0) {
+        throw new Error(`Unknown create pipeline stage: ${startStageId}`);
+      }
+
+      const ctx = pipelineContextRef.current;
+
+      for (const stage of PIPELINE_STAGES.slice(startIndex)) {
+        switch (stage.id) {
+          case 'validate_form':
+            await runStage('validate_form', async () => {
+              ctx.values = collectCreateFormValues();
+              return COPY.create.status.formValidated;
+            });
+            break;
+          case 'connect_creator_wallet_walletconnect':
+            await runStage('connect_creator_wallet_walletconnect', () => ensureCreatorWalletForPipeline(ctx));
+            break;
+          case 'ensure_self_config_registered':
+            await runStage('ensure_self_config_registered', () => ensureSelfConfigRegistered(ctx));
+            break;
+          case 'deploy_census_contract':
+            await runStage('deploy_census_contract', () => deployCensusContract(ctx));
+            break;
+          case 'start_indexer':
+            await runStage('start_indexer', () => startIndexer(ctx));
+            break;
+          case 'wait_indexer_ready':
+            await runStage('wait_indexer_ready', () => waitIndexerReady(ctx));
+            break;
+          case 'create_davinci_process':
+            await runStage('create_davinci_process', () => createDavinciProcess(ctx));
+            break;
+          case 'wait_process_ready_in_sequencer':
+            await runStage('wait_process_ready_in_sequencer', () => waitProcessReadyInSequencer(ctx));
+            break;
+          case 'done':
+            await runStage('done', async () => COPY.shared.completed);
+            break;
+          default:
+            throw new Error(`Unhandled create pipeline stage: ${stage.id}`);
+        }
+      }
+
+      completeCreatePipeline(ctx);
+    },
+    [
+      collectCreateFormValues,
+      completeCreatePipeline,
+      createDavinciProcess,
+      deployCensusContract,
+      ensureCreatorWalletForPipeline,
+      ensureSelfConfigRegistered,
+      runStage,
+      startIndexer,
+      waitIndexerReady,
+      waitProcessReadyInSequencer,
+    ]
+  );
+
+  const resetPipelineFromStage = useCallback((startStageId: string) => {
+    const startIndex = PIPELINE_STAGES.findIndex((stage) => stage.id === startStageId);
+    if (startIndex < 0) return;
+
+    const stageIdsToReset = new Set(PIPELINE_STAGES.slice(startIndex).map((stage) => stage.id));
+    setPipeline((previous) =>
+      previous.map((stage) =>
+        stageIdsToReset.has(stage.id) ? { ...stage, status: 'pending', message: COPY.shared.pending } : stage
+      )
+    );
+  }, []);
+
+  const handleRetryStage = useCallback(
+    async (stageId: string) => {
+      if (createSubmitting) return;
+
+      resetPipelineFromStage(stageId);
+      setOverlayState(createInitialOverlayState());
+      setCreateSubmitting(true);
+
+      try {
+        await runCreatePipelineFrom(stageId);
+      } catch (error) {
+        console.error('[OpenCitizenCensus] Create pipeline retry failed', error);
+      } finally {
+        setCreateSubmitting(false);
+      }
+    },
+    [createSubmitting, resetPipelineFromStage, runCreatePipelineFrom]
+  );
+
   const handleCreateSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (createSubmitting) return;
       if (!creatorConnected) {
+        return;
+      }
+      if (creatorWalletFundingBlocked) {
         return;
       }
 
@@ -1068,56 +1245,11 @@ export default function CreateRoute() {
       setOutputs(EMPTY_OUTPUTS);
       setPipeline(newPipelineState());
       setOverlayState(createInitialOverlayState());
+      pipelineContextRef.current = createEmptyPipelineContext();
       setCreateSubmitting(true);
 
-      const ctx: PipelineContext = {
-        values: null,
-        configId: '',
-        provider: null,
-        browserProvider: null,
-        signer: null,
-        creatorAddress: '',
-        contractAddress: '',
-        deploymentBlock: 0,
-        censusUri: '',
-        sdk: null,
-        processId: '',
-      };
-
       try {
-        await runStage('validate_form', async () => {
-          ctx.values = collectCreateFormValues();
-          return COPY.create.status.formValidated;
-        });
-
-        await runStage('connect_creator_wallet_walletconnect', () => ensureCreatorWalletForPipeline(ctx));
-        await runStage('ensure_self_config_registered', () => ensureSelfConfigRegistered(ctx));
-        await runStage('deploy_census_contract', () => deployCensusContract(ctx));
-        await runStage('start_indexer', () => startIndexer(ctx));
-        await runStage('wait_indexer_ready', () => waitIndexerReady(ctx));
-        await runStage('create_davinci_process', () => createDavinciProcess(ctx));
-        await runStage('wait_process_ready_in_sequencer', () => waitProcessReadyInSequencer(ctx));
-        await runStage('done', async () => COPY.shared.completed);
-
-        if (ctx.values && ctx.processId) {
-          persistProcessMeta(ctx.processId, {
-            contractAddress: ctx.contractAddress,
-            censusUri: ctx.censusUri,
-            title: ctx.values.title,
-            scopeSeed: ctx.values.scopeSeed,
-            countries: ctx.values.countries,
-            country: ctx.values.country,
-            minAge: ctx.values.minAge,
-            network: CONFIG.network,
-            updatedAt: new Date().toISOString(),
-          });
-          persistVoteScopeSeed(ctx.processId, ctx.values.scopeSeed);
-        }
-
-        setForm(createInitialFormState());
-        setCountryQuery('');
-        closeCountriesMenu();
-        setCreateFormDirty(false);
+        await runCreatePipelineFrom('validate_form');
       } catch (error) {
         console.error('[OpenCitizenCensus] Create pipeline failed', error);
       } finally {
@@ -1127,16 +1259,13 @@ export default function CreateRoute() {
     [
       collectCreateFormValues,
       creatorConnected,
+      creatorWalletFundingBlocked,
       createDavinciProcess,
       createSubmitting,
       deployCensusContract,
       ensureCreatorWalletForPipeline,
       ensureSelfConfigRegistered,
-      runStage,
-      startIndexer,
-      waitIndexerReady,
-      waitProcessReadyInSequencer,
-      closeCountriesMenu,
+      runCreatePipelineFrom,
     ]
   );
 
@@ -1544,26 +1673,63 @@ export default function CreateRoute() {
               />
               <span className="advanced-field-helper">{COPY.create.form.maxVotersHelper}</span>
             </div>
+            <label className="advanced-field advanced-field-checkbox" htmlFor="listInExplore">
+              <span className="advanced-field-checkbox-row">
+                <input
+                  id="listInExplore"
+                  name="list_in_explore"
+                  className="advanced-field-checkbox-input"
+                  type="checkbox"
+                  checked={form.listInExplore}
+                  disabled={formLocked}
+                  onChange={(event) => updateForm({ listInExplore: event.target.checked })}
+                />
+                <span className="advanced-field-checkbox-copy">
+                  <span className="advanced-field-label">{COPY.create.form.listInExploreLabel}</span>
+                  <span className="advanced-field-helper">{COPY.create.form.listInExploreHelper}</span>
+                </span>
+              </span>
+            </label>
           </div>
         </details>
 
         <div className="create-actions">
           {creatorConnected ? (
-            <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked}>
+            <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked || creatorWalletFundingBlocked}>
               <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-check-circle'}`} aria-hidden="true" />
               <span>{createSubmitting ? COPY.create.form.creatingButton : COPY.create.form.createButton}</span>
             </button>
           ) : (
-            <button
-              id="connectCreatorWalletBtn"
-              type="button"
-              className="cta-btn cta-btn-connect"
-              disabled={formLocked}
-              onClick={() => void handleCreatorWalletButton()}
-            >
-              <span className="btn-icon iconoir-wallet" aria-hidden="true" />
-              <span>{COPY.create.navbar.connectWalletToCreate}</span>
-            </button>
+            <>
+              <button
+                id="connectCreatorWalletBtn"
+                type="button"
+                className="cta-btn cta-btn-connect"
+                disabled={formLocked}
+                onClick={() => void handleCreatorWalletButton()}
+              >
+                <span className="btn-icon iconoir-wallet" aria-hidden="true" />
+                <span>{COPY.create.navbar.connectWalletToCreate}</span>
+              </button>
+              <p className="field-helper create-wallet-connect-note">
+                {COPY.create.walletConnectPromptLead}{' '}
+                <strong>{COPY.create.walletConnectPromptEmphasis}</strong>.
+              </p>
+            </>
+          )}
+
+          {creatorConnected && creatorWalletBalanceState === 'checking' && (
+            <p className="field-helper create-wallet-balance-note">{COPY.create.walletBalanceChecking}</p>
+          )}
+
+          {creatorConnected && creatorWalletBalanceState === 'insufficient' && (
+            <p className="field-helper create-wallet-balance-note create-wallet-balance-note-error">
+              {COPY.create.walletNeedsFundsBeforeCreate}{' '}
+              <a href={COPY.create.walletFaucetUrl} target="_blank" rel="noreferrer">
+                {COPY.create.walletFaucetLabel}
+              </a>
+              .
+            </p>
           )}
         </div>
 
@@ -1629,7 +1795,20 @@ export default function CreateRoute() {
                     <span className="timeline-marker" aria-hidden="true" />
                     <div className="timeline-content">
                       <p className="timeline-label">{entry.stage.label}</p>
-                      <p className="timeline-meta">{entry.status.message || COPY.shared.running}</p>
+                      <div className="timeline-status-row">
+                        <p className="timeline-meta">{entry.status.message || COPY.shared.running}</p>
+                        {isError && (
+                          <button
+                            id={`retryCreateStageBtn-${entry.stage.id}`}
+                            type="button"
+                            className="ghost timeline-retry-btn"
+                            disabled={createSubmitting}
+                            onClick={() => void handleRetryStage(entry.stage.id)}
+                          >
+                            {COPY.shared.retry}
+                          </button>
+                        )}
+                      </div>
                       {entry.stage.id === 'done' && entry.status.status === 'success' && Boolean(outputs.voteUrl) && (
                         <div id="timelineVoteUrlWrap" className="timeline-vote-url">
                           <div className="output-link-actions">

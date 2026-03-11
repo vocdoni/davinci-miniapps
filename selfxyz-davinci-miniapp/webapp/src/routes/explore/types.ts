@@ -1,5 +1,6 @@
 export type ExploreFilterReason =
   | 'ok'
+  | 'not_listed'
   | 'missing_scope'
   | 'invalid_scope'
   | 'missing_min_age'

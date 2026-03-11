@@ -30,6 +30,7 @@ export const COPY = {
     explore: 'Explore',
     copy: 'Copy',
     copied: 'Copied',
+    retry: 'Retry',
     error: 'Error',
     close: 'Close',
     unknown: 'Unknown',
@@ -50,6 +51,13 @@ export const COPY = {
     missingWalletConnectHint: 'VITE_WALLETCONNECT_PROJECT_ID (needed when no browser extension wallet is detected)',
     connectingWallet: 'Connecting browser wallet...',
     failedConnectWallet: 'Failed to connect creator wallet.',
+    walletBalanceChecking: 'Checking CELO balance...',
+    walletNeedsFundsBeforeCreate:
+      "Almost there! Creating a vote requires a tiny bit of CELO for transaction fees. Don't have any? No worries, get some for free",
+    walletFaucetLabel: 'here',
+    walletFaucetUrl: 'https://stakely.io/faucet/celo-celo',
+    walletConnectPromptLead: 'Connect your wallet. Every vote you create counts, and',
+    walletConnectPromptEmphasis: "early builders won't go unnoticed",
     shareSocialText: 'Join this vote on Ask The World - DAVINCI',
     navbar: {
       walletTitle: 'Creator Wallet',
@@ -99,6 +107,8 @@ export const COPY = {
       advancedSettings: '▾ Advanced Settings',
       maxVotersLabel: 'Maximum voters',
       maxVotersHelper: 'Limit the number of participants.',
+      listInExploreLabel: 'Show in Explore',
+      listInExploreHelper: 'Turn this off for private or testing processes.',
       createButton: 'Create the voting process',
       creatingButton: 'Creating process...',
     },
@@ -295,11 +305,9 @@ export const COPY = {
       managedIdentityTitle: 'Identity Wallet',
       managedIdentityClose: 'Close identity popup',
       identityIntroPrimary:
-        'This app creates a local wallet automatically so anyone can vote without installing a browser wallet or managing gas.',
+        'We set up an ephemeral identity for you: no wallet or setup needed. It\'s tied to this browser, so clearing data or switching devices means starting fresh.',
       identityIntroSecondary:
-        'That keeps the vote accessible for web2 users and gives this process a stable voter address, even when the user starts with no wallet.',
-      identityIntroRisks:
-        'The local wallet lives in this browser. If site data is cleared, the device changes, or the private key is exposed, control of this voting identity can be lost or transferred.',
+        'Want to use your own identity? Connect your wallet instead. Early users won\'t be forgotten. Your votes stay fully anonymous regardless.',
       importBeforeProcess: 'Open /vote/:processId before importing a key.',
       connectBeforeProcess: 'Open /vote/:processId before connecting a browser wallet.',
       resetBeforeProcess: 'Open /vote/:processId before resetting key.',
@@ -316,7 +324,7 @@ export const COPY = {
       walletAddress: 'Address',
       walletSource: 'Source',
       walletSourceConnected: 'Connected',
-      walletSourceDerived: 'Derived',
+      walletSourceDerived: 'Ephemeral Identity',
       walletSourceImported: 'Imported',
       walletSourceConnectedHelper: (sourceLabel: string) =>
         sourceLabel ? `Connected with ${sourceLabel}. This address will be used for registration and voting.` : 'Connected browser wallet. This address will be used for registration and voting.',
@@ -385,6 +393,9 @@ export const COPY = {
       finishDesktopHelper: 'Scan the QR (or open the deep-link) and wait for readiness.',
       registrationProgress: 'Registration progress',
       registrationCompletedSubmitting: 'Registration completed. Your vote is being submitted...',
+      identityPromptLead: 'Want to use your own identity?',
+      identityPromptLink: 'Connect your wallet here.',
+      identityPromptFootnote: "Early users won't be forgotten. Your vote stays anonymous.",
       progressSteps: {
         onchainLabel: 'Onchain census inclusion',
         onchainDescription: 'After Self verification, this step completes when onchain weight is greater than zero.',

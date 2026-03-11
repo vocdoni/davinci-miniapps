@@ -10,6 +10,7 @@ export interface CreateFormState {
   minAge: string;
   durationHours: string;
   maxVoters: string;
+  listInExplore: boolean;
 }
 
 export interface CreateOverlayState {

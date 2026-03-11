@@ -32,6 +32,7 @@ describe('create route model', () => {
         minAge: '18',
         durationHours: '24',
         maxVoters: '1000',
+        listInExplore: false,
       },
       Date.parse('2026-03-01T10:00:00Z'),
       () => 0
@@ -41,6 +42,7 @@ describe('create route model', () => {
     expect(values.countries).toEqual(['USA', 'FRA']);
     expect(values.country).toBe('USA');
     expect(values.startDate.toISOString()).toBe('2026-03-01T10:00:00.000Z');
+    expect(values.listInExplore).toBe(false);
     expect(values.question).toEqual({
       title: 'Should we approve this budget?',
       description: '',
@@ -79,6 +81,10 @@ describe('create route model', () => {
 
   it('parses countries with dedupe while preserving order', () => {
     expect(parseCountries(['usa', 'FRA', 'USA', 'gbr'])).toEqual(['USA', 'FRA', 'GBR']);
+  });
+
+  it('defaults listInExplore to true', () => {
+    expect(createInitialFormState().listInExplore).toBe(true);
   });
 
   it('rejects empty or oversized country lists', () => {
