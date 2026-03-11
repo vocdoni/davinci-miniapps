@@ -49,6 +49,7 @@ import {
   toSafeInteger,
   toSelfEndpointType,
   trimTrailingSlash,
+  wait,
   type VoteStatusKey,
 } from '../lib/occ';
 import { getUniversalLink } from '../selfApp';
@@ -134,6 +135,13 @@ interface VoteBallotState {
   statusWatcherToken: number;
 }
 
+interface VoteAdminState {
+  creatorAddress: string;
+  isCreator: boolean;
+  checking: boolean;
+  action: '' | 'pause' | 'resume' | 'stop';
+}
+
 const EMPTY_RESOLUTION: VoteResolutionState = {
   sdk: null,
   process: null,
@@ -183,6 +191,16 @@ const EMPTY_BALLOT: VoteBallotState = {
   statusPanelVoteId: '',
   statusWatcherToken: 0,
 };
+
+const EMPTY_ADMIN: VoteAdminState = {
+  creatorAddress: '',
+  isCreator: false,
+  checking: false,
+  action: '',
+};
+
+const ADMIN_STATUS_POLL_MS = 2_000;
+const ADMIN_STATUS_TIMEOUT_MS = 35_000;
 
 function shouldShowVoteResults(statusCode: number | null): boolean {
   return normalizeProcessStatus(statusCode) === ProcessStatus.RESULTS;
@@ -364,6 +382,12 @@ function getManagedWalletSourceMeta(wallet: ManagedWalletSnapshot | null): {
   };
 }
 
+function canAdminUpdateProcess(statusCode: number | null, endDateMs: number | null): boolean {
+  const normalizedStatus = normalizeProcessStatus(statusCode);
+  if (hasProcessEndedByTime(endDateMs)) return false;
+  return normalizedStatus === ProcessStatus.READY || normalizedStatus === ProcessStatus.PAUSED;
+}
+
 export default function VoteRoute() {
   const params = useParams();
   const baseUrl = import.meta.env.BASE_URL || '/';
@@ -388,6 +412,7 @@ export default function VoteRoute() {
   const [importKey, setImportKey] = useState('');
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [walletConnectPending, setWalletConnectPending] = useState(false);
+  const [voteAdmin, setVoteAdmin] = useState<VoteAdminState>(EMPTY_ADMIN);
   const [voteDetailsOpen, setVoteDetailsOpen] = useState(false);
   const [voteIdentityOpen, setVoteIdentityOpen] = useState(false);
   const [registrationModal, setRegistrationModal] = useState<RegistrationModalState>(EMPTY_REGISTRATION_MODAL);
@@ -480,6 +505,20 @@ export default function VoteRoute() {
     }
   }, []);
 
+  const applyVoteProcessSnapshot = useCallback((latestProcess: any) => {
+    if (!latestProcess || typeof latestProcess !== 'object') return;
+
+    setVoteResolution((previous) => ({
+      ...previous,
+      process: latestProcess,
+      statusCode: normalizeProcessStatus((latestProcess as any).status),
+      isAcceptingVotes: isProcessAcceptingVotes(latestProcess),
+      rawResult: Array.isArray((latestProcess as any).result) ? (latestProcess as any).result : null,
+      votersCount: toSafeInteger((latestProcess as any).votersCount),
+      maxVoters: toSafeInteger((latestProcess as any).maxVoters),
+    }));
+  }, []);
+
   const refreshVoteReadiness = useCallback(async (override?: { processId?: string; censusContract?: string; sdk?: any }) => {
     const resolution = resolutionRef.current;
     const processId = override?.processId ?? resolution.processId;
@@ -496,17 +535,7 @@ export default function VoteRoute() {
     if (sdk) {
       try {
         const latestProcess = await getProcessFromSequencer(sdk, processId);
-        if (latestProcess && typeof latestProcess === 'object') {
-          setVoteResolution((previous) => ({
-            ...previous,
-            process: latestProcess,
-            statusCode: normalizeProcessStatus((latestProcess as any).status),
-            isAcceptingVotes: isProcessAcceptingVotes(latestProcess),
-            rawResult: Array.isArray((latestProcess as any).result) ? (latestProcess as any).result : null,
-            votersCount: toSafeInteger((latestProcess as any).votersCount),
-            maxVoters: toSafeInteger((latestProcess as any).maxVoters),
-          }));
-        }
+        applyVoteProcessSnapshot(latestProcess);
       } catch {
         // Keep previous process status values if polling fetch fails.
       }
@@ -536,7 +565,7 @@ export default function VoteRoute() {
     }
 
     setVoteResolution((previous) => ({ ...previous, readinessCheckedAt: Date.now() }));
-  }, [getProcessFromSequencer]);
+  }, [applyVoteProcessSnapshot, getProcessFromSequencer]);
 
   const startVotePolling = useCallback(() => {
     stopVotePolling();
@@ -694,6 +723,7 @@ export default function VoteRoute() {
     setRegistrationModal(EMPTY_REGISTRATION_MODAL);
     setVoteDetailsOpen(false);
     setVoteIdentityOpen(false);
+    setVoteAdmin(EMPTY_ADMIN);
     setVoteStatusMessage(COPY.vote.status.resolveProcessAndWallet);
   }, [clearVoteBallot, setVoteStatusMessage, stopVotePolling]);
 
@@ -1503,6 +1533,101 @@ export default function VoteRoute() {
   }, [closeRegistrationModal, registrationModal.open, voteResolution]);
 
   useEffect(() => {
+    let ignore = false;
+
+    if (
+      !voteDetailsOpen ||
+      managedWallet?.source !== 'connected' ||
+      !managedWallet.address ||
+      !connectedWallet?.signer ||
+      !voteResolution.processId
+    ) {
+      setVoteAdmin(EMPTY_ADMIN);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setVoteAdmin((previous) => ({
+      ...previous,
+      creatorAddress: '',
+      isCreator: false,
+      checking: true,
+    }));
+
+    void (async () => {
+      try {
+        const sdk = createSequencerSdk({
+          signer: connectedWallet.signer,
+          sequencerUrl: CONFIG.davinciSequencerUrl,
+        });
+        await sdk.init();
+        const processInfo = await sdk.getProcess(voteResolution.processId);
+        const creatorAddress = String(processInfo?.creator || '').trim();
+        const isCreator =
+          Boolean(creatorAddress) && creatorAddress.toLowerCase() === String(managedWallet.address || '').trim().toLowerCase();
+
+        if (ignore) return;
+
+        setVoteAdmin({
+          creatorAddress,
+          isCreator,
+          checking: false,
+          action: '',
+        });
+      } catch {
+        if (ignore) return;
+        setVoteAdmin(EMPTY_ADMIN);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [connectedWallet?.signer, managedWallet?.address, managedWallet?.source, voteDetailsOpen, voteResolution.processId]);
+
+  const waitForAdminProcessStatus = useCallback(
+    async ({
+      processId,
+      expectedStatuses,
+      timeoutMessage,
+    }: {
+      processId: string;
+      expectedStatuses: number[];
+      timeoutMessage: string;
+    }) => {
+      let readSdk = resolutionRef.current.sdk;
+
+      if (!readSdk) {
+        readSdk = createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
+        await readSdk.init();
+      }
+
+      const deadline = Date.now() + ADMIN_STATUS_TIMEOUT_MS;
+
+      while (Date.now() <= deadline) {
+        try {
+          const latestProcess = await getProcessFromSequencer(readSdk, processId);
+          applyVoteProcessSnapshot(latestProcess);
+
+          const latestStatus = normalizeProcessStatus(latestProcess?.status);
+          if (latestStatus !== null && expectedStatuses.includes(latestStatus)) {
+            return;
+          }
+        } catch {
+          // Keep polling until timeout. The transaction may still be propagating.
+        }
+
+        if (Date.now() >= deadline) break;
+        await wait(ADMIN_STATUS_POLL_MS);
+      }
+
+      throw new Error(timeoutMessage);
+    },
+    [applyVoteProcessSnapshot, getProcessFromSequencer]
+  );
+
+  useEffect(() => {
     if (
       !shouldAutoSubmitPendingVote({
         pendingVoteIntent,
@@ -1544,8 +1669,94 @@ export default function VoteRoute() {
     voteResolution,
   ]);
 
+  const performAdminProcessAction = useCallback(
+    async (action: 'pause' | 'resume' | 'stop') => {
+      const processId = resolutionRef.current.processId;
+      const censusContract = resolutionRef.current.censusContract;
+      const wallet = managedWalletRef.current;
+      const connection = connectedWalletRef.current;
+
+      if (!processId || wallet?.source !== 'connected' || !connection?.signer) {
+        setVoteStatusMessage(COPY.vote.status.browserWalletSignerRequired, true);
+        return;
+      }
+      if (voteAdmin.action) return;
+
+      try {
+        setVoteAdmin((previous) => ({ ...previous, action }));
+
+        const sdk = createSequencerSdk({
+          signer: connection.signer,
+          sequencerUrl: CONFIG.davinciSequencerUrl,
+        });
+        await sdk.init();
+
+        if (action === 'pause') {
+          setVoteStatusMessage(COPY.vote.status.pausingProcess);
+          await sdk.pauseProcess(processId);
+          await waitForAdminProcessStatus({
+            processId,
+            expectedStatuses: [ProcessStatus.PAUSED],
+            timeoutMessage: COPY.vote.status.pauseProcessTimeout,
+          });
+          void refreshVoteReadiness({ processId, censusContract, sdk: resolutionRef.current.sdk || sdk });
+          setVoteStatusMessage(COPY.vote.status.processPaused);
+          return;
+        }
+
+        if (action === 'resume') {
+          setVoteStatusMessage(COPY.vote.status.resumingProcess);
+          await sdk.resumeProcess(processId);
+          await waitForAdminProcessStatus({
+            processId,
+            expectedStatuses: [ProcessStatus.READY],
+            timeoutMessage: COPY.vote.status.resumeProcessTimeout,
+          });
+          void refreshVoteReadiness({ processId, censusContract, sdk: resolutionRef.current.sdk || sdk });
+          setVoteStatusMessage(COPY.vote.status.processResumed);
+          return;
+        }
+
+        setVoteStatusMessage(COPY.vote.status.stoppingProcess);
+        await sdk.endProcess(processId);
+        await waitForAdminProcessStatus({
+          processId,
+          expectedStatuses: [ProcessStatus.ENDED, ProcessStatus.RESULTS],
+          timeoutMessage: COPY.vote.status.stopProcessTimeout,
+        });
+        setVoteDetailsOpen(false);
+        setVoteStatusMessage(COPY.vote.status.processStopped);
+        void refreshVoteReadiness({ processId, censusContract, sdk: resolutionRef.current.sdk || sdk });
+      } catch (error) {
+        if (action === 'pause') {
+          setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedPauseProcess, true);
+        } else if (action === 'resume') {
+          setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedResumeProcess, true);
+        } else {
+          setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedStopProcess, true);
+        }
+      } finally {
+        setVoteAdmin((previous) => ({ ...previous, action: '' }));
+      }
+    },
+    [refreshVoteReadiness, setVoteStatusMessage, voteAdmin.action, waitForAdminProcessStatus]
+  );
+
   const lifecycle = formatVoteLifecycle(voteResolution);
   const processClosed = isVoteProcessClosed(voteResolution);
+  const processAdminUpdatable = canAdminUpdateProcess(voteResolution.statusCode, voteResolution.endDateMs);
+  const processPaused = normalizeProcessStatus(voteResolution.statusCode) === ProcessStatus.PAUSED;
+  const showProcessAdminWidget = managedWallet?.source === 'connected' && voteAdmin.isCreator;
+  const pauseResumeButtonLabel =
+    voteAdmin.action === 'pause'
+      ? COPY.vote.buttons.pausingProcess
+      : voteAdmin.action === 'resume'
+        ? COPY.vote.buttons.resumingProcess
+        : processPaused
+          ? COPY.vote.buttons.resumeProcess
+          : COPY.vote.buttons.pauseProcess;
+  const stopProcessButtonLabel =
+    voteAdmin.action === 'stop' ? COPY.vote.buttons.stoppingProcess : COPY.vote.buttons.stopProcess;
   const sequencerEligible = voteResolution.sequencerWeight > 0n;
 
   const hasStoredVoteId = Boolean(voteBallot.submissionId);
@@ -1576,7 +1787,9 @@ export default function VoteRoute() {
   const voteButtonLabel = voteBallot.submitting
     ? COPY.vote.buttons.submittingVote
     : processClosed
-      ? COPY.vote.buttons.votingClosed
+      ? processPaused
+        ? COPY.vote.buttons.votingPaused
+        : COPY.vote.buttons.votingClosed
       : pendingVoteIntent
         ? COPY.vote.buttons.waitingForRegistration
         : hasStoredVoteId && isVoteStatusTerminal(voteBallot.submissionStatus)
@@ -1835,6 +2048,47 @@ export default function VoteRoute() {
               </tr>
             </tbody>
           </table>
+
+          {showProcessAdminWidget && (
+            <section className="vote-details-admin-panel" aria-labelledby="voteDetailsAdminTitle">
+              <div className="vote-details-admin-head">
+                <div>
+                  <p className="label" id="voteDetailsAdminTitle">
+                    {COPY.vote.dialogs.adminWidgetTitle}
+                  </p>
+                  <p className="muted vote-details-admin-copy">{COPY.vote.dialogs.adminWidgetDescription}</p>
+                </div>
+                {voteAdmin.creatorAddress ? (
+                  <code className="vote-details-admin-creator" title={voteAdmin.creatorAddress}>
+                    {voteAdmin.creatorAddress}
+                  </code>
+                ) : null}
+              </div>
+
+              <div className="vote-details-admin-actions">
+                <button
+                  id="toggleProcessPauseBtn"
+                  type="button"
+                  className="cta-btn secondary"
+                  disabled={!processAdminUpdatable || Boolean(voteAdmin.action) || voteAdmin.checking}
+                  onClick={() => void performAdminProcessAction(processPaused ? 'resume' : 'pause')}
+                >
+                  <span className={`btn-icon ${processPaused ? 'iconoir-refresh' : 'iconoir-lock'}`} aria-hidden="true" />
+                  <span className="btn-text">{pauseResumeButtonLabel}</span>
+                </button>
+                <button
+                  id="stopProcessBtn"
+                  type="button"
+                  className="cta-btn disconnect"
+                  disabled={!processAdminUpdatable || Boolean(voteAdmin.action) || voteAdmin.checking}
+                  onClick={() => void performAdminProcessAction('stop')}
+                >
+                  <span className={`btn-icon ${voteAdmin.action === 'stop' ? 'iconoir-refresh' : 'iconoir-warning-circle'}`} aria-hidden="true" />
+                  <span className="btn-text">{stopProcessButtonLabel}</span>
+                </button>
+              </div>
+            </section>
+          )}
         </PopupModal>
 
         <PopupModal

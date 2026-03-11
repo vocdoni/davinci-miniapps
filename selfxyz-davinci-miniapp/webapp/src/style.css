@@ -1586,6 +1586,55 @@ textarea {
   margin: 0;
 }
 
+.vote-details-admin-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(31, 42, 58, 0.1);
+}
+
+.vote-details-admin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vote-details-admin-head .label {
+  margin: 0 0 4px;
+}
+
+.vote-details-admin-copy {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.vote-details-admin-creator {
+  width: 100%;
+  display: inline-block;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 42, 58, 0.12);
+  background: #f8fbff;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.vote-details-admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.vote-details-admin-actions .cta-btn,
+.vote-details-admin-actions .cta-btn.secondary,
+.vote-details-admin-actions .cta-btn.disconnect {
+  width: 100%;
+  justify-content: center;
+}
+
 .vote-identity-popup-body {
   padding-top: 20px;
 }
@@ -4075,6 +4124,10 @@ button.qr-copy-btn:focus-visible {
 
   #voteView .vote-header-actions .cta-btn {
     width: auto;
+  }
+
+  .vote-details-admin-actions {
+    grid-template-columns: 1fr;
   }
 
   #createView .vote-header-actions .cta-btn {

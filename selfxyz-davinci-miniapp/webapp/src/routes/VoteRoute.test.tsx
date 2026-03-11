@@ -26,6 +26,10 @@ const mockCreateSequencerSdk = vi.fn();
 const mockGetProcessFromSequencer = vi.fn();
 const mockFetchProcessMetadata = vi.fn();
 const mockFetchSequencerWeight = vi.fn();
+const mockAdminGetProcess = vi.fn();
+const mockPauseProcess = vi.fn();
+const mockResumeProcess = vi.fn();
+const mockEndProcess = vi.fn();
 
 vi.mock('../services/sequencer', () => ({
   createSequencerSdk: (...args: unknown[]) => mockCreateSequencerSdk(...args),
@@ -71,19 +75,23 @@ import VoteRoute from './VoteRoute';
 
 const PROCESS_ID = `0x${'1'.padStart(62, '0')}`;
 const CENSUS_ADDRESS = '0x1111111111111111111111111111111111111111';
+let currentProcessStatus = 0;
+let currentCreatorAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+let queuedProcessStatuses: number[] = [];
 
-function makeProcess() {
+function makeProcess(overrides: Partial<Record<string, unknown>> = {}) {
   const startDate = new Date(Date.now() - 60_000).toISOString();
   return {
     id: PROCESS_ID,
-    status: 0,
+    status: currentProcessStatus,
     metadataURI: `https://meta/${PROCESS_ID}`,
     censusContract: CENSUS_ADDRESS,
     votersCount: 0,
     maxVoters: 100,
-    isAcceptingVotes: true,
+    isAcceptingVotes: currentProcessStatus === 0,
     startDate,
     duration: 3600,
+    ...overrides,
   };
 }
 
@@ -132,20 +140,52 @@ describe('VoteRoute identity popup', () => {
     mockGetProcessFromSequencer.mockReset();
     mockFetchProcessMetadata.mockReset();
     mockFetchSequencerWeight.mockReset();
+    mockAdminGetProcess.mockReset();
+    mockPauseProcess.mockReset();
+    mockResumeProcess.mockReset();
+    mockEndProcess.mockReset();
     mockFetchOnchainWeight.mockReset();
     mockEthCall.mockReset();
     mockConnectBrowserWallet.mockReset();
     mockResumeConnectedBrowserWallet.mockReset();
     mockSelfAppBuilderInputs.mockReset();
+    currentProcessStatus = 0;
+    currentCreatorAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    queuedProcessStatuses = [];
 
-    mockCreateSequencerSdk.mockReturnValue({
+    const readSdk = {
       init: vi.fn().mockResolvedValue(undefined),
       api: { sequencer: {} },
       hasAddressVoted: vi.fn().mockResolvedValue(false),
+    };
+    const adminSdk = {
+      init: vi.fn().mockResolvedValue(undefined),
+      api: { sequencer: {} },
+      getProcess: (...args: unknown[]) => mockAdminGetProcess(...args),
+      pauseProcess: (...args: unknown[]) => mockPauseProcess(...args),
+      resumeProcess: (...args: unknown[]) => mockResumeProcess(...args),
+      endProcess: (...args: unknown[]) => mockEndProcess(...args),
+    };
+
+    mockCreateSequencerSdk.mockImplementation((options?: { signer?: unknown }) => (options?.signer ? adminSdk : readSdk));
+    mockGetProcessFromSequencer.mockImplementation(async () => {
+      if (queuedProcessStatuses.length) {
+        currentProcessStatus = queuedProcessStatuses.shift() as number;
+      }
+      return makeProcess();
     });
-    mockGetProcessFromSequencer.mockResolvedValue(makeProcess());
     mockFetchProcessMetadata.mockResolvedValue(makeMetadata());
     mockFetchSequencerWeight.mockResolvedValue(0n);
+    mockAdminGetProcess.mockImplementation(async () => ({ creator: currentCreatorAddress }));
+    mockPauseProcess.mockImplementation(async () => {
+      currentProcessStatus = 3;
+    });
+    mockResumeProcess.mockImplementation(async () => {
+      currentProcessStatus = 0;
+    });
+    mockEndProcess.mockImplementation(async () => {
+      currentProcessStatus = 1;
+    });
     mockFetchOnchainWeight.mockResolvedValue(0n);
     mockEthCall.mockRejectedValue(new Error('minAge lookup not needed in this test'));
     mockResumeConnectedBrowserWallet.mockResolvedValue(null);
@@ -244,6 +284,158 @@ describe('VoteRoute identity popup', () => {
     });
 
     expect(screen.queryByRole('button', { name: 'Use local derived wallet' })).not.toBeInTheDocument();
+  });
+
+  it('does not show creator admin controls for a connected wallet that is not the process creator', async () => {
+    const connectedAddress = '0x7777777777777777777777777777777777777777';
+    mockConnectBrowserWallet.mockResolvedValue({
+      provider: { request: vi.fn() },
+      browserProvider: {},
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+    });
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect browser wallet' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+    });
+
+    fireEvent.click(document.getElementById('closeVoteIdentityBtn') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    await waitFor(() => {
+      expect(mockAdminGetProcess).toHaveBeenCalledWith(PROCESS_ID);
+    });
+
+    expect(screen.queryByText('Admin Controls')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause process' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop process' })).not.toBeInTheDocument();
+  });
+
+  it('shows creator admin controls in details and keeps the popup open on pause and resume', async () => {
+    const connectedAddress = '0x5555555555555555555555555555555555555555';
+    currentCreatorAddress = connectedAddress;
+    mockPauseProcess.mockImplementation(async () => {
+      queuedProcessStatuses = [0, 3];
+    });
+    mockResumeProcess.mockImplementation(async () => {
+      queuedProcessStatuses = [3, 0];
+    });
+    mockConnectBrowserWallet.mockResolvedValue({
+      provider: { request: vi.fn() },
+      browserProvider: {},
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+    });
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect browser wallet' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+    });
+
+    fireEvent.click(document.getElementById('closeVoteIdentityBtn') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Controls')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Pause process' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Stop process' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause process' }));
+
+    expect(screen.getByRole('button', { name: 'Pausing...' })).toBeInTheDocument();
+    expect(document.getElementById('voteDetailsDialog')).toBeVisible();
+
+    await waitFor(
+      () => {
+        expect(mockPauseProcess).toHaveBeenCalledWith(PROCESS_ID);
+        expect(document.getElementById('voteDetailsDialog')).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Resume process' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Voting paused' })).toBeInTheDocument();
+      },
+      { timeout: 5_000 }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume process' }));
+
+    expect(screen.getByRole('button', { name: 'Resuming...' })).toBeInTheDocument();
+    expect(document.getElementById('voteDetailsDialog')).toBeVisible();
+
+    await waitFor(
+      () => {
+        expect(mockResumeProcess).toHaveBeenCalledWith(PROCESS_ID);
+        expect(document.getElementById('voteDetailsDialog')).toBeVisible();
+        expect(screen.getByRole('button', { name: 'Pause process' })).toBeInTheDocument();
+      },
+      { timeout: 5_000 }
+    );
+  }, 15_000);
+
+  it('stops the process from the creator admin controls and closes the details popup', async () => {
+    const connectedAddress = '0x6666666666666666666666666666666666666666';
+    currentCreatorAddress = connectedAddress;
+    mockEndProcess.mockImplementation(async () => {
+      queuedProcessStatuses = [0, 1];
+    });
+    mockConnectBrowserWallet.mockResolvedValue({
+      provider: { request: vi.fn() },
+      browserProvider: {},
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+    });
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect browser wallet' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+    });
+
+    fireEvent.click(document.getElementById('closeVoteIdentityBtn') as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stop process' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop process' }));
+
+    expect(screen.getByRole('button', { name: 'Stopping...' })).toBeInTheDocument();
+    expect(document.getElementById('voteDetailsDialog')).toBeVisible();
+
+    await waitFor(
+      () => {
+        expect(mockEndProcess).toHaveBeenCalledWith(PROCESS_ID);
+        expect(document.getElementById('voteDetailsDialog')).not.toBeVisible();
+      },
+      { timeout: 5_000 }
+    );
   });
 
   it('shows a clickable wallet widget in the registration popup', async () => {

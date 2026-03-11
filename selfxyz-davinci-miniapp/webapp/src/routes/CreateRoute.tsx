@@ -16,8 +16,11 @@ import {
   collectErrorMessages,
   computeConfigId,
   computeIndexerExpiresAt,
+  clearConnectedWalletPreference,
   isInternalJsonRpcError,
+  loadConnectedWalletPreference,
   newPipelineState,
+  persistConnectedWalletPreference,
   persistProcessMeta,
   persistVoteScopeSeed,
   stringifyMetaValues,
@@ -35,6 +38,7 @@ import {
   connectBrowserWallet,
   disconnectWalletConnection,
   getInjectedProvider,
+  resumeConnectedBrowserWallet,
   type CreatorWalletConnection,
   type OCCProvider,
 } from '../services/wallet';
@@ -102,6 +106,7 @@ interface ShareTarget {
 
 const CREATOR_WALLET_STATUS_DEFAULT =
   COPY.create.walletStatusDefault;
+const CREATE_WALLET_PREFERENCE_ID = 'create';
 
 const EMPTY_OUTPUTS: CreateOutputs = {
   censusContract: '',
@@ -419,11 +424,17 @@ export default function CreateRoute() {
   );
 
   const applyWalletConnection = useCallback((connection: CreatorWalletConnection) => {
+    persistConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID, {
+      address: connection.address,
+      sourceLabel: connection.sourceLabel,
+      connectorType: connection.connectorType,
+    });
     setCreatorWallet(connection);
     setCreatorWalletStatus(COPY.create.navbar.connectWalletSource(connection.sourceLabel, ACTIVE_NETWORK.label));
   }, []);
 
   const resetWalletState = useCallback(() => {
+    clearConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID);
     setCreatorWallet({
       provider: null,
       browserProvider: null,
@@ -434,6 +445,31 @@ export default function CreateRoute() {
     });
     setCreatorWalletStatus(CREATOR_WALLET_STATUS_DEFAULT);
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const connectedPreference = loadConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID);
+    if (!connectedPreference) return;
+
+    void (async () => {
+      try {
+        const connection = await resumeConnectedBrowserWallet(connectedPreference, walletRef.current.provider);
+        if (!connection) {
+          clearConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID);
+          return;
+        }
+        if (ignore) return;
+        applyWalletConnection(connection);
+      } catch {
+        if (ignore) return;
+        clearConnectedWalletPreference(CREATE_WALLET_PREFERENCE_ID);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [applyWalletConnection]);
 
   const connectCreatorWallet = useCallback(async () => {
     try {
@@ -739,6 +775,7 @@ export default function CreateRoute() {
   const ensureCreatorWalletForPipeline = useCallback(async (ctx: PipelineContext) => {
     if (!walletRef.current.signer) {
       const connection = await connectBrowserWallet(walletRef.current.provider);
+      applyWalletConnection(connection);
       ctx.provider = connection.provider;
       ctx.browserProvider = connection.browserProvider;
       ctx.signer = connection.signer;
@@ -751,7 +788,7 @@ export default function CreateRoute() {
     ctx.signer = walletRef.current.signer;
     ctx.creatorAddress = walletRef.current.address;
     return `Using connected wallet ${ctx.creatorAddress}`;
-  }, []);
+  }, [applyWalletConnection]);
 
   const ensureSelfConfigRegistered = useCallback(
     async (ctx: PipelineContext) => {
