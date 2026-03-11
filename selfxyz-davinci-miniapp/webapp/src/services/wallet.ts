@@ -48,7 +48,7 @@ export function getInjectedProvider(): OCCProvider | null {
   return ethereum;
 }
 
-export function getWalletSourceLabel(provider: OCCProvider, fallback = COPY.walletService.walletConnectFallbackSource): string {
+export function getWalletSourceLabel(provider: OCCProvider, fallback: string = COPY.walletService.walletConnectFallbackSource): string {
   if (provider?.isMetaMask) return COPY.walletService.metaMask;
   if (provider?.isCoinbaseWallet) return COPY.walletService.coinbaseWallet;
   return fallback;

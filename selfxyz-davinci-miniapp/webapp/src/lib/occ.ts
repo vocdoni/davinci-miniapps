@@ -1,4 +1,4 @@
-import { AbiCoder, Interface, Wallet, keccak256, randomBytes, sha256 } from 'ethers';
+import { AbiCoder, Interface, Wallet, keccak256, randomBytes, sha256, toUtf8Bytes } from 'ethers';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
 
 import artifact from '../artifacts/OpenCitizenCensus.json';
@@ -472,13 +472,13 @@ export function derivePrivateKey(processId: string): string {
   const seed = getOrCreateMasterSecret();
   const normalizedProcessId = normalizeProcessId(processId || 'default');
   const material = `${seed}:${normalizedProcessId.toLowerCase()}`;
-  let candidate = keccak256(new TextEncoder().encode(material));
+  let candidate = keccak256(toUtf8Bytes(material));
 
   try {
     // eslint-disable-next-line no-new
     new Wallet(candidate);
   } catch {
-    candidate = keccak256(new TextEncoder().encode(`${material}:fallback`));
+    candidate = keccak256(toUtf8Bytes(`${material}:fallback`));
   }
 
   return normalizePrivateKey(candidate);

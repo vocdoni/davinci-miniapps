@@ -151,7 +151,7 @@ export default function CreateRoute() {
   const [createFormDirty, setCreateFormDirty] = useState(false);
   const [overlayState, setOverlayState] = useState<CreateOverlayState>(createInitialOverlayState);
 
-  const [creatorWalletStatus, setCreatorWalletStatus] = useState(CREATOR_WALLET_STATUS_DEFAULT);
+  const [creatorWalletStatus, setCreatorWalletStatus] = useState<string>(CREATOR_WALLET_STATUS_DEFAULT);
   const [creatorWallet, setCreatorWallet] = useState<CreatorWalletState>({
     provider: null,
     browserProvider: null,

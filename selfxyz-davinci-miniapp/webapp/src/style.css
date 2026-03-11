@@ -1592,19 +1592,201 @@ textarea {
 
 .identity-dialog-content {
   display: grid;
+  gap: 18px;
+}
+
+.identity-dialog-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.identity-dialog-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.identity-wallet-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(244, 248, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.identity-wallet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.identity-field-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.identity-source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.identity-source-tag[data-source='connected'] {
+  color: #166534;
+  background: rgba(22, 101, 52, 0.08);
+  border-color: rgba(22, 101, 52, 0.18);
+}
+
+.identity-source-tag[data-source='derived'] {
+  color: #2f4f73;
+  background: rgba(47, 79, 115, 0.08);
+  border-color: rgba(47, 79, 115, 0.18);
+}
+
+.identity-source-tag[data-source='imported'] {
+  color: #8a5a00;
+  background: rgba(138, 90, 0, 0.1);
+  border-color: rgba(138, 90, 0, 0.18);
+}
+
+.identity-source-icon {
+  font-size: 14px;
+}
+
+.identity-address-row {
+  display: grid;
   gap: 12px;
 }
 
-.identity-dialog-content p {
+.identity-address-row.has-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+}
+
+.identity-address-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(31, 42, 58, 0.16);
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.identity-address-input[readonly] {
+  cursor: text;
+}
+
+.identity-address-action {
+  align-self: stretch;
+  white-space: nowrap;
+  padding: 10px 14px;
+  font-size: 13px;
+  min-height: 0;
+}
+
+.identity-source-helper,
+.identity-risk-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.identity-import-actions,
+.identity-reset-actions {
   margin: 0;
 }
 
-.identity-dialog-content #walletSecretBox {
-  padding: 10px 12px;
-  border: 1px solid rgba(31, 42, 58, 0.14);
-  border-radius: 10px;
+.identity-divider {
+  height: 1px;
+  background: rgba(31, 42, 58, 0.1);
+}
+
+.identity-actions-section {
+  display: grid;
+  gap: 14px;
+}
+
+.identity-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.identity-action-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+#voteView .identity-action-grid .cta-btn.identity-action-btn-muted {
+  background: #e7ebf0;
+  color: #425466;
+  border: 1px solid rgba(66, 84, 102, 0.18);
+}
+
+#voteView .identity-action-grid .cta-btn.identity-action-btn-muted:hover:not(:disabled) {
+  background: #dce3ea;
+  color: #22303c;
+  box-shadow: 0 8px 18px rgba(66, 84, 102, 0.14);
+}
+
+.identity-action-btn.is-active {
   background: #f4f8ff;
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.identity-import-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.identity-import-preview {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.identity-import-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.identity-import-preview code {
+  display: block;
   overflow-x: auto;
+  white-space: nowrap;
+}
+
+.identity-import-panel .field-helper {
+  margin: 0;
 }
 
 .self-registration-layout {
@@ -2057,6 +2239,60 @@ button.qr-copy-btn:focus-visible {
 
 .vote-registration-layout .registration-status-guide .vote-status-timeline {
   margin-top: 8px;
+}
+
+.vote-registration-footer {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.registration-wallet-widget {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.registration-wallet-widget .identity-source-tag {
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+  transition: box-shadow 0.2s ease;
+}
+
+.registration-wallet-widget:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.registration-wallet-widget:hover:not(:disabled) .identity-source-tag {
+  box-shadow: 0 8px 16px rgba(31, 42, 58, 0.08);
+}
+
+.registration-wallet-widget:focus-visible {
+  outline: 2px solid rgba(74, 90, 239, 0.32);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.registration-wallet-widget:disabled {
+  cursor: default;
+}
+
+.registration-wallet-source-address {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  overflow-wrap: anywhere;
 }
 
 .vote-registration-submit-note {
@@ -3626,6 +3862,18 @@ button.qr-copy-btn:focus-visible {
   .grid.two,
   .grid.three,
   .stepper {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-wallet-head {
+    align-items: flex-start;
+  }
+
+  .identity-address-row.has-action {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-action-grid {
     grid-template-columns: 1fr;
   }
 

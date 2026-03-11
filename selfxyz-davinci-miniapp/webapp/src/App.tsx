@@ -35,9 +35,9 @@ function AppLayout() {
         <main id="mainContent">
           <Outlet />
         </main>
-      </div>
 
-      <SupportPopup open={showSupportPopup && supportOpen} onDismiss={() => setSupportOpen(false)} />
+        <SupportPopup open={showSupportPopup && supportOpen} onDismiss={() => setSupportOpen(false)} />
+      </div>
 
       <footer className="app-footer">
         <div className="footer-row">

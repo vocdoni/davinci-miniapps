@@ -2,7 +2,7 @@ import type { PendingVoteIntent, VoteSubmitGateResult } from './types';
 
 export interface VoteSubmitGateInput {
   hasProcessId: boolean;
-  hasWalletPrivateKey: boolean;
+  hasWalletSigner: boolean;
   isProcessClosed: boolean;
   hasQuestion: boolean;
   hasAllChoices: boolean;
@@ -37,7 +37,7 @@ export function evaluateVoteSubmitGate(
 ): VoteSubmitGateDecision {
   const messages: VoteSubmitGateMessages = { ...DEFAULT_MESSAGES, ...customMessages };
 
-  if (!input.hasProcessId || !input.hasWalletPrivateKey) {
+  if (!input.hasProcessId || !input.hasWalletSigner) {
     return { result: 'blocked', blockMessage: messages.missingContext };
   }
   if (input.isProcessClosed) {

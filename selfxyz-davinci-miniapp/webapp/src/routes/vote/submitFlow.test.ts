@@ -10,7 +10,7 @@ import {
 describe('vote submit flow', () => {
   const baseInput = {
     hasProcessId: true,
-    hasWalletPrivateKey: true,
+    hasWalletSigner: true,
     isProcessClosed: false,
     hasQuestion: true,
     hasAllChoices: true,

@@ -16,7 +16,6 @@ import {
   VOTE_STATUS_FLOW,
   VOTE_STATUS_INFO,
   buildCensusUri,
-  clearWalletOverride,
   extractCensusContract,
   extractCensusUri,
   extractProcessDurationMs,
@@ -39,6 +38,7 @@ import {
   normalizeProcessStatus,
   normalizeVoteQuestions,
   normalizeVoteStatus,
+  normalizePrivateKey,
   persistProcessMeta,
   persistVoteScopeSeed,
   persistVoteSubmission,
@@ -58,6 +58,7 @@ import {
   fetchSequencerWeight,
   getProcessFromSequencer,
 } from '../services/sequencer';
+import { connectBrowserWallet, type CreatorWalletConnection } from '../services/wallet';
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
 import { detectRegistrationMobileMode } from './vote/device';
@@ -72,7 +73,8 @@ import type { PendingVoteIntent, RegistrationModalState } from './vote/types';
 interface ManagedWalletSnapshot {
   address: string;
   privateKey: string;
-  source: 'derived' | 'imported';
+  source: 'derived' | 'imported' | 'connected';
+  sourceLabel?: string;
 }
 
 interface VoteQuestionChoice {
@@ -312,6 +314,53 @@ function buildVoteResultsModel(resolution: VoteResolutionState, ballot: VoteBall
   };
 }
 
+function shortenRegistrationWalletAddress(address: string): string {
+  const normalized = String(address || '').trim();
+  if (!/^0x[a-fA-F0-9]{10,}$/.test(normalized)) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+function getManagedWalletSourceMeta(wallet: ManagedWalletSnapshot | null): {
+  key: 'derived' | 'imported' | 'connected' | 'unknown';
+  label: string;
+  iconClass: string;
+  helper: string;
+} {
+  if (!wallet) {
+    return {
+      key: 'unknown',
+      label: '-',
+      iconClass: 'iconoir-user',
+      helper: '',
+    };
+  }
+
+  if (wallet.source === 'connected') {
+    return {
+      key: 'connected',
+      label: COPY.vote.dialogs.walletSourceConnected,
+      iconClass: 'iconoir-wallet',
+      helper: COPY.vote.dialogs.walletSourceConnectedHelper(wallet.sourceLabel || ''),
+    };
+  }
+
+  if (wallet.source === 'imported') {
+    return {
+      key: 'imported',
+      label: COPY.vote.dialogs.walletSourceImported,
+      iconClass: 'iconoir-key',
+      helper: COPY.vote.dialogs.walletSourceImportedHelper,
+    };
+  }
+
+  return {
+    key: 'derived',
+    label: COPY.vote.dialogs.walletSourceDerived,
+    iconClass: 'iconoir-user',
+    helper: COPY.vote.dialogs.walletSourceDerivedHelper,
+  };
+}
+
 export default function VoteRoute() {
   const params = useParams();
   const baseUrl = import.meta.env.BASE_URL || '/';
@@ -326,26 +375,29 @@ export default function VoteRoute() {
   );
 
   const [contextBlocked, setContextBlocked] = useState(false);
-  const [contextMessage, setContextMessage] = useState(COPY.vote.context.invalidProcessId);
+  const [contextMessage, setContextMessage] = useState<string>(COPY.vote.context.invalidProcessId);
 
   const [voteResolution, setVoteResolution] = useState<VoteResolutionState>(EMPTY_RESOLUTION);
   const [managedWallet, setManagedWallet] = useState<ManagedWalletSnapshot | null>(null);
-  const [privateVisible, setPrivateVisible] = useState(false);
+  const [connectedWallet, setConnectedWallet] = useState<CreatorWalletConnection | null>(null);
   const [voteSelf, setVoteSelf] = useState<VoteSelfState>(EMPTY_VOTE_SELF);
   const [voteBallot, setVoteBallot] = useState<VoteBallotState>(EMPTY_BALLOT);
   const [importKey, setImportKey] = useState('');
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [walletConnectPending, setWalletConnectPending] = useState(false);
   const [voteDetailsOpen, setVoteDetailsOpen] = useState(false);
   const [voteIdentityOpen, setVoteIdentityOpen] = useState(false);
   const [registrationModal, setRegistrationModal] = useState<RegistrationModalState>(EMPTY_REGISTRATION_MODAL);
   const [pendingVoteIntent, setPendingVoteIntent] = useState<PendingVoteIntent | null>(null);
   const [voteStatusDetailsOpen, setVoteStatusDetailsOpen] = useState(false);
-  const [copyVoteIdLabel, setCopyVoteIdLabel] = useState(COPY.shared.copy);
+  const [copyVoteIdLabel, setCopyVoteIdLabel] = useState<string>(COPY.shared.copy);
 
   const votePollRef = useRef<number | null>(null);
   const pendingAutoSubmitRef = useRef(false);
   const registrationQrRequestKeyRef = useRef('');
   const resolutionRef = useRef(voteResolution);
   const managedWalletRef = useRef(managedWallet);
+  const connectedWalletRef = useRef(connectedWallet);
   const voteSelfRef = useRef(voteSelf);
   const voteBallotRef = useRef(voteBallot);
 
@@ -355,6 +407,9 @@ export default function VoteRoute() {
   useEffect(() => {
     managedWalletRef.current = managedWallet;
   }, [managedWallet]);
+  useEffect(() => {
+    connectedWalletRef.current = connectedWallet;
+  }, [connectedWallet]);
   useEffect(() => {
     voteSelfRef.current = voteSelf;
   }, [voteSelf]);
@@ -378,6 +433,40 @@ export default function VoteRoute() {
       document.body.classList.remove('app-blocked');
     };
   }, [contextBlocked, registrationModal.open, voteDetailsOpen, voteIdentityOpen]);
+
+  useEffect(() => {
+    if (voteIdentityOpen) return;
+    setImportKey('');
+    setShowImportPanel(false);
+  }, [voteIdentityOpen]);
+
+  const managedWalletSourceMeta = useMemo(() => getManagedWalletSourceMeta(managedWallet), [managedWallet]);
+  const importKeyPreview = useMemo(() => {
+    const raw = String(importKey || '').trim();
+    if (!raw) {
+      return {
+        normalizedKey: '',
+        address: '',
+        error: '',
+      };
+    }
+
+    try {
+      const normalizedKey = normalizePrivateKey(raw);
+      const wallet = new Wallet(normalizedKey);
+      return {
+        normalizedKey,
+        address: wallet.address,
+        error: '',
+      };
+    } catch (error) {
+      return {
+        normalizedKey: '',
+        address: '',
+        error: error instanceof Error ? error.message : COPY.vote.dialogs.invalidPrivateKey,
+      };
+    }
+  }, [importKey]);
 
   const setVoteStatusMessage = useCallback((_message: string, _error = false) => {}, []);
 
@@ -467,32 +556,6 @@ export default function VoteRoute() {
     return stored;
   }, []);
 
-  const bootstrapVoteManagedWallet = useCallback(
-    (processId: string) => {
-      const normalizedProcessId = normalizeProcessId(processId);
-      if (!normalizedProcessId) {
-        setManagedWallet(null);
-        setPrivateVisible(false);
-        return;
-      }
-
-      const wallet = loadManagedWallet(normalizedProcessId);
-      setManagedWallet(wallet);
-      setPrivateVisible(false);
-
-      setVoteBallot((previous) => ({
-        ...previous,
-        submissionId: '',
-        submissionStatus: '',
-        hasVoted: false,
-        statusWatcherToken: previous.statusWatcherToken + 1,
-      }));
-
-      restoreVoteSubmissionFromStorage(normalizedProcessId, wallet.address);
-    },
-    [restoreVoteSubmissionFromStorage]
-  );
-
   const fetchVoteSelfMinAge = useCallback(
     async (contractAddress: string) => {
       if (!/^0x[a-fA-F0-9]{40}$/.test(String(contractAddress || ''))) return null;
@@ -528,6 +591,55 @@ export default function VoteRoute() {
     }));
   }, []);
 
+  const applyManagedWalletSnapshot = useCallback(
+    (processId: string, wallet: ManagedWalletSnapshot | null, connection: CreatorWalletConnection | null = null) => {
+      managedWalletRef.current = wallet;
+      connectedWalletRef.current = connection;
+      setManagedWallet(wallet);
+      setConnectedWallet(connection);
+      setImportKey('');
+      setShowImportPanel(false);
+      clearVoteSelfArtifacts();
+      setVoteResolution((previous) => ({
+        ...previous,
+        onchainWeight: 0n,
+        sequencerWeight: 0n,
+        onchainLookupFailed: false,
+        readinessCheckedAt: null,
+      }));
+      setVoteBallot((previous) => ({
+        ...previous,
+        submissionId: '',
+        submissionStatus: '',
+        hasVoted: false,
+        statusWatcherToken: previous.statusWatcherToken + 1,
+      }));
+      if (wallet?.address) {
+        restoreVoteSubmissionFromStorage(processId, wallet.address);
+      }
+    },
+    [clearVoteSelfArtifacts, restoreVoteSubmissionFromStorage]
+  );
+
+  const bootstrapVoteManagedWallet = useCallback(
+    (processId: string) => {
+      const normalizedProcessId = normalizeProcessId(processId);
+      if (!normalizedProcessId) {
+        managedWalletRef.current = null;
+        connectedWalletRef.current = null;
+        setManagedWallet(null);
+        setConnectedWallet(null);
+        setImportKey('');
+        setShowImportPanel(false);
+        return;
+      }
+
+      const wallet = loadManagedWallet(normalizedProcessId);
+      applyManagedWalletSnapshot(normalizedProcessId, wallet, null);
+    },
+    [applyManagedWalletSnapshot]
+  );
+
   const clearVoteBallot = useCallback((message?: string) => {
     setVoteBallot((previous) => ({
       ...EMPTY_BALLOT,
@@ -538,9 +650,15 @@ export default function VoteRoute() {
 
   const resetVoteResolution = useCallback(() => {
     stopVotePolling();
+    managedWalletRef.current = null;
+    connectedWalletRef.current = null;
     setVoteResolution(EMPTY_RESOLUTION);
+    setManagedWallet(null);
+    setConnectedWallet(null);
     setVoteSelf(EMPTY_VOTE_SELF);
     clearVoteBallot();
+    setImportKey('');
+    setShowImportPanel(false);
     setPendingVoteIntent(null);
     setRegistrationModal(EMPTY_REGISTRATION_MODAL);
     setVoteDetailsOpen(false);
@@ -936,6 +1054,86 @@ export default function VoteRoute() {
     window.open(link, '_blank', 'noopener,noreferrer');
   }, []);
 
+  const connectManagedBrowserWallet = useCallback(async () => {
+    const processId = resolutionRef.current.processId;
+    if (!processId) {
+      setVoteStatusMessage(COPY.vote.dialogs.connectBeforeProcess, true);
+      return;
+    }
+    if (walletConnectPending) return;
+
+    try {
+      setWalletConnectPending(true);
+      setVoteStatusMessage(COPY.vote.status.connectingBrowserWallet);
+
+      const connection = await connectBrowserWallet(connectedWalletRef.current?.provider);
+      applyManagedWalletSnapshot(
+        processId,
+        {
+          address: connection.address,
+          privateKey: '',
+          source: 'connected',
+          sourceLabel: connection.sourceLabel,
+        },
+        connection
+      );
+
+      await refreshVoteReadiness();
+      await refreshHasVotedFlag();
+      setVoteStatusMessage(COPY.vote.status.browserWalletConnected(connection.sourceLabel));
+    } catch (error) {
+      setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedConnectBrowserWallet, true);
+    } finally {
+      setWalletConnectPending(false);
+    }
+  }, [applyManagedWalletSnapshot, refreshHasVotedFlag, refreshVoteReadiness, setVoteStatusMessage, walletConnectPending]);
+
+  const importManagedPrivateKey = useCallback(async () => {
+    const processId = resolutionRef.current.processId;
+    if (!processId) {
+      setVoteStatusMessage(COPY.vote.dialogs.importBeforeProcess, true);
+      return;
+    }
+    if (!importKeyPreview.normalizedKey || !importKeyPreview.address) {
+      setVoteStatusMessage(importKeyPreview.error || COPY.vote.dialogs.invalidPrivateKey, true);
+      return;
+    }
+
+    setWalletOverride(processId, importKeyPreview.normalizedKey);
+    applyManagedWalletSnapshot(processId, {
+      address: importKeyPreview.address,
+      privateKey: importKeyPreview.normalizedKey,
+      source: 'imported',
+    });
+    await refreshVoteReadiness();
+    await refreshHasVotedFlag();
+    setVoteStatusMessage(COPY.vote.dialogs.importedKeyApplied);
+  }, [applyManagedWalletSnapshot, importKeyPreview, refreshHasVotedFlag, refreshVoteReadiness, setVoteStatusMessage]);
+
+  const restoreLocalManagedWallet = useCallback(async () => {
+    const processId = resolutionRef.current.processId;
+    if (!processId) {
+      setVoteStatusMessage(COPY.vote.dialogs.resetBeforeProcess, true);
+      return;
+    }
+
+    const wallet = loadManagedWallet(processId);
+    applyManagedWalletSnapshot(processId, wallet, null);
+    await refreshVoteReadiness();
+    await refreshHasVotedFlag();
+    setVoteStatusMessage(COPY.vote.dialogs.localWalletRestored);
+  }, [applyManagedWalletSnapshot, refreshHasVotedFlag, refreshVoteReadiness, setVoteStatusMessage]);
+
+  const resolveManagedVoteSigner = useCallback(() => {
+    const wallet = managedWalletRef.current;
+    if (!wallet) return null;
+    if (wallet.source === 'connected') {
+      return connectedWalletRef.current?.signer || null;
+    }
+    if (!wallet.privateKey) return null;
+    return new Wallet(wallet.privateKey);
+  }, []);
+
   const submitVoteSnapshot = useCallback(
     async (selectedChoices: number[]): Promise<boolean> => {
       if (voteBallotRef.current.submitting) return false;
@@ -944,9 +1142,17 @@ export default function VoteRoute() {
       const ballot = voteBallotRef.current;
       const wallet = managedWalletRef.current;
       const processId = resolution.processId;
+      const signer = resolveManagedVoteSigner();
 
-      if (!processId || !wallet?.privateKey) {
+      if (!processId || !wallet) {
         setVoteStatusMessage(COPY.vote.status.resolveBeforeSubmit, true);
+        return false;
+      }
+      if (!signer) {
+        setVoteStatusMessage(
+          wallet.source === 'connected' ? COPY.vote.status.browserWalletSignerRequired : COPY.vote.status.resolveBeforeSubmit,
+          true
+        );
         return false;
       }
       if (isVoteProcessClosed(resolution)) {
@@ -984,7 +1190,7 @@ export default function VoteRoute() {
         setVoteStatusMessage(COPY.vote.status.submittingVote);
 
         const sdk = createSequencerSdk({
-          signer: new Wallet(wallet.privateKey),
+          signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
           censusUrl,
         });
@@ -1038,7 +1244,7 @@ export default function VoteRoute() {
         setVoteBallot((previous) => ({ ...previous, submitting: false }));
       }
     },
-    [setVoteStatusMessage, trackVoteSubmissionStatus]
+    [resolveManagedVoteSigner, setVoteStatusMessage, trackVoteSubmissionStatus]
   );
 
   const emitVote = useCallback(async () => {
@@ -1061,7 +1267,7 @@ export default function VoteRoute() {
     const gate = evaluateVoteSubmitGate(
       {
         hasProcessId: Boolean(processId),
-        hasWalletPrivateKey: Boolean(wallet?.privateKey),
+        hasWalletSigner: Boolean(wallet && (wallet.source === 'connected' ? connectedWalletRef.current?.signer : wallet.privateKey)),
         isProcessClosed: isVoteProcessClosed(resolution),
         hasQuestion,
         hasAllChoices: hasAllSelectedChoices,
@@ -1069,6 +1275,7 @@ export default function VoteRoute() {
         hasVoteReadiness: hasVoteReadiness(resolution),
       },
       {
+        missingContext: wallet?.source === 'connected' ? COPY.vote.status.browserWalletSignerRequired : COPY.vote.status.resolveBeforeSubmit,
         processClosed: getClosedProcessMessage(resolution),
       }
     );
@@ -1105,10 +1312,6 @@ export default function VoteRoute() {
       status: 'waiting',
     });
     setVoteStatusMessage(COPY.vote.status.registrationRequired);
-
-    if (!voteSelfRef.current.link && !voteSelfRef.current.generating) {
-      void generateVoteSelfQr(true);
-    }
   }, [pendingVoteIntent, refreshVoteReadiness, setVoteStatusMessage, submitVoteSnapshot]);
 
   const closeRegistrationModal = useCallback(
@@ -1191,7 +1394,7 @@ export default function VoteRoute() {
     if (hasVoteReadiness(voteResolution)) return;
     if (isVoteProcessClosed(voteResolution)) return;
     if (!voteResolution.processId || !voteResolution.censusContract || !managedWallet?.address || !voteSelf.scopeSeed) return;
-    if (voteSelf.generating || voteSelf.link) return;
+    if (voteSelf.generating) return;
 
     const requestKey = [
       String(voteResolution.processId || '').toLowerCase(),
@@ -1216,7 +1419,6 @@ export default function VoteRoute() {
     voteResolution.statusCode,
     voteResolution.onchainWeight,
     voteSelf.generating,
-    voteSelf.link,
     voteSelf.scopeSeed,
   ]);
 
@@ -1318,10 +1520,13 @@ export default function VoteRoute() {
     Number.isInteger(selectedBallotChoice) &&
     Number(selectedBallotChoice) >= 0 &&
     (voteBallot.question?.choices || []).some((choice) => Number(choice.value) === selectedBallotChoice);
+  const hasManagedWalletSigner = Boolean(
+    managedWallet && (managedWallet.source === 'connected' ? connectedWallet?.signer : managedWallet.privateKey)
+  );
 
   const canSubmitVote =
     Boolean(voteResolution.processId) &&
-    Boolean(managedWallet?.privateKey) &&
+    hasManagedWalletSigner &&
     !processClosed &&
     hasQuestion &&
     hasAllChoices &&
@@ -1359,6 +1564,11 @@ export default function VoteRoute() {
     registrationModal.open &&
     Boolean(pendingVoteIntent) &&
     (hasVoteReadiness(voteResolution) || voteBallot.submitting || registrationModal.status === 'submitting');
+  const openIdentityFromRegistration = useCallback(() => {
+    if (registrationManualCloseBlocked) return;
+    closeRegistrationModal('close');
+    setVoteIdentityOpen(true);
+  }, [closeRegistrationModal, registrationManualCloseBlocked]);
 
   const registrationSteps = useMemo(() => {
     const onchainRequired = isOnchainReadinessRequired(voteResolution);
@@ -1426,9 +1636,9 @@ export default function VoteRoute() {
     const isErrorStatus = normalizedStatus === 'error';
     const isSettledStatus = normalizedStatus === 'settled';
 
-    let title = COPY.vote.submitResult.receivedTitle;
-    let description = COPY.vote.submitResult.receivedDescription;
-    let iconClass = 'iconoir-check-circle';
+    let title: string = COPY.vote.submitResult.receivedTitle;
+    let description: string = COPY.vote.submitResult.receivedDescription;
+    let iconClass: string = 'iconoir-check-circle';
 
     if (isSettledStatus) {
       title = COPY.vote.submitResult.finalizedTitle;
@@ -1470,6 +1680,12 @@ export default function VoteRoute() {
     voteSelf.countries.length > 0 ? voteSelf.countries.join(', ') : voteSelf.country ? voteSelf.country : '-';
   const voteConfiguredDuration = formatDurationMs(extractProcessDurationMs(voteResolution.process, null));
   const voteRemainingTimeText = formatRemainingTimeFromEndMs(voteResolution.endDateMs);
+  const showCopyPrivateKey = Boolean(managedWallet && managedWallet.source !== 'connected' && managedWallet.privateKey);
+  const showRegistrationWalletAddress = Boolean(managedWallet && managedWallet.source !== 'derived' && managedWallet.address);
+  const registrationWalletAddressLabel = showRegistrationWalletAddress ? shortenRegistrationWalletAddress(managedWallet?.address || '') : '';
+  const connectWalletButtonLabel = walletConnectPending
+    ? COPY.vote.buttons.connectingBrowserWallet
+    : COPY.vote.buttons.connectBrowserWallet;
 
   return (
     <>
@@ -1596,134 +1812,139 @@ export default function VoteRoute() {
           onClose={() => setVoteIdentityOpen(false)}
         >
           <div className="identity-dialog-content">
-            <p>
-              {COPY.vote.dialogs.walletAddress}: <code id="walletAddress">{managedWallet?.address || '-'}</code>
-            </p>
-            <p>
-              {COPY.vote.dialogs.walletSource}: <span id="walletSource">{managedWallet?.source || '-'}</span>
-            </p>
+            <div className="identity-dialog-copy">
+              <p>{COPY.vote.dialogs.identityIntroPrimary}</p>
+              <p>{COPY.vote.dialogs.identityIntroSecondary}</p>
+              <p>{COPY.vote.dialogs.identityIntroRisks}</p>
+            </div>
 
-            <div className="row">
-              <button
-                id="revealKeyBtn"
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  if (!managedWallet) return;
-                  if (!privateVisible) {
-                    const confirmed = window.confirm(COPY.vote.dialogs.revealKeyConfirm);
-                    if (!confirmed) return;
-                  }
-                  setPrivateVisible((previous) => !previous);
-                }}
-              >
-                <span className="btn-icon iconoir-eye" aria-hidden="true" />
-                <span className="btn-text">
-                  {privateVisible ? COPY.vote.buttons.hidePrivateKey : COPY.vote.buttons.revealPrivateKey}
+            <section className="identity-wallet-panel" aria-labelledby="walletAddressLabel">
+              <div className="identity-wallet-head">
+                <label id="walletAddressLabel" className="identity-field-label" htmlFor="walletAddressInput">
+                  {COPY.vote.dialogs.walletAddress}
+                </label>
+                <span id="walletSource" className="identity-source-tag" data-source={managedWalletSourceMeta.key}>
+                  <span className={`identity-source-icon ${managedWalletSourceMeta.iconClass}`} aria-hidden="true" />
+                  <span>{managedWalletSourceMeta.label}</span>
                 </span>
-              </button>
-              <button
-                id="copyKeyBtn"
-                type="button"
-                className="secondary"
-                disabled={!managedWallet || !privateVisible}
-                onClick={async () => {
-                  if (!managedWallet || !privateVisible) return;
-                  try {
-                    await navigator.clipboard.writeText(managedWallet.privateKey);
-                    setVoteStatusMessage(COPY.vote.dialogs.privateKeyCopied);
-                  } catch {
-                    setVoteStatusMessage(COPY.vote.dialogs.failedCopyPrivateKey, true);
-                  }
-                }}
-              >
-                <span className="btn-icon iconoir-copy" aria-hidden="true" />
-                <span className="btn-text">{COPY.vote.buttons.copyPrivateKey}</span>
-              </button>
-            </div>
+              </div>
 
-            <div id="walletSecretBox" hidden={!privateVisible || !managedWallet}>
-              <code id="walletPrivateKey">{privateVisible && managedWallet ? managedWallet.privateKey : COPY.shared.hidden}</code>
-            </div>
+              <div className={`identity-address-row${showCopyPrivateKey ? ' has-action' : ''}`}>
+                <input
+                  id="walletAddressInput"
+                  className="identity-address-input"
+                  type="text"
+                  readOnly
+                  value={managedWallet?.address || ''}
+                  placeholder="-"
+                  title={managedWallet?.address || COPY.shared.unknown}
+                />
 
-            <label>
-              {COPY.vote.dialogs.importPrivateKeyLabel}
-              <input
-                id="importKeyInput"
-                name="import_private_key"
-                spellCheck={false}
-                autoComplete="off"
-                type="password"
-                placeholder={COPY.vote.dialogs.importPrivateKeyPlaceholder}
-                value={importKey}
-                onChange={(event) => setImportKey(event.target.value)}
-              />
-            </label>
+                {showCopyPrivateKey && (
+                  <button
+                    id="copyKeyBtn"
+                    type="button"
+                    className="secondary identity-address-action"
+                    onClick={async () => {
+                      if (!managedWallet?.privateKey) return;
+                      try {
+                        await navigator.clipboard.writeText(managedWallet.privateKey);
+                        setVoteStatusMessage(COPY.vote.dialogs.privateKeyCopied);
+                      } catch {
+                        setVoteStatusMessage(COPY.vote.dialogs.failedCopyPrivateKey, true);
+                      }
+                    }}
+                  >
+                    <span className="btn-icon iconoir-copy" aria-hidden="true" />
+                    <span className="btn-text">{COPY.vote.buttons.copyPrivateKey}</span>
+                  </button>
+                )}
+              </div>
 
-            <div className="row">
-              <button
-                id="importKeyBtn"
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  const processId = resolutionRef.current.processId;
-                  if (!processId) {
-                    setVoteStatusMessage(COPY.vote.dialogs.importBeforeProcess, true);
-                    return;
-                  }
+              {managedWalletSourceMeta.helper ? <p className="identity-source-helper">{managedWalletSourceMeta.helper}</p> : null}
 
-                  let normalizedKey = '';
-                  try {
-                    normalizedKey = String(importKey || '').trim();
-                    if (!/^0x[a-fA-F0-9]{64}$/.test(normalizedKey)) {
-                      throw new Error(COPY.vote.dialogs.privateKeyFormatError);
-                    }
-                    // eslint-disable-next-line no-new
-                    new Wallet(normalizedKey);
-                  } catch (error) {
-                    setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.dialogs.invalidPrivateKey, true);
-                    return;
-                  }
+              {showCopyPrivateKey && <p className="muted danger identity-risk-copy">{COPY.vote.dialogs.warningKeyExposure}</p>}
+            </section>
 
-                  const confirmed = window.confirm(COPY.vote.dialogs.importKeyConfirm);
-                  if (!confirmed) return;
+            <div className="identity-divider" aria-hidden="true" />
 
-                  setWalletOverride(processId, normalizedKey);
-                  setImportKey('');
-                  bootstrapVoteManagedWallet(processId);
-                  void refreshVoteReadiness();
-                  void refreshHasVotedFlag();
-                  setVoteStatusMessage(COPY.vote.dialogs.importedKeyApplied);
-                }}
-              >
-                <span className="btn-icon iconoir-key" aria-hidden="true" />
-                <span className="btn-text">{COPY.vote.buttons.importKey}</span>
-              </button>
+            <section className="identity-actions-section">
+              <div className="identity-action-grid">
+                <button
+                  id="toggleImportKeyBtn"
+                  type="button"
+                  className={`cta-btn secondary identity-action-btn${showImportPanel ? ' is-active' : ''}`}
+                  aria-expanded={showImportPanel}
+                  aria-controls="identityImportPanel"
+                  onClick={() => setShowImportPanel((previous) => !previous)}
+                >
+                  <span className="btn-icon iconoir-key" aria-hidden="true" />
+                  <span className="btn-text">{COPY.vote.buttons.importKey}</span>
+                </button>
 
-              <button
-                id="clearImportedKeyBtn"
-                type="button"
-                className="ghost"
-                onClick={() => {
-                  const processId = resolutionRef.current.processId;
-                  if (!processId) {
-                    setVoteStatusMessage(COPY.vote.dialogs.resetBeforeProcess, true);
-                    return;
-                  }
+                {managedWallet?.source === 'connected' ? (
+                  <button
+                    id="restoreLocalWalletBtn"
+                    type="button"
+                    className="cta-btn identity-action-btn identity-action-btn-muted"
+                    disabled={!voteResolution.processId}
+                    onClick={() => void restoreLocalManagedWallet()}
+                  >
+                    <span className="btn-icon iconoir-refresh" aria-hidden="true" />
+                    <span className="btn-text">{COPY.vote.buttons.useLocalDerivedWallet}</span>
+                  </button>
+                ) : (
+                  <button
+                    id="connectBrowserWalletBtn"
+                    type="button"
+                    className="cta-btn identity-action-btn"
+                    disabled={!voteResolution.processId || walletConnectPending}
+                    onClick={() => void connectManagedBrowserWallet()}
+                  >
+                    <span className={`btn-icon ${walletConnectPending ? 'iconoir-refresh' : 'iconoir-wallet'}`} aria-hidden="true" />
+                    <span className="btn-text">{connectWalletButtonLabel}</span>
+                  </button>
+                )}
+              </div>
 
-                  clearWalletOverride(processId);
-                  bootstrapVoteManagedWallet(processId);
-                  void refreshVoteReadiness();
-                  void refreshHasVotedFlag();
-                  setVoteStatusMessage(COPY.vote.dialogs.derivedKeyRestored);
-                }}
-              >
-                <span className="btn-icon iconoir-refresh" aria-hidden="true" />
-                <span className="btn-text">{COPY.vote.buttons.useDerivedKey}</span>
-              </button>
-            </div>
+              <div id="identityImportPanel" className="identity-import-panel" hidden={!showImportPanel}>
+                <label htmlFor="importKeyInput">{COPY.vote.dialogs.importPrivateKeyLabel}</label>
+                <input
+                  id="importKeyInput"
+                  name="import_private_key"
+                  spellCheck={false}
+                  autoComplete="off"
+                  type="password"
+                  placeholder={COPY.vote.dialogs.importPrivateKeyPlaceholder}
+                  value={importKey}
+                  onChange={(event) => setImportKey(event.target.value)}
+                />
 
-            <p className="muted danger">{COPY.vote.dialogs.warningKeyExposure}</p>
+                {importKeyPreview.address ? (
+                  <div id="importedWalletAddressPreview" className="identity-import-preview">
+                    <span className="identity-import-preview-label">{COPY.vote.dialogs.importPreviewAddress}</span>
+                    <code>{importKeyPreview.address}</code>
+                  </div>
+                ) : importKeyPreview.error ? (
+                  <p id="importKeyError" className="field-helper danger">
+                    {importKeyPreview.error}
+                  </p>
+                ) : null}
+
+                <div className="row identity-import-actions">
+                  <button
+                    id="importKeyBtn"
+                    type="button"
+                    className="secondary"
+                    disabled={!importKeyPreview.address}
+                    onClick={() => void importManagedPrivateKey()}
+                  >
+                    <span className="btn-icon iconoir-key" aria-hidden="true" />
+                    <span className="btn-text">{COPY.vote.buttons.confirmImport}</span>
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
         </PopupModal>
 
@@ -2149,6 +2370,29 @@ export default function VoteRoute() {
             </div>
           </aside>
         </div>
+        {managedWallet && (
+          <div className="vote-registration-footer">
+            <button
+              id="registrationWalletWidget"
+              type="button"
+              className="registration-wallet-widget"
+              aria-controls="voteIdentityDialog"
+              aria-haspopup="dialog"
+              disabled={registrationManualCloseBlocked}
+              onClick={openIdentityFromRegistration}
+            >
+              <span className="identity-source-tag" data-source={managedWalletSourceMeta.key}>
+                <span className={`identity-source-icon ${managedWalletSourceMeta.iconClass}`} aria-hidden="true" />
+                <span>{managedWalletSourceMeta.label}</span>
+                {showRegistrationWalletAddress && (
+                  <code className="registration-wallet-source-address" title={managedWallet.address}>
+                    {registrationWalletAddressLabel}
+                  </code>
+                )}
+              </span>
+            </button>
+          </div>
+        )}
         {showRegistrationSubmittingNotice && (
           <p className="vote-registration-submit-note" role="status" aria-live="polite">
             <span className="timeline-spinner" aria-hidden="true" />
