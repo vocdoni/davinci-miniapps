@@ -158,6 +158,7 @@ export default function CreateRoute() {
     signer: null,
     address: '',
     sourceLabel: '',
+    connectorType: 'injected',
   });
 
   const [form, setForm] = useState<CreateFormState>(createInitialFormState);
@@ -429,6 +430,7 @@ export default function CreateRoute() {
       signer: null,
       address: '',
       sourceLabel: '',
+      connectorType: 'injected',
     });
     setCreatorWalletStatus(CREATOR_WALLET_STATUS_DEFAULT);
   }, []);

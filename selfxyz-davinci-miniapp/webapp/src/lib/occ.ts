@@ -240,6 +240,12 @@ export interface ProcessMetaSnapshot {
   updatedAt?: string;
 }
 
+export interface ConnectedWalletPreference {
+  address: string;
+  sourceLabel: string;
+  connectorType: 'injected' | 'walletconnect';
+}
+
 export function normalizeVoteStatus(status: unknown): VoteStatusKey | '' {
   const normalized = String(status || '').trim().toLowerCase();
   if (normalized in VOTE_STATUS_INFO) {
@@ -358,6 +364,10 @@ export function voteSubmissionStorageKey(processId: string, address: string): st
 
 export function getWalletOverrideKey(processId: string): string {
   return `occ.walletOverride.${processId || 'default'}`;
+}
+
+export function getConnectedWalletPreferenceKey(processId: string): string {
+  return `occ.connectedWallet.${processId || 'default'}`;
 }
 
 export function persistProcessMeta(processId: string, payload: ProcessMetaSnapshot): void {
@@ -491,6 +501,53 @@ export function getWalletOverride(processId: string): string {
     return normalizePrivateKey(raw);
   } catch {
     return '';
+  }
+}
+
+export function loadConnectedWalletPreference(processId: string): ConnectedWalletPreference | null {
+  const key = getConnectedWalletPreferenceKey(processId);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const address = String(parsed?.address || '').trim();
+    const sourceLabel = String(parsed?.sourceLabel || '').trim();
+    const connectorType = parsed?.connectorType === 'walletconnect' ? 'walletconnect' : parsed?.connectorType === 'injected' ? 'injected' : '';
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address) || !connectorType) return null;
+    return {
+      address,
+      sourceLabel,
+      connectorType,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function persistConnectedWalletPreference(processId: string, preference: ConnectedWalletPreference): void {
+  const key = getConnectedWalletPreferenceKey(processId);
+  const address = String(preference?.address || '').trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
+  const connectorType = preference.connectorType === 'walletconnect' ? 'walletconnect' : 'injected';
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        address,
+        sourceLabel: String(preference?.sourceLabel || '').trim(),
+        connectorType,
+      })
+    );
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+export function clearConnectedWalletPreference(processId: string): void {
+  try {
+    localStorage.removeItem(getConnectedWalletPreferenceKey(processId));
+  } catch {
+    // Ignore storage errors.
   }
 }
 

@@ -43,10 +43,12 @@ vi.mock('../services/readiness', () => ({
 }));
 
 const mockConnectBrowserWallet = vi.fn();
+const mockResumeConnectedBrowserWallet = vi.fn();
 const mockSelfAppBuilderInputs = vi.fn();
 
 vi.mock('../services/wallet', () => ({
   connectBrowserWallet: (...args: unknown[]) => mockConnectBrowserWallet(...args),
+  resumeConnectedBrowserWallet: (...args: unknown[]) => mockResumeConnectedBrowserWallet(...args),
 }));
 
 vi.mock('@selfxyz/qrcode', () => ({
@@ -133,6 +135,7 @@ describe('VoteRoute identity popup', () => {
     mockFetchOnchainWeight.mockReset();
     mockEthCall.mockReset();
     mockConnectBrowserWallet.mockReset();
+    mockResumeConnectedBrowserWallet.mockReset();
     mockSelfAppBuilderInputs.mockReset();
 
     mockCreateSequencerSdk.mockReturnValue({
@@ -145,6 +148,7 @@ describe('VoteRoute identity popup', () => {
     mockFetchSequencerWeight.mockResolvedValue(0n);
     mockFetchOnchainWeight.mockResolvedValue(0n);
     mockEthCall.mockRejectedValue(new Error('minAge lookup not needed in this test'));
+    mockResumeConnectedBrowserWallet.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -339,5 +343,57 @@ describe('VoteRoute identity popup', () => {
     });
 
     expect(mockSelfAppBuilderInputs).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores a connected wallet after refresh when the provider can resume silently', async () => {
+    const connectedAddress = '0x4444444444444444444444444444444444444444';
+    const connectedWallet = {
+      provider: { request: vi.fn() },
+      browserProvider: {},
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+      connectorType: 'injected' as const,
+    };
+
+    mockConnectBrowserWallet.mockResolvedValue(connectedWallet);
+
+    const firstRender = render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect browser wallet' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+    });
+
+    firstRender.unmount();
+
+    mockResumeConnectedBrowserWallet.mockResolvedValue(connectedWallet);
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(mockResumeConnectedBrowserWallet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: connectedAddress,
+          sourceLabel: 'MetaMask',
+          connectorType: 'injected',
+        }),
+        undefined
+      );
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+
+    await waitFor(() => {
+      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+      expect((document.getElementById('walletAddressInput') as HTMLInputElement).value).toBe(connectedAddress);
+    });
   });
 });

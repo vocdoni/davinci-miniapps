@@ -16,6 +16,7 @@ import {
   VOTE_STATUS_FLOW,
   VOTE_STATUS_INFO,
   buildCensusUri,
+  clearConnectedWalletPreference,
   extractCensusContract,
   extractCensusUri,
   extractProcessDurationMs,
@@ -30,6 +31,7 @@ import {
   hasProcessEndedByTime,
   isProcessAcceptingVotes,
   isVoteStatusTerminal,
+  loadConnectedWalletPreference,
   loadManagedWallet,
   loadProcessMeta,
   loadVoteScopeSeed,
@@ -39,6 +41,7 @@ import {
   normalizeVoteQuestions,
   normalizeVoteStatus,
   normalizePrivateKey,
+  persistConnectedWalletPreference,
   persistProcessMeta,
   persistVoteScopeSeed,
   persistVoteSubmission,
@@ -58,7 +61,7 @@ import {
   fetchSequencerWeight,
   getProcessFromSequencer,
 } from '../services/sequencer';
-import { connectBrowserWallet, type CreatorWalletConnection } from '../services/wallet';
+import { connectBrowserWallet, resumeConnectedBrowserWallet, type CreatorWalletConnection } from '../services/wallet';
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
 import { detectRegistrationMobileMode } from './vote/device';
@@ -622,7 +625,7 @@ export default function VoteRoute() {
   );
 
   const bootstrapVoteManagedWallet = useCallback(
-    (processId: string) => {
+    async (processId: string) => {
       const normalizedProcessId = normalizeProcessId(processId);
       if (!normalizedProcessId) {
         managedWalletRef.current = null;
@@ -632,6 +635,34 @@ export default function VoteRoute() {
         setImportKey('');
         setShowImportPanel(false);
         return;
+      }
+
+      const connectedPreference = loadConnectedWalletPreference(normalizedProcessId);
+      if (connectedPreference) {
+        try {
+          const connection = await resumeConnectedBrowserWallet(connectedPreference, connectedWalletRef.current?.provider);
+          if (connection) {
+            persistConnectedWalletPreference(normalizedProcessId, {
+              address: connection.address,
+              sourceLabel: connection.sourceLabel,
+              connectorType: connection.connectorType,
+            });
+            applyManagedWalletSnapshot(
+              normalizedProcessId,
+              {
+                address: connection.address,
+                privateKey: '',
+                source: 'connected',
+                sourceLabel: connection.sourceLabel,
+              },
+              connection
+            );
+            return;
+          }
+        } catch {
+          // Fall back to the local managed wallet when browser-wallet restore is unavailable.
+        }
+        clearConnectedWalletPreference(normalizedProcessId);
       }
 
       const wallet = loadManagedWallet(normalizedProcessId);
@@ -801,7 +832,7 @@ export default function VoteRoute() {
       }
 
       stopVotePolling();
-      bootstrapVoteManagedWallet(normalizedProcessId);
+      await bootstrapVoteManagedWallet(normalizedProcessId);
       clearVoteSelfArtifacts();
 
       setVoteResolution((previous) => ({
@@ -1067,6 +1098,11 @@ export default function VoteRoute() {
       setVoteStatusMessage(COPY.vote.status.connectingBrowserWallet);
 
       const connection = await connectBrowserWallet(connectedWalletRef.current?.provider);
+      persistConnectedWalletPreference(processId, {
+        address: connection.address,
+        sourceLabel: connection.sourceLabel,
+        connectorType: connection.connectorType,
+      });
       applyManagedWalletSnapshot(
         processId,
         {
@@ -1100,6 +1136,7 @@ export default function VoteRoute() {
     }
 
     setWalletOverride(processId, importKeyPreview.normalizedKey);
+    clearConnectedWalletPreference(processId);
     applyManagedWalletSnapshot(processId, {
       address: importKeyPreview.address,
       privateKey: importKeyPreview.normalizedKey,
@@ -1117,6 +1154,7 @@ export default function VoteRoute() {
       return;
     }
 
+    clearConnectedWalletPreference(processId);
     const wallet = loadManagedWallet(processId);
     applyManagedWalletSnapshot(processId, wallet, null);
     await refreshVoteReadiness();
