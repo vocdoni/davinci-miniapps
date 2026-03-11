@@ -59,7 +59,7 @@ function renderRichNode(node: ChildNode, key: string): ReactNode {
       const rel = target === '_blank' ? 'noopener noreferrer' : undefined;
 
       return (
-        <a key={key} href={href} target={target} rel={rel}>
+        <a key={key} className="rich-text-link" href={href} target={target} rel={rel}>
           {children}
         </a>
       );

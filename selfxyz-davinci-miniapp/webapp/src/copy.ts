@@ -161,6 +161,8 @@ export const COPY = {
     headerTitle: 'Explore processes',
     headerTextRich:
       'Browse processes created with this app. The list only includes voting processes compatible with <a href="https://self.xyz" target="_blank">Self.xyz</a> identification flow and links directly to each voting page.',
+    countryFilterLabel: 'Country',
+    countryFilterAll: 'All countries',
     statsShowing: (count: number) => `Showing ${count} compatible process${count === 1 ? '' : 'es'}`,
     retry: 'Retry',
     loading: 'Loading processes...',

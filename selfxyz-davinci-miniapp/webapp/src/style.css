@@ -79,6 +79,13 @@ body::before {
   max-width: 680px;
 }
 
+a:where(.rich-text-link) {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
 button {
   border: 1px solid rgba(31, 42, 58, 0.2);
   padding: 10px 16px;
@@ -2569,6 +2576,16 @@ button.qr-copy-btn:focus-visible {
   margin-bottom: 18px;
 }
 
+#exploreView .explore-list-panel {
+  display: grid;
+}
+
+#exploreView .explore-filter-floating {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 10px;
+}
+
 #exploreView .explore-list-wrap {
   border: 1px solid rgba(31, 42, 58, 0.12);
   border-radius: 16px;
@@ -2584,6 +2601,47 @@ button.qr-copy-btn:focus-visible {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
+}
+
+#exploreView .explore-filter {
+  min-width: 0;
+  position: relative;
+}
+
+#exploreView .explore-filter::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid rgba(31, 42, 58, 0.65);
+  border-bottom: 1.5px solid rgba(31, 42, 58, 0.65);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
+
+#exploreView .explore-filter-select {
+  width: 156px;
+  max-width: 100%;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 58, 0.12);
+  background: transparent;
+  color: var(--ink);
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 32px 0 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#exploreView .explore-filter-select:focus {
+  outline: 2px solid rgba(74, 90, 239, 0.14);
+  outline-offset: 0;
+  border-color: rgba(74, 90, 239, 0.3);
 }
 
 #exploreView .explore-list {
@@ -4215,8 +4273,16 @@ button.qr-copy-btn:focus-visible {
   }
 
   #exploreView .explore-list-head {
-    flex-direction: column;
     align-items: flex-start;
+  }
+
+  #exploreView .explore-filter-floating {
+    margin: 0 0 10px;
+  }
+
+  #exploreView .explore-filter {
+    width: auto;
+    min-width: 0;
   }
 
   #exploreView .explore-row-main {

@@ -127,6 +127,33 @@ describe('ExploreRoute', () => {
     });
   });
 
+  it('filters the list by a single requested country', async () => {
+    const id1 = processIdFrom(1);
+    const id2 = processIdFrom(2);
+
+    mockListProcessesFromSequencer.mockResolvedValue([id1, id2]);
+    mockGetProcessFromSequencer.mockImplementation(async (_sdk, processId: string) => makeProcess(processId));
+    mockFetchProcessMetadata.mockImplementation(async (_sdk, process: { id: string }) => {
+      if (process.id === id1) return makeMetadata('European vote', ['ESP', 'FRA']);
+      return makeMetadata('US vote', ['USA']);
+    });
+
+    render(<ExploreRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByText('European vote')).toBeInTheDocument();
+      expect(screen.getByText('US vote')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Country'), { target: { value: 'FRA' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('European vote')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('US vote')).not.toBeInTheDocument();
+  });
+
   it('shows empty state when no compatible processes are found', async () => {
     const id = processIdFrom(1);
     mockListProcessesFromSequencer.mockResolvedValue([id]);
@@ -141,6 +168,8 @@ describe('ExploreRoute', () => {
     await waitFor(() => {
       expect(screen.getByText('No compatible processes found.')).toBeInTheDocument();
     });
+
+    expect(screen.queryByLabelText('Country')).not.toBeInTheDocument();
   });
 
   it('skips processes without the explicit explore listing flag', async () => {

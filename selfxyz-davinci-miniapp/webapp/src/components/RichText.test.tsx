@@ -29,6 +29,7 @@ describe('RichText', () => {
     expect(link).toHaveAttribute('href', 'https://example.com/docs');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(link).toHaveClass('rich-text-link');
   });
 
   it('drops unsafe links but preserves their text', () => {

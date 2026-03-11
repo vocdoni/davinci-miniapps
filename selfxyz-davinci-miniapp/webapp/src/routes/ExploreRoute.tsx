@@ -16,6 +16,7 @@ import {
   sortProcessIdsNewestFirst,
 } from './explore/model';
 import type { ExplorePageState, ExploreProcessRow } from './explore/types';
+import { COUNTRY_OPTIONS } from './create/constants';
 
 const PAGE_MATCH_TARGET = 20;
 const SCAN_CHUNK_SIZE = 20;
@@ -53,6 +54,7 @@ export default function ExploreRoute() {
   const baseUrl = import.meta.env.BASE_URL || '/';
   const [state, setState] = useState<ExplorePageState>(DEFAULT_EXPLORE_PAGE_STATE);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState('');
 
   const sdkRef = useRef<any | null>(null);
   const processCacheRef = useRef<Map<string, Record<string, unknown> | null>>(new Map());
@@ -72,6 +74,10 @@ export default function ExploreRoute() {
   const navLinks = useMemo(
     () => [{ id: 'navExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
     [buildAppHref]
+  );
+  const countryFilterOptions = useMemo(
+    () => [...COUNTRY_OPTIONS].sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' })),
+    []
   );
 
   const getSdk = useCallback(() => {
@@ -138,6 +144,16 @@ export default function ExploreRoute() {
     [buildAppHref, getMetadata, getProcess]
   );
 
+  const buildFilteredRowFromProcessId = useCallback(
+    async (processId: string, options?: { forceProcess?: boolean }): Promise<ExploreProcessRow | null> => {
+      const row = await buildRowFromProcessId(processId, options);
+      if (!row) return null;
+      if (selectedCountry && !row.countries.includes(selectedCountry)) return null;
+      return row;
+    },
+    [buildRowFromProcessId, selectedCountry]
+  );
+
   const loadSortedProcessIds = useCallback(async (): Promise<string[]> => {
     const processIds = await listProcessesFromSequencer(getSdk());
     const uniqueProcessIds = Array.from(new Set(processIds.map((processId) => normalizeProcessId(processId)).filter(Boolean)));
@@ -180,7 +196,7 @@ export default function ExploreRoute() {
         targetMatches: PAGE_MATCH_TARGET,
         chunkSize: SCAN_CHUNK_SIZE,
         concurrency: FETCH_CONCURRENCY,
-        mapProcessId: (processId) => buildRowFromProcessId(processId),
+        mapProcessId: (processId) => buildFilteredRowFromProcessId(processId),
       });
       if (token !== requestTokenRef.current) return;
 
@@ -205,7 +221,7 @@ export default function ExploreRoute() {
         allProcessIds: [],
       });
     }
-  }, [buildRowFromProcessId, loadSortedProcessIds]);
+  }, [buildFilteredRowFromProcessId, loadSortedProcessIds]);
 
   const handleLoadMore = useCallback(async () => {
     if (state.loading || loadingMore || !state.hasMore) return;
@@ -219,7 +235,7 @@ export default function ExploreRoute() {
         targetMatches: PAGE_MATCH_TARGET,
         chunkSize: SCAN_CHUNK_SIZE,
         concurrency: FETCH_CONCURRENCY,
-        mapProcessId: (processId) => buildRowFromProcessId(processId),
+        mapProcessId: (processId) => buildFilteredRowFromProcessId(processId),
       });
       if (token !== requestTokenRef.current) return;
 
@@ -245,7 +261,7 @@ export default function ExploreRoute() {
         setLoadingMore(false);
       }
     }
-  }, [buildRowFromProcessId, loadingMore, state.allProcessIds, state.hasMore, state.loading, state.nextCursor]);
+  }, [buildFilteredRowFromProcessId, loadingMore, state.allProcessIds, state.hasMore, state.loading, state.nextCursor]);
 
   const refreshLoadedRows = useCallback(async () => {
     if (state.loading || state.refreshing || !state.rows.length) return;
@@ -264,7 +280,7 @@ export default function ExploreRoute() {
         targetMatches: activeProcessIds.length,
         chunkSize: SCAN_CHUNK_SIZE,
         concurrency: FETCH_CONCURRENCY,
-        mapProcessId: (processId) => buildRowFromProcessId(processId, { forceProcess: true }),
+        mapProcessId: (processId) => buildFilteredRowFromProcessId(processId, { forceProcess: true }),
       });
       if (token !== requestTokenRef.current) return;
 
@@ -282,7 +298,7 @@ export default function ExploreRoute() {
         error: getErrorMessage(error),
       }));
     }
-  }, [buildRowFromProcessId, state.loading, state.refreshing, state.rows]);
+  }, [buildFilteredRowFromProcessId, state.loading, state.refreshing, state.rows]);
 
   useEffect(() => {
     void loadInitial();
@@ -299,6 +315,8 @@ export default function ExploreRoute() {
       window.clearInterval(interval);
     };
   }, [refreshLoadedRows]);
+
+  const showCountryFilter = Boolean(selectedCountry) || state.rows.length > 0;
 
   return (
     <section id="exploreView" className="view explore-route">
@@ -320,74 +338,97 @@ export default function ExploreRoute() {
         </p>
       </header>
 
-      <section className="explore-list-wrap">
-        <div className="explore-list-head">
-          <p className="muted" id="exploreStatsText">
-            {COPY.explore.statsShowing(state.rows.length)}
-          </p>
-        </div>
-
-        {state.error && (
-          <div className="explore-feedback explore-feedback-error" role="alert">
-            <p>{state.error}</p>
-            <button type="button" className="secondary" onClick={() => void loadInitial()}>
-              {COPY.explore.retry}
-            </button>
+      <section className="explore-list-panel">
+        {showCountryFilter && (
+          <div className="explore-filter-floating">
+            <div className="explore-filter">
+              <select
+                id="exploreCountryFilter"
+                className="explore-filter-select"
+                aria-label={COPY.explore.countryFilterLabel}
+                value={selectedCountry}
+                onChange={(event) => setSelectedCountry(event.target.value)}
+              >
+                <option value="">{COPY.explore.countryFilterAll}</option>
+                {countryFilterOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label} ({option.code})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
-        {state.loading && (
-          <div className="explore-feedback explore-feedback-loading" id="exploreLoading">
-            <span className="timeline-spinner" aria-hidden="true" />
-            <span>{COPY.explore.loading}</span>
+        <section className="explore-list-wrap">
+          <div className="explore-list-head">
+            <p className="muted" id="exploreStatsText">
+              {COPY.explore.statsShowing(state.rows.length)}
+            </p>
           </div>
-        )}
 
-        {!state.loading && !state.error && state.rows.length === 0 && (
-          <div className="explore-feedback" id="exploreEmptyState">
-            {COPY.explore.emptyState}
-          </div>
-        )}
+          {state.error && (
+            <div className="explore-feedback explore-feedback-error" role="alert">
+              <p>{state.error}</p>
+              <button type="button" className="secondary" onClick={() => void loadInitial()}>
+                {COPY.explore.retry}
+              </button>
+            </div>
+          )}
 
-        {!state.loading && state.rows.length > 0 && (
-          <>
-            <ul className="explore-list" id="exploreProcessList">
-              {state.rows.map((row) => {
-                const showRemaining = row.statusCode === ProcessStatus.READY;
-                return (
-                  <li className="explore-row" key={row.processId}>
-                    <a className="explore-row-link" href={row.voteHref}>
-                      <div className="explore-row-main">
-                        <p className="explore-row-question">{row.questionTitle}</p>
-                        <span className={`explore-row-status is-${statusClassName(row.statusCode)}`}>{row.statusLabel}</span>
-                      </div>
-                      <p className="explore-row-requirements">
-                        {COPY.explore.requirementsPrefix} {row.countries.join(', ')} | {COPY.explore.requirementsMinAge}{' '}
-                        {row.minAge}
-                        {showRemaining ? ` | ${COPY.explore.requirementsClosesIn} ${row.readyTimeRemainingLabel}` : ''}
-                      </p>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
+          {state.loading && (
+            <div className="explore-feedback explore-feedback-loading" id="exploreLoading">
+              <span className="timeline-spinner" aria-hidden="true" />
+              <span>{COPY.explore.loading}</span>
+            </div>
+          )}
 
-            {state.hasMore && (
-              <div className="explore-load-more-wrap">
-                <button
-                  id="exploreLoadMoreBtn"
-                  type="button"
-                  className="cta-btn secondary"
-                  disabled={loadingMore}
-                  onClick={() => void handleLoadMore()}
-                >
-                  <span className={`btn-icon ${loadingMore ? 'iconoir-refresh' : 'iconoir-more-horiz'}`} aria-hidden="true" />
-                  <span>{loadingMore ? COPY.explore.loadingMore : COPY.explore.loadMore}</span>
-                </button>
-              </div>
-            )}
-          </>
-        )}
+          {!state.loading && !state.error && state.rows.length === 0 && (
+            <div className="explore-feedback" id="exploreEmptyState">
+              {COPY.explore.emptyState}
+            </div>
+          )}
+
+          {!state.loading && state.rows.length > 0 && (
+            <>
+              <ul className="explore-list" id="exploreProcessList">
+                {state.rows.map((row) => {
+                  const showRemaining = row.statusCode === ProcessStatus.READY;
+                  return (
+                    <li className="explore-row" key={row.processId}>
+                      <a className="explore-row-link" href={row.voteHref}>
+                        <div className="explore-row-main">
+                          <p className="explore-row-question">{row.questionTitle}</p>
+                          <span className={`explore-row-status is-${statusClassName(row.statusCode)}`}>{row.statusLabel}</span>
+                        </div>
+                        <p className="explore-row-requirements">
+                          {COPY.explore.requirementsPrefix} {row.countries.join(', ')} | {COPY.explore.requirementsMinAge}{' '}
+                          {row.minAge}
+                          {showRemaining ? ` | ${COPY.explore.requirementsClosesIn} ${row.readyTimeRemainingLabel}` : ''}
+                        </p>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {state.hasMore && (
+                <div className="explore-load-more-wrap">
+                  <button
+                    id="exploreLoadMoreBtn"
+                    type="button"
+                    className="cta-btn secondary"
+                    disabled={loadingMore}
+                    onClick={() => void handleLoadMore()}
+                  >
+                    <span className={`btn-icon ${loadingMore ? 'iconoir-refresh' : 'iconoir-more-horiz'}`} aria-hidden="true" />
+                    <span>{loadingMore ? COPY.explore.loadingMore : COPY.explore.loadMore}</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </section>
     </section>
   );
