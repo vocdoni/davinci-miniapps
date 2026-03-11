@@ -52,12 +52,10 @@ export const COPY = {
     connectingWallet: 'Connecting browser wallet...',
     failedConnectWallet: 'Failed to connect creator wallet.',
     walletBalanceChecking: 'Checking CELO balance...',
-    walletNeedsFundsBeforeCreate:
-      "Almost there! Creating a vote requires a tiny bit of CELO for transaction fees. Don't have any? No worries, get some for free",
-    walletFaucetLabel: 'here',
-    walletFaucetUrl: 'https://stakely.io/faucet/celo-celo',
-    walletConnectPromptLead: 'Connect your wallet. Every vote you create counts, and',
-    walletConnectPromptEmphasis: "early builders won't go unnoticed",
+    walletNeedsFundsBeforeCreateRich:
+      'Almost there! Creating a vote requires a tiny bit of CELO for transaction fees. Don\'t have any? No worries, get some for free <a href="https://stakely.io/faucet/celo-celo" target="_blank">here</a>.',
+    walletConnectPromptRich:
+      'Connect your wallet. Every vote you create counts, and <strong>early builders won\'t go unnoticed</strong>.',
     shareSocialText: 'Join this vote on Ask The World - DAVINCI',
     navbar: {
       walletTitle: 'Creator Wallet',
@@ -69,11 +67,8 @@ export const COPY = {
     },
     header: {
       title: 'What do you want to ask?',
-      introParagraph1: 'Ask any question, target any country or groups.',
-      introParagraph2BeforeSelf: "Citizens prove they're real with their ID or passport using",
-      introParagraph2BetweenLinks: ', and vote in complete anonymity through the',
-      introParagraph3: 'No data exposed. No double votes. No coercion.',
-      introParagraph4: 'Just truth, verified on-chain.',
+      introRich:
+        'Ask any question, target any country or groups.<br /><br />Citizens prove they\'re real with their ID or passport using <a href="https://self.xyz" target="_blank"><strong>Self.xyz</strong></a>, and vote in complete anonymity through the <a href="https://davinci.vote" target="_blank"><strong>DAVINCI Protocol</strong></a>.<br /><br />No data exposed. No double votes. No coercion.<br />Just truth, verified on-chain.',
     },
     form: {
       processPlaceholder: 'Type your question here...',
@@ -164,9 +159,8 @@ export const COPY = {
     loadingError: 'Failed to load processes from sequencer.',
     missingSequencerUrl: 'Missing VITE_DAVINCI_SEQUENCER_URL.',
     headerTitle: 'Explore processes',
-    headerTextBeforeSelf:
-      'Browse processes created with this app. The list only includes voting processes compatible with',
-    headerTextAfterSelf: 'identification flow and links directly to each voting page.',
+    headerTextRich:
+      'Browse processes created with this app. The list only includes voting processes compatible with <a href="https://self.xyz" target="_blank">Self.xyz</a> identification flow and links directly to each voting page.',
     statsShowing: (count: number) => `Showing ${count} compatible process${count === 1 ? '' : 'es'}`,
     retry: 'Retry',
     loading: 'Loading processes...',
@@ -296,8 +290,8 @@ export const COPY = {
       loadingQuestion: 'Loading question...',
       chooseOption: 'Choose an option',
       resultsAvailable: 'Results are available for this process.',
-      helpBeforeSelf: 'Choose an option, join the census through the',
-      helpAfterSelf: 'app, and cast your vote.',
+      helpRich:
+        'Choose an option, join the census through the <a href="https://self.xyz" target="_blank">Self.xyz</a> app, and cast your vote.',
     },
     dialogs: {
       processDetailsTitle: 'Process Details',
@@ -305,9 +299,9 @@ export const COPY = {
       managedIdentityTitle: 'Identity Wallet',
       managedIdentityClose: 'Close identity popup',
       identityIntroPrimary:
-        'We set up an ephemeral identity for you: no wallet or setup needed. It\'s tied to this browser, so clearing data or switching devices means starting fresh.',
+        'We set up an ephemeral identity for you: <b>no wallet or setup needed</b>. It\'s tied to this browser, so clearing data or switching devices means starting fresh.',
       identityIntroSecondary:
-        'Want to use your own identity? Connect your wallet instead. Early users won\'t be forgotten. Your votes stay fully anonymous regardless.',
+        '<b>Want to use your own identity?</b> Connect your wallet instead. <u>Early users won\'t be forgotten</u>. Your votes stay fully anonymous regardless.',
       importBeforeProcess: 'Open /vote/:processId before importing a key.',
       connectBeforeProcess: 'Open /vote/:processId before connecting a browser wallet.',
       resetBeforeProcess: 'Open /vote/:processId before resetting key.',

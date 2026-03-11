@@ -71,6 +71,7 @@ vi.mock('@selfxyz/qrcode', () => ({
   SelfQRcodeWrapper: () => <div data-testid="self-qr" />,
 }));
 
+import { COPY } from '../copy';
 import VoteRoute from './VoteRoute';
 
 const PROCESS_ID = `0x${'1'.padStart(62, '0')}`;
@@ -115,6 +116,12 @@ function makeMetadata() {
       },
     },
   };
+}
+
+function htmlToText(value: string): string {
+  const container = document.createElement('div');
+  container.innerHTML = value;
+  return container.textContent || '';
 }
 
 describe('VoteRoute identity popup', () => {
@@ -206,9 +213,11 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
 
     expect(screen.getByRole('dialog', { name: 'Identity Wallet' })).toBeInTheDocument();
-    expect(screen.getByText(/creates a local wallet automatically/i)).toBeInTheDocument();
-    expect(screen.getByText(/keeps the vote accessible for web2 users/i)).toBeInTheDocument();
-    expect(screen.getByText(/private key is exposed/i)).toBeInTheDocument();
+    const identityCopy = document.querySelector('.identity-dialog-copy');
+    expect(identityCopy).not.toBeNull();
+    expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroPrimary));
+    expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroSecondary));
+    expect(screen.getByText(COPY.vote.dialogs.warningKeyExposure)).toBeInTheDocument();
 
     const addressInput = document.getElementById('walletAddressInput') as HTMLInputElement;
     expect(addressInput.value).toMatch(/^0x[a-fA-F0-9]{40}$/);
@@ -475,8 +484,7 @@ describe('VoteRoute identity popup', () => {
     expect(registrationWalletWidget.tagName).toBe('DIV');
     expect(registrationWalletWidget).toHaveTextContent('Connected');
     expect(registrationWalletWidget).toHaveTextContent('0x222222...2222');
-    expect(screen.queryByText("Want to use your own identity?")).not.toBeInTheDocument();
-    expect(screen.queryByText("Early users won't be forgotten. Your vote stays anonymous.")).not.toBeInTheDocument();
+    expect(document.querySelector('.registration-wallet-helper')).toBeNull();
     expect(screen.queryByRole('link', { name: 'Connect your wallet here.' })).not.toBeInTheDocument();
   });
 
@@ -498,8 +506,10 @@ describe('VoteRoute identity popup', () => {
     expect(registrationWalletWidget).toBeInTheDocument();
     expect(registrationWalletWidget.tagName).toBe('DIV');
     expect(registrationWalletWidget).toHaveTextContent('Ephemeral Identity');
-    expect(screen.getByText("Want to use your own identity?")).toBeInTheDocument();
-    expect(screen.getByText("Early users won't be forgotten. Your vote stays anonymous.")).toBeInTheDocument();
+    const registrationWalletHelper = document.querySelector('.registration-wallet-helper');
+    expect(registrationWalletHelper).not.toBeNull();
+    expect(registrationWalletHelper).toHaveTextContent("Want to use your own identity?");
+    expect(registrationWalletHelper).toHaveTextContent("Early users won't be forgotten. Your vote stays anonymous.");
 
     fireEvent.click(screen.getByRole('link', { name: 'Connect your wallet here.' }));
 

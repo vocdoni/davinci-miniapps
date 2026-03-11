@@ -2,6 +2,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
+import RichText from '../components/RichText';
 import { COPY } from '../copy';
 import { CONFIG } from '../lib/occ';
 import { listProcessesFromSequencer, createSequencerSdk, fetchProcessMetadata, getProcessFromSequencer } from '../services/sequencer';
@@ -315,11 +316,7 @@ export default function ExploreRoute() {
           {COPY.explore.headerTitle}
         </h1>
         <p id="exploreHeaderText" className="create-intro question-hero-helper">
-          {COPY.explore.headerTextBeforeSelf}{' '}
-          <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
-            Self.xyz
-          </a>{' '}
-          {COPY.explore.headerTextAfterSelf}
+          <RichText html={COPY.explore.headerTextRich} />
         </p>
       </header>
 

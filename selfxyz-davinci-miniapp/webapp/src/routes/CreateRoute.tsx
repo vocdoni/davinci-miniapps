@@ -44,6 +44,7 @@ import {
 } from '../services/wallet';
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
+import RichText from '../components/RichText';
 import {
   COUNTRY_OPTIONS,
   DEFAULT_DURATION_HOURS,
@@ -1321,20 +1322,7 @@ export default function CreateRoute() {
           {COPY.create.header.title}
         </h1>
         <p className="create-intro question-hero-helper">
-          {COPY.create.header.introParagraph1}
-          {'\n\n'}
-          {COPY.create.header.introParagraph2BeforeSelf}{' '}
-          <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
-            <strong>Self.xyz</strong>
-          </a>
-          {COPY.create.header.introParagraph2BetweenLinks}{' '}
-          <a className="field-link" href="https://davinci.vote" target="_blank" rel="noreferrer">
-            <strong>DAVINCI Protocol</strong>
-          </a>
-          {'.\n\n'}
-          {COPY.create.header.introParagraph3}
-          {'\n'}
-          {COPY.create.header.introParagraph4}
+          <RichText html={COPY.create.header.introRich} />
         </p>
       </header>
 
@@ -1712,8 +1700,7 @@ export default function CreateRoute() {
                 <span>{COPY.create.navbar.connectWalletToCreate}</span>
               </button>
               <p className="field-helper create-wallet-connect-note">
-                {COPY.create.walletConnectPromptLead}{' '}
-                <strong>{COPY.create.walletConnectPromptEmphasis}</strong>.
+                <RichText html={COPY.create.walletConnectPromptRich} />
               </p>
             </>
           )}
@@ -1724,11 +1711,7 @@ export default function CreateRoute() {
 
           {creatorConnected && creatorWalletBalanceState === 'insufficient' && (
             <p className="field-helper create-wallet-balance-note create-wallet-balance-note-error">
-              {COPY.create.walletNeedsFundsBeforeCreate}{' '}
-              <a href={COPY.create.walletFaucetUrl} target="_blank" rel="noreferrer">
-                {COPY.create.walletFaucetLabel}
-              </a>
-              .
+              <RichText html={COPY.create.walletNeedsFundsBeforeCreateRich} />
             </p>
           )}
         </div>

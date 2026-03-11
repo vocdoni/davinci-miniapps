@@ -65,6 +65,7 @@ import {
 import { connectBrowserWallet, resumeConnectedBrowserWallet, type CreatorWalletConnection } from '../services/wallet';
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
+import RichText from '../components/RichText';
 import { detectRegistrationMobileMode } from './vote/device';
 import {
   buildSingleQuestionBallotValues,
@@ -1919,13 +1920,7 @@ export default function VoteRoute() {
   const voteHeaderHelpText = voteResultsVisible ? (
     COPY.vote.header.resultsAvailable
   ) : (
-    <>
-      {COPY.vote.header.helpBeforeSelf}{' '}
-      <a className="field-link" href="https://self.xyz" target="_blank" rel="noreferrer">
-        Self.xyz
-      </a>{' '}
-      {COPY.vote.header.helpAfterSelf}
-    </>
+    <RichText html={COPY.vote.header.helpRich} />
   );
   const voteSelfCountriesText =
     voteSelf.countries.length > 0 ? voteSelf.countries.join(', ') : voteSelf.country ? voteSelf.country : '-';
@@ -2106,8 +2101,12 @@ export default function VoteRoute() {
         >
           <div className="identity-dialog-content">
             <div className="identity-dialog-copy">
-              <p>{COPY.vote.dialogs.identityIntroPrimary}</p>
-              <p>{COPY.vote.dialogs.identityIntroSecondary}</p>
+              <p>
+                <RichText html={COPY.vote.dialogs.identityIntroPrimary} />
+              </p>
+              <p>
+                <RichText html={COPY.vote.dialogs.identityIntroSecondary} />
+              </p>
             </div>
 
             <section className="identity-wallet-panel" aria-labelledby="walletAddressLabel">
