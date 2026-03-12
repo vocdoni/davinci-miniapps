@@ -1845,12 +1845,6 @@ export default function VoteRoute() {
         label: COPY.vote.registration.progressSteps.sequencerLabel,
         description: COPY.vote.registration.progressSteps.sequencerDescription,
         done: sequencerReady,
-      },
-      {
-        id: 'ready',
-        label: COPY.vote.registration.progressSteps.readyLabel,
-        description: COPY.vote.registration.progressSteps.readyDescription,
-        done: readyToVote,
       }
     );
 
@@ -2620,22 +2614,22 @@ export default function VoteRoute() {
             )}
 
             {registrationModal.isMobile && (
-              <div className="vote-registration-requirements">
+              <div className="vote-registration-requirements vote-registration-requirements-mobile">
                 <p className="label">{COPY.vote.registration.requirementsToVote}</p>
-                <div className="vote-registration-requirements-grid">
-                  <div className="vote-registration-requirement">
-                    <p className="label">{COPY.vote.registration.minimumAge}</p>
-                    <p className="value" id="voteSelfMinAgeInfo">
+                <ul className="vote-registration-requirements-list">
+                  <li>
+                    <span className="vote-registration-requirements-list-label">{COPY.vote.registration.minimumAge}</span>
+                    <span className="vote-registration-requirements-list-value" id="voteSelfMinAgeInfo">
                       {voteSelf.minAge ? String(voteSelf.minAge) : '-'}
-                    </p>
-                  </div>
-                  <div className="vote-registration-requirement">
-                    <p className="label">{COPY.vote.registration.countries}</p>
-                    <p className="value" id="voteCountryInfo">
+                    </span>
+                  </li>
+                  <li>
+                    <span className="vote-registration-requirements-list-label">{COPY.vote.registration.countries}</span>
+                    <span className="vote-registration-requirements-list-value" id="voteCountryInfo">
                       {voteSelfCountriesText}
-                    </p>
-                  </div>
-                </div>
+                    </span>
+                  </li>
+                </ul>
               </div>
             )}
 
