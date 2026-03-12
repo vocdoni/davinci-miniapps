@@ -128,6 +128,11 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
         return _currentRoot;
     }
 
+    function getTotalVotingPowerAtRoot(uint256 root) external view returns (uint256 totalVotingPower) {
+        // return teh current number of leafs
+        return this.treeSize();
+    }
+
     // ====================================================
     // Admin
     // ====================================================
@@ -168,7 +173,7 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
         nullifierUsed[output.nullifier] = true;
 
         // Insert leaf into Lean-IMT
-        uint256 leaf = uint256(uint160(user));
+        uint256 leaf = _packLeaf(user, 1);
         uint256 newRoot = _insertAndRotateRoot(leaf);
 
         uint88 prev = weightOf[user];
@@ -229,5 +234,9 @@ contract OpenCitizenCensus is ICensusValidator, SelfVerificationRoot, Ownable {
         string memory nationality
     ) internal view returns (bool) {
         return _allowedNationalityHash[keccak256(bytes(nationality))];
+    }
+
+    function _packLeaf(address account, uint88 weight) internal pure returns (uint256) {
+        return (uint256(uint160(account)) << 88) | uint256(weight);
     }
 }
