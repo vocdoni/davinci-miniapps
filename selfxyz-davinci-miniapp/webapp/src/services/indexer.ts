@@ -18,6 +18,22 @@ export function buildIndexerPayload(input: BuildIndexerPayloadInput): IndexerCon
   };
 }
 
+export async function pingIndexer(indexerUrl: string): Promise<void> {
+  const baseUrl = String(indexerUrl || '').replace(/\/+$/, '').trim();
+  if (!baseUrl) {
+    throw new Error('Indexer URL is unavailable.');
+  }
+
+  const response = await fetch(`${baseUrl}/contracts`, {
+    method: 'HEAD',
+    cache: 'no-store',
+  });
+
+  if (response.status >= 500) {
+    throw new Error(`Indexer ping failed (${response.status})`);
+  }
+}
+
 export async function bootstrapIndexer(indexerUrl: string, payload: IndexerContractPayload): Promise<void> {
   const url = `${String(indexerUrl || '').replace(/\/+$/, '')}/contracts`;
   const response = await fetch(url, {

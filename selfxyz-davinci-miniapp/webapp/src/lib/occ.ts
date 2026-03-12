@@ -1,9 +1,11 @@
 import { AbiCoder, Interface, Wallet, keccak256, randomBytes, sha256, toUtf8Bytes } from 'ethers';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
+import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 
 import artifact from '../artifacts/OpenCitizenCensus.json';
 import { COPY } from '../copy';
 import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
+import { toRecord } from '../utils/records';
 import { toDateFromUnknown, toDurationMs, toRfc3339Timestamp } from '../utils/timing';
 
 const env = import.meta.env;
@@ -743,7 +745,17 @@ export function toSequencerCensusUri(censusUri: string): string {
   return `graphql://${value.replace(/^\/+/, '')}`;
 }
 
-export function stringifyMetaValues(value: unknown): unknown {
+export type StringifiedMetaValue = string | StringifiedMetaObject | StringifiedMetaValue[];
+
+export interface StringifiedMetaObject {
+  [key: string]: StringifiedMetaValue;
+}
+
+export function stringifyMetaValues(value: null | undefined): '';
+export function stringifyMetaValues(value: unknown[]): StringifiedMetaValue[];
+export function stringifyMetaValues(value: Record<string, unknown>): StringifiedMetaObject;
+export function stringifyMetaValues(value: unknown): StringifiedMetaValue | '';
+export function stringifyMetaValues(value: unknown): StringifiedMetaValue | '' {
   if (value === null || value === undefined) return '';
   if (Array.isArray(value)) return value.map((item) => stringifyMetaValues(item));
   if (typeof value === 'object') {
@@ -919,25 +931,29 @@ export function normalizeVoteQuestions(rawQuestions: unknown): Array<{
     .filter((question) => question.choices.length > 0);
 }
 
-export function extractCensusContract(process: Record<string, any> | null): string {
+export function extractCensusContract(process: SequencerProcess | null): string {
+  const census = toRecord(process?.census);
+  const metadata = toRecord(process?.metadata);
   const candidates = [
     process?.censusContract,
-    process?.census?.contractAddress,
-    process?.census?.address,
+    census?.contractAddress,
+    census?.address,
     process?.censusAddress,
-    process?.metadata?.censusContract,
-    process?.metadata?.censusContractAddress,
+    metadata?.censusContract,
+    metadata?.censusContractAddress,
   ].map((value) => String(value || '').trim());
 
   return candidates.find((value) => /^0x[a-fA-F0-9]{40}$/.test(value)) || '';
 }
 
-export function extractCensusUri(process: Record<string, any> | null, contractAddress: string): string {
+export function extractCensusUri(process: SequencerProcess | null, contractAddress: string): string {
+  const census = toRecord(process?.census);
+  const metadata = toRecord(process?.metadata);
   const candidates = [
     process?.censusUri,
-    process?.census?.uri,
-    process?.census?.censusUri,
-    process?.metadata?.censusUri,
+    census?.uri,
+    census?.censusUri,
+    metadata?.censusUri,
   ].map((value) => String(value || '').trim());
 
   const existing = candidates.find((value) => /^https?:\/\//i.test(value) || /^graphql:\/\//i.test(value));
@@ -947,31 +963,34 @@ export function extractCensusUri(process: Record<string, any> | null, contractAd
 }
 
 export function extractProcessDescription(
-  process: Record<string, any> | null,
-  metadata: Record<string, any> | null
+  process: SequencerProcess | null,
+  metadata: SequencerMetadata | null
 ): string {
+  const processMetadata = toRecord(process?.metadata);
   const candidates = [
     getLocalizedText(metadata?.description),
     getLocalizedText(process?.description),
-    getLocalizedText(process?.metadata?.description),
+    getLocalizedText(processMetadata?.description),
   ];
   return String(candidates.find((value) => String(value || '').trim()) || '').trim();
 }
 
 export function extractProcessEndDateMs(
-  process: Record<string, any> | null,
-  metadata: Record<string, any> | null
+  process: SequencerProcess | null,
+  metadata: SequencerMetadata | null
 ): number | null {
+  const processTiming = toRecord(process?.timing);
+  const metadataTiming = toRecord(metadata?.timing);
   const endCandidates = [
-    process?.timing?.endDate,
-    process?.timing?.endTime,
-    process?.timing?.endsAt,
+    processTiming?.endDate,
+    processTiming?.endTime,
+    processTiming?.endsAt,
     process?.endDate,
     process?.endTime,
     process?.endsAt,
-    metadata?.timing?.endDate,
-    metadata?.timing?.endTime,
-    metadata?.timing?.endsAt,
+    metadataTiming?.endDate,
+    metadataTiming?.endTime,
+    metadataTiming?.endsAt,
     metadata?.endDate,
     metadata?.endTime,
     metadata?.endsAt,
@@ -983,29 +1002,29 @@ export function extractProcessEndDateMs(
   }
 
   const startCandidates = [
-    process?.timing?.startDate,
-    process?.timing?.startTime,
-    process?.timing?.startsAt,
+    processTiming?.startDate,
+    processTiming?.startTime,
+    processTiming?.startsAt,
     process?.startDate,
     process?.startTime,
     process?.startsAt,
-    metadata?.timing?.startDate,
-    metadata?.timing?.startTime,
-    metadata?.timing?.startsAt,
+    metadataTiming?.startDate,
+    metadataTiming?.startTime,
+    metadataTiming?.startsAt,
     metadata?.startDate,
     metadata?.startTime,
     metadata?.startsAt,
   ];
   const durationCandidates = [
-    process?.timing?.duration,
-    process?.timing?.durationSeconds,
-    process?.timing?.durationMs,
+    processTiming?.duration,
+    processTiming?.durationSeconds,
+    processTiming?.durationMs,
     process?.duration,
     process?.durationSeconds,
     process?.durationMs,
-    metadata?.timing?.duration,
-    metadata?.timing?.durationSeconds,
-    metadata?.timing?.durationMs,
+    metadataTiming?.duration,
+    metadataTiming?.durationSeconds,
+    metadataTiming?.durationMs,
     metadata?.duration,
     metadata?.durationSeconds,
     metadata?.durationMs,
@@ -1030,19 +1049,21 @@ export function extractProcessEndDateMs(
 }
 
 export function extractProcessDurationMs(
-  process: Record<string, any> | null,
-  metadata: Record<string, any> | null
+  process: SequencerProcess | null,
+  metadata: SequencerMetadata | null
 ): number | null {
+  const processTiming = toRecord(process?.timing);
+  const metadataTiming = toRecord(metadata?.timing);
   const durationCandidates = [
-    process?.timing?.duration,
-    process?.timing?.durationSeconds,
-    process?.timing?.durationMs,
+    processTiming?.duration,
+    processTiming?.durationSeconds,
+    processTiming?.durationMs,
     process?.duration,
     process?.durationSeconds,
     process?.durationMs,
-    metadata?.timing?.duration,
-    metadata?.timing?.durationSeconds,
-    metadata?.timing?.durationMs,
+    metadataTiming?.duration,
+    metadataTiming?.durationSeconds,
+    metadataTiming?.durationMs,
     metadata?.duration,
     metadata?.durationSeconds,
     metadata?.durationMs,
@@ -1055,15 +1076,15 @@ export function extractProcessDurationMs(
   return null;
 }
 
-export function extractVoteContextFromMetadata(metadata: Record<string, any> | null): {
+export function extractVoteContextFromMetadata(metadata: SequencerMetadata | null): {
   scopeSeed: string;
   minAge: number | null;
   countries: string[];
   country: string;
   network: string;
 } {
-  const meta = metadata?.meta && typeof metadata.meta === 'object' ? metadata.meta : {};
-  const selfConfig = meta?.selfConfig && typeof meta.selfConfig === 'object' ? meta.selfConfig : {};
+  const meta = toRecord(metadata?.meta) || {};
+  const selfConfig = toRecord(meta.selfConfig) || {};
 
   const scopeSeed = normalizeScope(selfConfig.scope ?? selfConfig.scopeSeed ?? '');
   const minAge = normalizeMinAge(selfConfig.minAge);

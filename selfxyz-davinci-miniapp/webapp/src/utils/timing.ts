@@ -1,3 +1,6 @@
+import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
+import { toRecord } from './records';
+
 export function toDateFromUnknown(value: unknown): Date | null {
   if (value === null || value === undefined || value === '') return null;
 
@@ -71,19 +74,21 @@ export function computeExpiresAtFromStartAndDuration(startDate: Date, durationSe
 }
 
 export function extractProcessEndDateMs(
-  process: Record<string, any> | null,
-  metadata: Record<string, any> | null
+  process: SequencerProcess | null,
+  metadata: SequencerMetadata | null
 ): number | null {
+  const processTiming = toRecord(process?.timing);
+  const metadataTiming = toRecord(metadata?.timing);
   const endCandidates = [
-    process?.timing?.endDate,
-    process?.timing?.endTime,
-    process?.timing?.endsAt,
+    processTiming?.endDate,
+    processTiming?.endTime,
+    processTiming?.endsAt,
     process?.endDate,
     process?.endTime,
     process?.endsAt,
-    metadata?.timing?.endDate,
-    metadata?.timing?.endTime,
-    metadata?.timing?.endsAt,
+    metadataTiming?.endDate,
+    metadataTiming?.endTime,
+    metadataTiming?.endsAt,
     metadata?.endDate,
     metadata?.endTime,
     metadata?.endsAt,
@@ -95,30 +100,30 @@ export function extractProcessEndDateMs(
   }
 
   const startCandidates = [
-    process?.timing?.startDate,
-    process?.timing?.startTime,
-    process?.timing?.startsAt,
+    processTiming?.startDate,
+    processTiming?.startTime,
+    processTiming?.startsAt,
     process?.startDate,
     process?.startTime,
     process?.startsAt,
-    metadata?.timing?.startDate,
-    metadata?.timing?.startTime,
-    metadata?.timing?.startsAt,
+    metadataTiming?.startDate,
+    metadataTiming?.startTime,
+    metadataTiming?.startsAt,
     metadata?.startDate,
     metadata?.startTime,
     metadata?.startsAt,
   ];
 
   const durationCandidates = [
-    process?.timing?.duration,
-    process?.timing?.durationSeconds,
-    process?.timing?.durationMs,
+    processTiming?.duration,
+    processTiming?.durationSeconds,
+    processTiming?.durationMs,
     process?.duration,
     process?.durationSeconds,
     process?.durationMs,
-    metadata?.timing?.duration,
-    metadata?.timing?.durationSeconds,
-    metadata?.timing?.durationMs,
+    metadataTiming?.duration,
+    metadataTiming?.durationSeconds,
+    metadataTiming?.durationMs,
     metadata?.duration,
     metadata?.durationSeconds,
     metadata?.durationMs,

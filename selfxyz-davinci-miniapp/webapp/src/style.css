@@ -199,6 +199,92 @@ textarea:focus-visible,
   color: var(--err);
 }
 
+#maintenanceView {
+  min-height: min(72vh, 640px);
+  align-content: center;
+}
+
+.maintenance-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 36px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, #eef4ff 58%, #f9fbff 100%);
+  border-color: rgba(31, 42, 58, 0.12);
+  box-shadow: 0 28px 60px rgba(31, 42, 58, 0.14);
+}
+
+.maintenance-card::before {
+  content: '';
+  position: absolute;
+  right: -56px;
+  bottom: -76px;
+  width: 200px;
+  height: 200px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(31, 42, 58, 0.12) 0%, rgba(31, 42, 58, 0) 70%);
+  pointer-events: none;
+}
+
+.maintenance-title {
+  margin: 0;
+  max-width: 12ch;
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(34px, 7vw, 60px);
+  font-weight: 700;
+  line-height: 0.98;
+  color: var(--accent);
+}
+
+.maintenance-copy {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.maintenance-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: flex-start;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 42, 58, 0.14);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.maintenance-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #d08a24;
+  box-shadow: 0 0 0 6px rgba(208, 138, 36, 0.16);
+  animation: maintenance-pulse 1.8s ease-in-out infinite;
+}
+
+.maintenance-footnote {
+  max-width: 54ch;
+}
+
+@keyframes maintenance-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.82);
+    opacity: 0.68;
+  }
+}
+
 .stepper {
   list-style: none;
   margin: 0 0 16px;
@@ -1539,6 +1625,10 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .app-popup,
   .app-popup-card {
+    animation: none;
+  }
+
+  .maintenance-status-dot {
     animation: none;
   }
 }
@@ -4043,6 +4133,23 @@ button.qr-copy-btn:focus-visible {
 
   .app-popup-body {
     padding: 14px;
+  }
+
+  #maintenanceView {
+    min-height: min(68vh, 560px);
+  }
+
+  .maintenance-card {
+    padding: 24px 20px;
+  }
+
+  .maintenance-title {
+    max-width: none;
+    font-size: clamp(28px, 11vw, 42px);
+  }
+
+  .maintenance-copy {
+    font-size: 14px;
   }
 
   .app-header {

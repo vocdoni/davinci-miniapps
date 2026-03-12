@@ -17,6 +17,13 @@ export const COPY = {
   },
   app: {
     routeLoading: 'Loading route...',
+    maintenance: {
+      eyebrow: 'Maintenance mode',
+      title: "We're tuning the voting network.",
+      description: 'Some of our services are temporarily unavailable for maintenance. Keep this page open and the app will return automatically as soon as both services respond again.',
+      status: 'Checking status every 10 seconds.',
+      footnote: 'For more information contact support.',
+    },
   },
   support: {
     eyebrow: 'Support',

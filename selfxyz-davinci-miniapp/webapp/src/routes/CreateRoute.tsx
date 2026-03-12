@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { OnchainCensus } from '@vocdoni/davinci-sdk';
+import { DavinciSDK, ElectionResultsTypeNames, OnchainCensus } from '@vocdoni/davinci-sdk';
+import type { ElectionMetadata } from '@vocdoni/davinci-sdk';
 
 import { COPY } from '../copy';
 import {
@@ -92,7 +93,7 @@ interface PipelineContext {
   contractAddress: string;
   deploymentBlock: number;
   censusUri: string;
-  sdk: any;
+  sdk: DavinciSDK | null;
   processId: string;
 }
 
@@ -1018,12 +1019,16 @@ export default function CreateRoute() {
       },
     ];
 
-    const metadata = {
+    const metadata: ElectionMetadata = {
+      media: {
+        header: '',
+        logo: '',
+      },
       title: { default: ctx.values.title },
       description: { default: ctx.values.description || '' },
       questions,
       type: {
-        name: 'single-choice',
+        name: ElectionResultsTypeNames.SINGLE_CHOICE_MULTIQUESTION,
         properties: {},
       },
       version: '1.2',
@@ -1039,7 +1044,7 @@ export default function CreateRoute() {
       }),
     };
 
-    const hash = await (sdk.api.sequencer.pushMetadata as any)(metadata as any);
+    const hash = await sdk.api.sequencer.pushMetadata(metadata);
     const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
 
     const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
@@ -1063,7 +1068,7 @@ export default function CreateRoute() {
     setOutputs((previous) => ({
       ...previous,
       processId,
-      processTxHash: String((result as any).txHash || (result as any).transactionHash || ''),
+      processTxHash: result.transactionHash,
     }));
 
     return `Process created (${processId})`;
@@ -1073,10 +1078,15 @@ export default function CreateRoute() {
     const timeoutMs = 90_000;
     const start = Date.now();
     let lastError = '';
+    const sdk = ctx.sdk;
+
+    if (!sdk) {
+      throw new Error('Missing sequencer SDK instance for process readiness check.');
+    }
 
     while (Date.now() - start < timeoutMs) {
       try {
-        const process = await getProcessFromSequencer(ctx.sdk, ctx.processId);
+        const process = await getProcessFromSequencer(sdk, ctx.processId);
         if (process && process.isAcceptingVotes === true) {
           const voteUrl = buildVoteUrl(ctx.processId);
           setOutputs((previous) => ({ ...previous, voteUrl }));

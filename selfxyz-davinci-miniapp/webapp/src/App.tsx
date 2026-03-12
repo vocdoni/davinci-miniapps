@@ -3,13 +3,20 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { buildAssetUrl } from './utils/assets';
 import { COPY } from './copy';
 import SupportPopup from './components/SupportPopup';
+import SequencerMaintenanceGuard from './components/SequencerMaintenanceGuard';
+import MaintenanceRoute from './routes/MaintenanceRoute';
 
 const CreateRoute = lazy(() => import('./routes/CreateRoute'));
 const VoteRoute = lazy(() => import('./routes/VoteRoute'));
 const ExploreRoute = lazy(() => import('./routes/ExploreRoute'));
 
 function shouldShowSupportPopup(pathname: string): boolean {
-  return pathname === '/' || /^\/create(?:\/|$)/.test(pathname) || /^\/vote(?:\/|$)/.test(pathname);
+  return (
+    pathname === '/' ||
+    /^\/create(?:\/|$)/.test(pathname) ||
+    /^\/vote(?:\/|$)/.test(pathname) ||
+    pathname === '/maintenance'
+  );
 }
 
 function RouteLoadingFallback() {
@@ -31,6 +38,8 @@ function AppLayout() {
 
   return (
     <>
+      <SequencerMaintenanceGuard />
+
       <div className={`app-shell ${inVoteView ? 'route-vote' : 'route-create'}`}>
         <main id="mainContent">
           <Outlet />
@@ -107,6 +116,7 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="maintenance" element={<MaintenanceRoute />} />
         <Route path="*" element={<Navigate to="/create" replace />} />
       </Route>
     </Routes>

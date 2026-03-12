@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Wallet } from 'ethers';
 import { useParams } from 'react-router-dom';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
+import type { DavinciSDK } from '@vocdoni/davinci-sdk';
 import { SelfAppBuilder, SelfQRcodeWrapper } from '@selfxyz/qrcode';
+import type { SelfApp } from '@selfxyz/qrcode';
 
 import { COPY } from '../copy';
 import {
@@ -62,6 +64,7 @@ import {
   fetchSequencerWeight,
   getProcessFromSequencer,
 } from '../services/sequencer';
+import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 import { connectBrowserWallet, resumeConnectedBrowserWallet, type CreatorWalletConnection } from '../services/wallet';
 import AppNavbar from '../components/AppNavbar';
 import PopupModal from '../components/PopupModal';
@@ -94,8 +97,8 @@ interface VoteQuestion {
 }
 
 interface VoteResolutionState {
-  sdk: any | null;
-  process: any | null;
+  sdk: DavinciSDK | null;
+  process: SequencerProcess | null;
   processId: string;
   statusCode: number | null;
   isAcceptingVotes: boolean;
@@ -121,7 +124,7 @@ interface VoteSelfState {
   country: string;
   link: string;
   generating: boolean;
-  selfApp: any | null;
+  selfApp: SelfApp | null;
 }
 
 interface VoteBallotState {
@@ -141,6 +144,11 @@ interface VoteAdminState {
   isCreator: boolean;
   checking: boolean;
   action: '' | 'pause' | 'resume' | 'stop';
+}
+
+interface SelfQrErrorData {
+  error_code?: string;
+  reason?: string;
 }
 
 const EMPTY_RESOLUTION: VoteResolutionState = {
@@ -506,21 +514,21 @@ export default function VoteRoute() {
     }
   }, []);
 
-  const applyVoteProcessSnapshot = useCallback((latestProcess: any) => {
+  const applyVoteProcessSnapshot = useCallback((latestProcess: SequencerProcess | null) => {
     if (!latestProcess || typeof latestProcess !== 'object') return;
 
     setVoteResolution((previous) => ({
       ...previous,
       process: latestProcess,
-      statusCode: normalizeProcessStatus((latestProcess as any).status),
+      statusCode: normalizeProcessStatus(latestProcess.status),
       isAcceptingVotes: isProcessAcceptingVotes(latestProcess),
-      rawResult: Array.isArray((latestProcess as any).result) ? (latestProcess as any).result : null,
-      votersCount: toSafeInteger((latestProcess as any).votersCount),
-      maxVoters: toSafeInteger((latestProcess as any).maxVoters),
+      rawResult: Array.isArray(latestProcess.result) ? latestProcess.result : null,
+      votersCount: toSafeInteger(latestProcess.votersCount),
+      maxVoters: toSafeInteger(latestProcess.maxVoters),
     }));
   }, []);
 
-  const refreshVoteReadiness = useCallback(async (override?: { processId?: string; censusContract?: string; sdk?: any }) => {
+  const refreshVoteReadiness = useCallback(async (override?: { processId?: string; censusContract?: string; sdk?: DavinciSDK | null }) => {
     const resolution = resolutionRef.current;
     const processId = override?.processId ?? resolution.processId;
     const contractAddress = override?.censusContract ?? resolution.censusContract;
@@ -729,7 +737,7 @@ export default function VoteRoute() {
   }, [clearVoteBallot, setVoteStatusMessage, stopVotePolling]);
 
   const loadVoteQuestions = useCallback(
-    async (process: any, metadata: any) => {
+    async (process: SequencerProcess | null, metadata: SequencerMetadata | null) => {
       clearVoteBallot(COPY.vote.status.loadingQuestion);
       setVoteBallot((previous) => ({ ...previous, loading: true }));
 
@@ -792,7 +800,7 @@ export default function VoteRoute() {
   }, [setVoteStatusMessage]);
 
   const trackVoteSubmissionStatus = useCallback(
-    async (sdk: any, processId: string, voteId: string, token: number, voterAddress = '') => {
+    async (sdk: DavinciSDK, processId: string, voteId: string, token: number, voterAddress = '') => {
       if (!sdk || !voteId) return;
 
       try {
@@ -900,7 +908,7 @@ export default function VoteRoute() {
         const rawResult = Array.isArray(process?.result) ? process.result : null;
         const votersCount = toSafeInteger(process?.votersCount);
         const maxVoters = toSafeInteger(process?.maxVoters);
-        const processTypeName = String((metadata as any)?.type?.name || process?.metadata?.type?.name || '').trim();
+        const processTypeName = String(metadata?.type?.name || process?.metadata?.type?.name || '').trim();
 
         setVoteResolution((previous) => ({
           ...previous,
@@ -2489,7 +2497,7 @@ export default function VoteRoute() {
                         setVoteStatusMessage(COPY.vote.status.selfVerificationCompleted);
                         void refreshVoteReadiness();
                       }}
-                      onError={(data: any = {}) => {
+                      onError={(data: SelfQrErrorData = {}) => {
                         const reason = String(data.reason || data.error_code || '').trim();
                         setVoteStatusMessage(COPY.vote.status.selfQrError(reason), true);
                       }}

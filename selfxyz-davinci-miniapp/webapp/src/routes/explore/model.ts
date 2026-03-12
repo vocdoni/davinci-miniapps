@@ -1,5 +1,6 @@
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import { COPY } from '../../copy';
+import type { SequencerMetadata, SequencerProcess } from '../../services/sequencer';
 
 import {
   extractProcessEndDateMs,
@@ -12,13 +13,14 @@ import {
   normalizeVoteQuestions,
 } from '../../lib/occ';
 import { normalizeProcessId } from '../../utils/normalization';
+import { toRecord } from '../../utils/records';
 import { toDateFromUnknown } from '../../utils/timing';
 import type { ExploreFilterResult, ExplorePageState, ExploreProcessRow } from './types';
 
 export interface MapExploreRowInput {
   processId: string;
-  process: Record<string, unknown> | null;
-  metadata: Record<string, unknown> | null;
+  process: SequencerProcess | null;
+  metadata: SequencerMetadata | null;
   buildVoteHref: (processId: string) => string;
 }
 
@@ -52,19 +54,14 @@ export const DEFAULT_EXPLORE_PAGE_STATE: ExplorePageState = {
   allProcessIds: [],
 };
 
-function readSelfConfig(metadata: Record<string, unknown> | null): Record<string, unknown> {
-  if (!metadata || typeof metadata !== 'object') return {};
-  const rawMeta = metadata.meta;
-  if (!rawMeta || typeof rawMeta !== 'object') return {};
-  const selfConfig = (rawMeta as Record<string, unknown>).selfConfig;
-  if (!selfConfig || typeof selfConfig !== 'object') return {};
-  return selfConfig as Record<string, unknown>;
+function readSelfConfig(metadata: SequencerMetadata | null): Record<string, unknown> {
+  const rawMeta = toRecord(metadata?.meta);
+  const selfConfig = toRecord(rawMeta?.selfConfig);
+  return selfConfig || {};
 }
 
-function readProcessMeta(metadata: Record<string, unknown> | null): Record<string, unknown> {
-  if (!metadata || typeof metadata !== 'object') return {};
-  const rawMeta = metadata.meta;
-  return rawMeta && typeof rawMeta === 'object' ? (rawMeta as Record<string, unknown>) : {};
+function readProcessMeta(metadata: SequencerMetadata | null): Record<string, unknown> {
+  return toRecord(metadata?.meta) || {};
 }
 
 function isAsciiSafe(value: string): boolean {
@@ -81,7 +78,7 @@ function isTruthyMetadataFlag(value: unknown): boolean {
   return false;
 }
 
-export function isExploreEligibleMetadata(metadata: Record<string, unknown> | null): ExploreFilterResult {
+export function isExploreEligibleMetadata(metadata: SequencerMetadata | null): ExploreFilterResult {
   const rawMeta = readProcessMeta(metadata);
   if (!isTruthyMetadataFlag(rawMeta.listInExplore)) {
     return { accepted: false, reason: 'not_listed' };
@@ -94,7 +91,7 @@ export function isExploreEligibleMetadata(metadata: Record<string, unknown> | nu
     return { accepted: false, reason: 'missing_scope' };
   }
 
-  const context = extractVoteContextFromMetadata(metadata as Record<string, any> | null);
+  const context = extractVoteContextFromMetadata(metadata);
   if (!context.scopeSeed || !isAsciiSafe(context.scopeSeed)) {
     return { accepted: false, reason: 'invalid_scope' };
   }
@@ -115,15 +112,16 @@ export function isExploreEligibleMetadata(metadata: Record<string, unknown> | nu
   return { accepted: true, reason: 'ok' };
 }
 
-export function extractProcessStartTimeMs(process: Record<string, unknown> | null): number {
+export function extractProcessStartTimeMs(process: SequencerProcess | null): number {
   if (!process) return 0;
+  const timing = toRecord(process.timing);
   const candidates = [
     process.startTime,
     process.startDate,
     process.startsAt,
-    (process.timing as Record<string, unknown> | undefined)?.startTime,
-    (process.timing as Record<string, unknown> | undefined)?.startDate,
-    (process.timing as Record<string, unknown> | undefined)?.startsAt,
+    timing?.startTime,
+    timing?.startDate,
+    timing?.startsAt,
   ];
   for (const candidate of candidates) {
     const date = toDateFromUnknown(candidate);
@@ -145,19 +143,19 @@ export function mapExploreProcessRow(input: MapExploreRowInput): ExploreProcessR
   const filter = isExploreEligibleMetadata(input.metadata);
   if (!filter.accepted) return null;
 
-  const metadata = input.metadata as Record<string, unknown> | null;
-  const context = extractVoteContextFromMetadata(metadata as Record<string, any> | null);
-  const endDateMs = extractProcessEndDateMs(input.process as Record<string, any> | null, metadata as Record<string, any> | null);
+  const metadata = input.metadata;
+  const context = extractVoteContextFromMetadata(metadata);
+  const endDateMs = extractProcessEndDateMs(input.process, metadata);
 
-  const rawStatusCode = normalizeProcessStatus((input.process as Record<string, unknown> | null)?.status ?? null);
+  const rawStatusCode = normalizeProcessStatus(input.process?.status ?? null);
   const statusCode =
     rawStatusCode === ProcessStatus.READY && hasProcessEndedByTime(endDateMs) ? ProcessStatus.ENDED : rawStatusCode;
   const statusLabel = getProcessStatusInfo(statusCode)?.label || COPY.shared.unknown;
   const readyTimeRemainingLabel = statusCode === ProcessStatus.READY ? formatRemainingTimeFromEndMs(endDateMs) : '-';
 
   const questionTitle =
-    String(normalizeVoteQuestions((metadata as Record<string, unknown> | null)?.questions || [])[0]?.title || '').trim() ||
-    String(getLocalizedText((metadata as Record<string, unknown> | null)?.title) || '').trim() ||
+    String(normalizeVoteQuestions(metadata?.questions || [])[0]?.title || '').trim() ||
+    String(getLocalizedText(metadata?.title) || '').trim() ||
     normalizedProcessId;
 
   return {

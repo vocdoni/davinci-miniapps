@@ -1,11 +1,18 @@
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
+import type { DavinciSDK } from '@vocdoni/davinci-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
 import RichText from '../components/RichText';
 import { COPY } from '../copy';
 import { CONFIG } from '../lib/occ';
-import { listProcessesFromSequencer, createSequencerSdk, fetchProcessMetadata, getProcessFromSequencer } from '../services/sequencer';
+import {
+  listProcessesFromSequencer,
+  createSequencerSdk,
+  fetchProcessMetadata,
+  getProcessFromSequencer,
+} from '../services/sequencer';
+import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 import { buildAssetUrl } from '../utils/assets';
 import { normalizeProcessId } from '../utils/normalization';
 import {
@@ -25,7 +32,7 @@ const REFRESH_INTERVAL_MS = 30_000;
 
 interface MetadataCacheEntry {
   uri: string;
-  metadata: Record<string, unknown> | null;
+  metadata: SequencerMetadata | null;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -56,8 +63,8 @@ export default function ExploreRoute() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('');
 
-  const sdkRef = useRef<any | null>(null);
-  const processCacheRef = useRef<Map<string, Record<string, unknown> | null>>(new Map());
+  const sdkRef = useRef<DavinciSDK | null>(null);
+  const processCacheRef = useRef<Map<string, SequencerProcess | null>>(new Map());
   const metadataCacheRef = useRef<Map<string, MetadataCacheEntry>>(new Map());
   const requestTokenRef = useRef(0);
 
@@ -92,15 +99,14 @@ export default function ExploreRoute() {
   }, []);
 
   const getProcess = useCallback(
-    async (processId: string, force = false): Promise<Record<string, unknown> | null> => {
+    async (processId: string, force = false): Promise<SequencerProcess | null> => {
       const cached = processCacheRef.current.get(processId);
       if (cached && !force) return cached;
 
       try {
         const process = await getProcessFromSequencer(getSdk(), processId);
-        const normalized = process && typeof process === 'object' ? (process as Record<string, unknown>) : null;
-        processCacheRef.current.set(processId, normalized);
-        return normalized;
+        processCacheRef.current.set(processId, process);
+        return process;
       } catch {
         return cached || null;
       }
@@ -109,7 +115,7 @@ export default function ExploreRoute() {
   );
 
   const getMetadata = useCallback(
-    async (processId: string, process: Record<string, unknown> | null): Promise<Record<string, unknown> | null> => {
+    async (processId: string, process: SequencerProcess | null): Promise<SequencerMetadata | null> => {
       if (!process) return null;
       const metadataUri = String(process.metadataURI || process.metadataUri || '').trim();
       const cached = metadataCacheRef.current.get(processId);
