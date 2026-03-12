@@ -24,8 +24,8 @@ export async function pingIndexer(indexerUrl: string): Promise<void> {
     throw new Error('Indexer URL is unavailable.');
   }
 
-  const response = await fetch(`${baseUrl}/contracts`, {
-    method: 'HEAD',
+  const response = await fetch(baseUrl, {
+    method: 'GET',
     cache: 'no-store',
   });
 

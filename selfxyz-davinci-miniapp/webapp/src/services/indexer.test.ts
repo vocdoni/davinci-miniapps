@@ -24,13 +24,13 @@ describe('indexer service', () => {
     });
   });
 
-  it('treats non-5xx /contracts responses as healthy', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 405 }));
+  it('treats successful base responses as healthy', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(pingIndexer('https://indexer.example/')).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith('https://indexer.example/contracts', {
-      method: 'HEAD',
+    expect(fetchMock).toHaveBeenCalledWith('https://indexer.example', {
+      method: 'GET',
       cache: 'no-store',
     });
   });

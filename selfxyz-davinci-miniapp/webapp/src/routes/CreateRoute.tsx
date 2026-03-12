@@ -34,7 +34,7 @@ import {
 } from '../lib/occ';
 import { isValidCountryCode, normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
 import { buildAssetUrl } from '../utils/assets';
-import { createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
+import { createSequencerSdk, getProcessFromSequencer, listProcessesFromSequencer } from '../services/sequencer';
 import {
   connectBrowserWallet,
   disconnectWalletConnection,
@@ -204,19 +204,6 @@ export default function CreateRoute() {
   useEffect(() => {
     walletRef.current = creatorWallet;
   }, [creatorWallet]);
-
-  useEffect(() => {
-    const missing = [] as string[];
-    if (!CONFIG.walletConnectProjectId && !getInjectedProvider()) {
-      missing.push(COPY.create.missingWalletConnectHint);
-    }
-    if (!CONFIG.onchainIndexerUrl) missing.push('VITE_ONCHAIN_CENSUS_INDEXER_URL');
-    if (!CONFIG.davinciSequencerUrl) missing.push('VITE_DAVINCI_SEQUENCER_URL');
-
-    if (missing.length) {
-      console.warn(`[OpenCitizenCensus] Missing env vars: ${missing.join(', ')}`);
-    }
-  }, []);
 
   useEffect(() => {
     document.title = COPY.brand.documentTitle;
@@ -1086,6 +1073,17 @@ export default function CreateRoute() {
 
     while (Date.now() - start < timeoutMs) {
       try {
+        const processIds = await listProcessesFromSequencer(sdk);
+        const processIsListed = processIds.some(
+          (processId) => String(processId || '').toLowerCase() === String(ctx.processId || '').toLowerCase()
+        );
+
+        if (!processIsListed) {
+          lastError = COPY.create.status.processNotAcceptingVotesYet;
+          await wait(3_000);
+          continue;
+        }
+
         const process = await getProcessFromSequencer(sdk, ctx.processId);
         if (process && process.isAcceptingVotes === true) {
           const voteUrl = buildVoteUrl(ctx.processId);
@@ -1226,8 +1224,7 @@ export default function CreateRoute() {
 
       try {
         await runCreatePipelineFrom(stageId);
-      } catch (error) {
-        console.error('[OpenCitizenCensus] Create pipeline retry failed', error);
+      } catch {
       } finally {
         setCreateSubmitting(false);
       }
@@ -1248,8 +1245,7 @@ export default function CreateRoute() {
 
       try {
         collectCreateFormValues();
-      } catch (error) {
-        console.warn('[OpenCitizenCensus] Create form validation failed before submit', error);
+      } catch {
         return;
       }
 
@@ -1261,8 +1257,7 @@ export default function CreateRoute() {
 
       try {
         await runCreatePipelineFrom('validate_form');
-      } catch (error) {
-        console.error('[OpenCitizenCensus] Create pipeline failed', error);
+      } catch {
       } finally {
         setCreateSubmitting(false);
       }

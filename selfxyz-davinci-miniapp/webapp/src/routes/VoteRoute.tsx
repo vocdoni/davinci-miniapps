@@ -535,6 +535,8 @@ export default function VoteRoute() {
     const sdk = override?.sdk ?? resolution.sdk;
     const wallet = managedWalletRef.current;
     const managedAddress = wallet?.address || '';
+    const onchainReadinessSupported =
+      Boolean(String(ACTIVE_NETWORK.rpcUrl || '').trim()) && /^0x[a-fA-F0-9]{40}$/.test(String(contractAddress || '').trim());
 
     if (!processId) {
       setVoteResolution((previous) => ({ ...previous, readinessCheckedAt: null }));
@@ -555,15 +557,24 @@ export default function VoteRoute() {
       return;
     }
 
+    let onchainWeight = 0n;
+    let onchainLookupFailed = false;
+
     try {
-      if (String(ACTIVE_NETWORK.rpcUrl || '').trim() && /^0x[a-fA-F0-9]{40}$/.test(String(contractAddress || '').trim())) {
-        const onchainWeight = await fetchOnchainWeight(contractAddress, managedAddress);
+      if (onchainReadinessSupported) {
+        onchainWeight = await fetchOnchainWeight(contractAddress, managedAddress);
         setVoteResolution((previous) => ({ ...previous, onchainWeight, onchainLookupFailed: false }));
       } else {
         setVoteResolution((previous) => ({ ...previous, onchainWeight: 0n, onchainLookupFailed: false }));
       }
     } catch {
+      onchainLookupFailed = true;
       setVoteResolution((previous) => ({ ...previous, onchainWeight: 0n, onchainLookupFailed: true }));
+    }
+
+    if (onchainReadinessSupported && !onchainLookupFailed && onchainWeight <= 0n) {
+      setVoteResolution((previous) => ({ ...previous, sequencerWeight: 0n, readinessCheckedAt: Date.now() }));
+      return;
     }
 
     try {
@@ -781,8 +792,9 @@ export default function VoteRoute() {
     const wallet = managedWalletRef.current;
     const managedAddress = wallet?.address;
     const sdk = resolution.sdk;
+    const submissionId = String(voteBallotRef.current.submissionId || '').trim();
 
-    if (!processId || !managedAddress || !sdk) {
+    if (!processId || !managedAddress || !sdk || !submissionId) {
       setVoteBallot((previous) => ({ ...previous, hasVoted: false }));
       return;
     }
@@ -1001,7 +1013,6 @@ export default function VoteRoute() {
           setVoteStatusMessage(COPY.vote.status.processResolved);
         }
       } catch (error) {
-        console.error('[OpenCitizenCensus] Failed to resolve process', error);
         resetVoteResolution();
         setVoteStatusMessage(error instanceof Error ? error.message : COPY.vote.status.failedResolveProcess, true);
       }
