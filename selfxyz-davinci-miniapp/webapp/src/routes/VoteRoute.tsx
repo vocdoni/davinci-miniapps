@@ -1831,6 +1831,8 @@ export default function VoteRoute() {
   const voteResultsModel = useMemo(() => buildVoteResultsModel(voteResolution, voteBallot), [voteBallot, voteResolution]);
   const showRegistrationSubmittingNotice =
     registrationModal.status === 'submitting' || (hasVoteReadiness(voteResolution) && Boolean(pendingVoteIntent));
+  const registrationOnchainRequired = isOnchainReadinessRequired(voteResolution);
+  const registrationOnchainReady = registrationOnchainRequired && voteResolution.onchainWeight > 0n;
   const registrationManualCloseBlocked =
     registrationModal.open &&
     Boolean(pendingVoteIntent) &&
@@ -1842,19 +1844,15 @@ export default function VoteRoute() {
   }, [closeRegistrationModal, registrationManualCloseBlocked]);
 
   const registrationSteps = useMemo(() => {
-    const onchainRequired = isOnchainReadinessRequired(voteResolution);
-    const onchainReady = onchainRequired ? voteResolution.onchainWeight > 0n : true;
     const sequencerReady = voteResolution.sequencerWeight > 0n;
-    const readyToVote = hasVoteReadiness(voteResolution);
-
     const steps: Array<{ id: string; label: string; description: string; done: boolean }> = [];
 
-    if (onchainRequired) {
+    if (registrationOnchainRequired) {
       steps.push({
         id: 'onchain',
         label: COPY.vote.registration.progressSteps.onchainLabel,
         description: COPY.vote.registration.progressSteps.onchainDescription,
-        done: onchainReady,
+        done: registrationOnchainReady,
       });
     }
 
@@ -1864,13 +1862,21 @@ export default function VoteRoute() {
         label: COPY.vote.registration.progressSteps.sequencerLabel,
         description: COPY.vote.registration.progressSteps.sequencerDescription,
         done: sequencerReady,
+      },
+      {
+        id: 'submitting',
+        label: COPY.vote.buttons.submitVote,
+        description: COPY.vote.registration.registrationCompletedSubmitting,
+        done: false,
       }
     );
 
     return steps;
-  }, [voteResolution]);
+  }, [registrationOnchainReady, registrationOnchainRequired, voteResolution]);
 
-  const registrationCurrentId = registrationSteps.find((step) => !step.done)?.id || 'ready';
+  const registrationCurrentId = showRegistrationSubmittingNotice
+    ? 'submitting'
+    : registrationSteps.find((step) => !step.done && step.id !== 'submitting')?.id || '';
 
   const voteStatusFlow = (() => {
     const currentStatus = normalizeVoteStatus(voteBallot.submissionStatus) || (hasStoredVoteId ? 'pending' : '');
@@ -2496,7 +2502,11 @@ export default function VoteRoute() {
         <div className="self-registration-layout vote-registration-layout">
           {!registrationModal.isMobile && (
             <div className="vote-registration-qr-column">
-              <div id="voteSelfQrWrap" className="self-qr-wrap" hidden={!voteSelf.selfApp}>
+              <div
+                id="voteSelfQrWrap"
+                className={`self-qr-wrap${registrationOnchainReady ? ' is-complete' : ''}`}
+                hidden={!voteSelf.selfApp}
+              >
                 <div id="voteSelfQrRoot" className="self-qr-root" aria-label={COPY.vote.registration.qrAria}>
                   {voteSelf.selfApp ? (
                     <SelfQRcodeWrapper
@@ -2517,6 +2527,12 @@ export default function VoteRoute() {
                     <p className="muted">{COPY.vote.registration.preparingQr}</p>
                   )}
                 </div>
+
+                {registrationOnchainReady && (
+                  <div id="voteRegistrationCompleteOverlay" className="vote-registered-message" aria-hidden="true">
+                    <span className="vote-registered-icon iconoir-check-circle" aria-hidden="true" />
+                  </div>
+                )}
 
                 <button
                   id="copyVoteSelfLinkBtn"
@@ -2618,17 +2634,59 @@ export default function VoteRoute() {
             </ol>
 
             {registrationModal.isMobile && (
-              <div id="voteSelfQrActions" className="row self-qr-actions">
-                <button
-                  id="openVoteSelfLinkBtn"
-                  type="button"
-                  className="cta-btn"
-                  disabled={!voteSelf.link || processClosed}
-                  onClick={openVoteSelfLink}
-                >
-                  <span className="btn-icon iconoir-link" aria-hidden="true" />
-                  <span className="btn-text">{COPY.vote.buttons.openInSelfApp}</span>
-                </button>
+              <div className="vote-registration-mobile-actions">
+                <div className="vote-registration-mobile-actions-row">
+                  {managedWallet && (
+                    <div id="registrationWalletWidget" className="registration-wallet-widget">
+                      <span className="identity-source-tag" data-source={managedWalletSourceMeta.key}>
+                        <span className={`identity-source-icon ${managedWalletSourceMeta.iconClass}`} aria-hidden="true" />
+                        <span>{managedWalletSourceMeta.label}</span>
+                        {showRegistrationWalletAddress && (
+                          <code className="registration-wallet-source-address" title={managedWallet.address}>
+                            {registrationWalletAddressLabel}
+                          </code>
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <div id="voteSelfQrActions" className="row self-qr-actions vote-registration-mobile-open-action">
+                    <button
+                      id="openVoteSelfLinkBtn"
+                      type="button"
+                      className="cta-btn"
+                      disabled={!voteSelf.link || processClosed || registrationOnchainReady}
+                      onClick={openVoteSelfLink}
+                    >
+                      <span className="btn-icon iconoir-link" aria-hidden="true" />
+                      <span className="btn-text">{COPY.vote.buttons.openInSelfApp}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {showRegistrationIdentityPrompt && (
+                  <div className="registration-wallet-helper">
+                    <p className="registration-wallet-helper-line">
+                      {COPY.vote.registration.identityPromptLead}{' '}
+                      <a
+                        id="registrationIdentityLink"
+                        className={`field-link registration-identity-link${registrationManualCloseBlocked ? ' is-disabled' : ''}`}
+                        href="#voteIdentityDialog"
+                        aria-controls="voteIdentityDialog"
+                        aria-haspopup="dialog"
+                        aria-disabled={registrationManualCloseBlocked}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (registrationManualCloseBlocked) return;
+                          openIdentityFromRegistration();
+                        }}
+                      >
+                        {COPY.vote.registration.identityPromptLink}
+                      </a>
+                    </p>
+                    <p className="registration-wallet-helper-line">{COPY.vote.registration.identityPromptFootnote}</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2665,7 +2723,13 @@ export default function VoteRoute() {
                       </span>
                       <div className="vote-status-content">
                         <p className="vote-status-label">{step.label}</p>
-                        <p className="vote-status-description">{step.description}</p>
+                        <p
+                          className="vote-status-description"
+                          role={step.id === 'submitting' && isCurrent ? 'status' : undefined}
+                          aria-live={step.id === 'submitting' && isCurrent ? 'polite' : undefined}
+                        >
+                          {step.description}
+                        </p>
                       </div>
                     </li>
                   );
@@ -2674,7 +2738,7 @@ export default function VoteRoute() {
             </div>
           </aside>
         </div>
-        {managedWallet && (
+        {managedWallet && !registrationModal.isMobile && (
           <div className="vote-registration-footer">
             <div id="registrationWalletWidget" className="registration-wallet-widget">
               <span className="identity-source-tag" data-source={managedWalletSourceMeta.key}>
@@ -2711,12 +2775,6 @@ export default function VoteRoute() {
               </div>
             )}
           </div>
-        )}
-        {showRegistrationSubmittingNotice && (
-          <p className="vote-registration-submit-note" role="status" aria-live="polite">
-            <span className="timeline-spinner" aria-hidden="true" />
-            <span>{COPY.vote.registration.registrationCompletedSubmitting}</span>
-          </p>
         )}
       </PopupModal>
 

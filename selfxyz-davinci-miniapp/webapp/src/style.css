@@ -1534,12 +1534,18 @@ textarea {
   max-height: var(--popup-max-height);
   max-height: var(--popup-max-height-dynamic);
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border-radius: 20px;
   border: 1px solid rgba(31, 42, 58, 0.2);
   background: #fff;
   color: var(--ink);
   box-shadow: 0 28px 48px rgba(22, 34, 58, 0.26);
   animation: popup-card-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-popup-card::-webkit-scrollbar {
+  display: none;
 }
 
 .app-popup-head {
@@ -2019,6 +2025,11 @@ button.qr-copy-btn:focus-visible {
   transform: translate(-50%, -50%) scale(1);
 }
 
+.self-qr-wrap.is-complete .qr-copy-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 
 .self-qr-actions {
   margin: 24px 0 16px;
@@ -2043,6 +2054,10 @@ button.qr-copy-btn:focus-visible {
   font-weight: 800;
   color: #216e41;
   z-index: 3;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   pointer-events: none;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
@@ -2396,8 +2411,9 @@ button.qr-copy-btn:focus-visible {
 
 .vote-registration-footer {
   display: grid;
-  gap: 8px;
-  justify-items: flex-start;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 16px;
 }
 
 .registration-wallet-widget {
@@ -2423,6 +2439,7 @@ button.qr-copy-btn:focus-visible {
 .registration-wallet-helper {
   display: grid;
   gap: 2px;
+  min-width: 0;
   max-width: 380px;
 }
 
@@ -2447,6 +2464,50 @@ button.qr-copy-btn:focus-visible {
   color: currentColor;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   overflow-wrap: anywhere;
+}
+
+.vote-registration-mobile-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.vote-registration-mobile-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.vote-registration-mobile-actions-row .registration-wallet-widget {
+  order: 2;
+  min-width: 0;
+}
+
+.vote-registration-mobile-open-action {
+  order: 1;
+  margin: 0;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.vote-registration-mobile-open-action .cta-btn {
+  width: auto;
+}
+
+.vote-registration-mobile-actions .registration-wallet-helper {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0 6px;
+  max-width: none;
+}
+
+.vote-registration-mobile-actions .registration-wallet-helper-line {
+  display: inline;
+  margin: 0;
+  line-height: 1.3;
 }
 
 .vote-registration-submit-note {
@@ -4264,14 +4325,21 @@ button.qr-copy-btn:focus-visible {
     padding: 0;
     list-style: none;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
   .vote-registration-layout .vote-registration-requirements-list li {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
+    align-content: flex-start;
     gap: 6px;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(31, 42, 58, 0.12);
+    border-radius: 10px;
+    background: rgba(244, 248, 255, 0.86);
     color: var(--ink);
   }
 

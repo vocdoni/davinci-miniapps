@@ -63,6 +63,7 @@ import {
   removeOption,
   updateOption,
 } from './create/model';
+import { clearCreateFormDraft, hasCreateFormDraftProgress, loadCreateFormDraft, persistCreateFormDraft } from './create/draft';
 import { searchCountryOptions } from './create/countrySearch';
 import type { CreateFormState, CreateOverlayState } from './create/types';
 
@@ -172,8 +173,8 @@ function createEmptyPipelineContext(): PipelineContext {
 }
 
 export default function CreateRoute() {
+  const initialDraftRef = useRef<CreateFormState | null>(loadCreateFormDraft());
   const [createSubmitting, setCreateSubmitting] = useState(false);
-  const [createFormDirty, setCreateFormDirty] = useState(false);
   const [overlayState, setOverlayState] = useState<CreateOverlayState>(createInitialOverlayState);
 
   const [creatorWalletStatus, setCreatorWalletStatus] = useState<string>(CREATOR_WALLET_STATUS_DEFAULT);
@@ -187,7 +188,7 @@ export default function CreateRoute() {
     connectorType: 'injected',
   });
 
-  const [form, setForm] = useState<CreateFormState>(createInitialFormState);
+  const [form, setForm] = useState<CreateFormState>(() => initialDraftRef.current || createInitialFormState());
   const [pipeline, setPipeline] = useState<PipelineStageState[]>(newPipelineState);
   const [outputs, setOutputs] = useState<CreateOutputs>(EMPTY_OUTPUTS);
   const [countriesMenuOpen, setCountriesMenuOpen] = useState(false);
@@ -210,17 +211,14 @@ export default function CreateRoute() {
   }, []);
 
   useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!createFormDirty || createSubmitting) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
+    const hasDraftProgress = hasCreateFormDraftProgress(form);
+    if (hasDraftProgress) {
+      persistCreateFormDraft(form);
+      return;
+    }
 
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload);
-    };
-  }, [createFormDirty, createSubmitting]);
+    clearCreateFormDraft();
+  }, [form]);
 
   const creatorConnected = Boolean(creatorWallet.address);
   const creatorWalletFundingBlocked =
@@ -538,7 +536,6 @@ export default function CreateRoute() {
 
   const updateForm = useCallback((patch: Partial<CreateFormState>) => {
     setForm((previous) => ({ ...previous, ...patch }));
-    setCreateFormDirty(true);
   }, []);
 
   const addOptionRow = useCallback(() => {
@@ -546,7 +543,6 @@ export default function CreateRoute() {
       ...previous,
       options: addOption(previous.options),
     }));
-    setCreateFormDirty(true);
   }, []);
 
   const removeOptionRow = useCallback((optionIndex: number) => {
@@ -554,7 +550,6 @@ export default function CreateRoute() {
       ...previous,
       options: removeOption(previous.options, optionIndex),
     }));
-    setCreateFormDirty(true);
   }, []);
 
   const setOptionInputRef = useCallback((index: number, node: HTMLInputElement | null) => {
@@ -612,7 +607,6 @@ export default function CreateRoute() {
       ...previous,
       options: updateOption(previous.options, optionIndex, value),
     }));
-    setCreateFormDirty(true);
   }, []);
 
   const collectCreateFormValues = useCallback((): CreateValues => deriveCreateValuesFromForm(form), [form]);
@@ -639,7 +633,6 @@ export default function CreateRoute() {
           countries: [...previous.countries, normalizedCode],
         };
       });
-      setCreateFormDirty(true);
     },
     [formLocked]
   );
@@ -740,7 +733,6 @@ export default function CreateRoute() {
       const next = Math.min(99, Math.max(1, base + delta));
       return { ...previous, minAge: String(next) };
     });
-    setCreateFormDirty(true);
   }, []);
 
   const adjustDurationHours = useCallback((delta: number) => {
@@ -751,7 +743,6 @@ export default function CreateRoute() {
       const next = Math.max(1, base + delta);
       return { ...previous, durationHours: String(next) };
     });
-    setCreateFormDirty(true);
   }, []);
 
   const adjustDurationDays = useCallback((delta: number) => {
@@ -765,7 +756,6 @@ export default function CreateRoute() {
       const nextTotalHours = Math.max(1, nextDays * 24 + remainderHours);
       return { ...previous, durationHours: String(nextTotalHours) };
     });
-    setCreateFormDirty(true);
   }, []);
 
   const handleDurationHoursInputChange = useCallback(
@@ -1132,10 +1122,10 @@ export default function CreateRoute() {
         persistVoteScopeSeed(ctx.processId, ctx.values.scopeSeed);
       }
 
+      clearCreateFormDraft();
       setForm(createInitialFormState());
       setCountryQuery('');
       closeCountriesMenu();
-      setCreateFormDirty(false);
     },
     [closeCountriesMenu]
   );

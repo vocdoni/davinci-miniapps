@@ -8,6 +8,7 @@ const mockDisconnectWalletConnection = vi.fn();
 const mockGetInjectedProvider = vi.fn();
 const mockCreateSequencerSdk = vi.fn();
 const mockGetProcessFromSequencer = vi.fn();
+const mockListProcessesFromSequencer = vi.fn();
 const mockComputeConfigId = vi.fn();
 
 vi.mock('@vocdoni/davinci-sdk', () => ({
@@ -17,6 +18,9 @@ vi.mock('@vocdoni/davinci-sdk', () => ({
     CANCELED: 2,
     PAUSED: 3,
     RESULTS: 4,
+  },
+  ElectionResultsTypeNames: {
+    SINGLE_CHOICE_MULTIQUESTION: 'SINGLE_CHOICE_MULTIQUESTION',
   },
   OnchainCensus: class MockOnchainCensus {},
   DavinciSDK: class MockDavinciSDK {},
@@ -32,6 +36,7 @@ vi.mock('../services/wallet', () => ({
 vi.mock('../services/sequencer', () => ({
   createSequencerSdk: (...args: unknown[]) => mockCreateSequencerSdk(...args),
   getProcessFromSequencer: (...args: unknown[]) => mockGetProcessFromSequencer(...args),
+  listProcessesFromSequencer: (...args: unknown[]) => mockListProcessesFromSequencer(...args),
 }));
 
 vi.mock('../lib/occ', async () => {
@@ -74,6 +79,7 @@ describe('CreateRoute pipeline retries', () => {
     mockResumeConnectedBrowserWallet.mockResolvedValue(null);
     mockComputeConfigId.mockReset();
     mockComputeConfigId.mockReturnValue(`0x${'1'.repeat(64)}`);
+    mockListProcessesFromSequencer.mockReset();
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -83,129 +89,156 @@ describe('CreateRoute pipeline retries', () => {
     vi.unstubAllGlobals();
   });
 
-  it('retries the failed stage without restarting successful earlier stages', async () => {
-    const verificationInterface = new Interface(['function verificationConfigV2Exists(bytes32) view returns (bool)']);
-    const providerRequest = vi
-      .fn()
-      .mockResolvedValue(verificationInterface.encodeFunctionResult('verificationConfigV2Exists', [true]));
-    const signerSendTransaction = vi.fn().mockResolvedValue({ hash: '0xdeploytx' });
-    const browserProvider = {
-      getBalance: vi.fn().mockResolvedValue(1n),
-      getTransactionReceipt: vi.fn().mockResolvedValue({
-        contractAddress: '0x1111111111111111111111111111111111111111',
-        blockNumber: 123n,
-      }),
-    };
+  it(
+    'retries the failed stage without restarting successful earlier stages',
+    async () => {
+      const verificationInterface = new Interface(['function verificationConfigV2Exists(bytes32) view returns (bool)']);
+      const providerRequest = vi
+        .fn()
+        .mockResolvedValue(verificationInterface.encodeFunctionResult('verificationConfigV2Exists', [true]));
+      const signerSendTransaction = vi.fn().mockResolvedValue({ hash: '0xdeploytx' });
+      const browserProvider = {
+        getBalance: vi.fn().mockResolvedValue(1n),
+        getTransactionReceipt: vi.fn().mockResolvedValue({
+          contractAddress: '0x1111111111111111111111111111111111111111',
+          blockNumber: 123n,
+        }),
+      };
 
-    mockConnectBrowserWallet.mockResolvedValue({
-      provider: { request: providerRequest },
-      browserProvider,
-      signer: { sendTransaction: signerSendTransaction },
-      address: '0x8888888888888888888888888888888888888888',
-      sourceLabel: 'MetaMask',
-      connectorType: 'injected' as const,
-    });
+      mockConnectBrowserWallet.mockResolvedValue({
+        provider: { request: providerRequest },
+        browserProvider,
+        signer: { sendTransaction: signerSendTransaction },
+        address: '0x8888888888888888888888888888888888888888',
+        sourceLabel: 'MetaMask',
+        connectorType: 'injected' as const,
+      });
 
-    const sdk = {
-      init: vi.fn().mockResolvedValue(undefined),
-      api: {
-        sequencer: {
-          pushMetadata: vi.fn().mockResolvedValue('metadata-hash'),
-          getMetadataUrl: vi.fn().mockReturnValue('ipfs://metadata-hash'),
+      const sdk = {
+        init: vi.fn().mockResolvedValue(undefined),
+        api: {
+          sequencer: {
+            pushMetadata: vi.fn().mockResolvedValue('metadata-hash'),
+            getMetadataUrl: vi.fn().mockReturnValue('ipfs://metadata-hash'),
+          },
         },
-      },
-      createProcess: vi.fn().mockResolvedValue({
-        processId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        txHash: '0xprocesstx',
-      }),
-    };
+        createProcess: vi.fn().mockResolvedValue({
+          processId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          transactionHash: '0xprocesstx',
+        }),
+      };
 
-    mockCreateSequencerSdk.mockReturnValue(sdk);
-    mockGetProcessFromSequencer.mockResolvedValue({ isAcceptingVotes: true });
+      mockCreateSequencerSdk.mockReturnValue(sdk);
+      mockListProcessesFromSequencer.mockResolvedValue([
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ]);
+      mockGetProcessFromSequencer.mockResolvedValue({ isAcceptingVotes: true });
 
-    let contractsAttempts = 0;
-    const fetchMock = vi.mocked(fetch);
-    fetchMock.mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.endsWith('/contracts')) {
-        contractsAttempts += 1;
-        if (contractsAttempts === 1) {
+      let contractsAttempts = 0;
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/contracts')) {
+          contractsAttempts += 1;
+          if (contractsAttempts === 1) {
+            return {
+              ok: false,
+              status: 503,
+              text: vi.fn().mockResolvedValue('temporarily unavailable'),
+            } as unknown as Response;
+          }
+
           return {
-            ok: false,
-            status: 503,
-            text: vi.fn().mockResolvedValue('temporarily unavailable'),
+            ok: true,
+            status: 200,
+            text: vi.fn().mockResolvedValue(''),
           } as unknown as Response;
         }
 
-        return {
-          ok: true,
-          status: 200,
-          text: vi.fn().mockResolvedValue(''),
-        } as unknown as Response;
+        if (url.includes('/graphql')) {
+          return {
+            ok: true,
+            status: 200,
+            json: vi.fn().mockResolvedValue({ data: { weightChangeEvents: [] } }),
+          } as unknown as Response;
+        }
+
+        throw new Error(`Unexpected fetch call: ${url}`);
+      });
+
+      render(<CreateRoute />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeEnabled();
+      });
+
+      fireEvent.change(screen.getByPlaceholderText('Type your question here...'), {
+        target: { value: 'Should we adopt retries?' },
+      });
+      fireEvent.change(screen.getByPlaceholderText('Option 1'), {
+        target: { value: 'Yes' },
+      });
+      fireEvent.change(screen.getByPlaceholderText('Option 2'), {
+        target: { value: 'No' },
+      });
+
+      const countryInput = screen.getByRole('combobox', { name: 'Choose allowed countries' });
+      fireEvent.focus(countryInput);
+      const firstCountryOption = await waitFor(() => {
+        const option = document.querySelector('#countryList button');
+        expect(option).not.toBeNull();
+        return option;
+      });
+      fireEvent.click(firstCountryOption as Element);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create the voting process' }));
+
+      await waitFor(() => {
+        expect(document.getElementById('retryCreateStageBtn-start_indexer')).not.toBeNull();
+      });
+
+      expect(signerSendTransaction).toHaveBeenCalledTimes(1);
+      expect(providerRequest).toHaveBeenCalledTimes(1);
+
+      const timelinePanel = document.getElementById('createTimelineCard') as HTMLDetailsElement | null;
+      if (timelinePanel) {
+        timelinePanel.open = true;
       }
 
-      if (url.includes('/graphql')) {
-        return {
-          ok: true,
-          status: 200,
-          json: vi.fn().mockResolvedValue({ data: { weightChangeEvents: [] } }),
-        } as unknown as Response;
-      }
+      const retryButton = document.getElementById('retryCreateStageBtn-start_indexer');
+      expect(retryButton).not.toBeNull();
+      fireEvent.click(retryButton as HTMLElement);
 
-      throw new Error(`Unexpected fetch call: ${url}`);
-    });
+      await waitFor(() => {
+        expect(contractsAttempts).toBe(2);
+      });
 
-    render(<CreateRoute />);
+      await waitFor(() => {
+        expect(sdk.createProcess).toHaveBeenCalledTimes(1);
+      });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+      await waitFor(() => {
+        expect(mockListProcessesFromSequencer).toHaveBeenCalledTimes(1);
+        expect(mockGetProcessFromSequencer).toHaveBeenCalledTimes(1);
+      });
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeEnabled();
-    });
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Your voting process is live and ready for the world.' })).toBeInTheDocument();
+      });
 
-    fireEvent.change(screen.getByPlaceholderText('Type your question here...'), {
-      target: { value: 'Should we adopt retries?' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Option 1'), {
-      target: { value: 'Yes' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Option 2'), {
-      target: { value: 'No' },
-    });
+      expect(signerSendTransaction).toHaveBeenCalledTimes(1);
+      expect(providerRequest).toHaveBeenCalledTimes(1);
+      expect(contractsAttempts).toBe(2);
 
-    const countryInput = screen.getByRole('combobox', { name: 'Choose allowed countries' });
-    fireEvent.focus(countryInput);
-    const firstCountryOption = await waitFor(() => {
-      const option = document.querySelector('#countryList button');
-      expect(option).not.toBeNull();
-      return option;
-    });
-    fireEvent.click(firstCountryOption as Element);
+      cleanup();
+      render(<CreateRoute />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create the voting process' }));
-
-    await waitFor(() => {
-      expect(document.getElementById('retryCreateStageBtn-start_indexer')).not.toBeNull();
-    });
-
-    expect(signerSendTransaction).toHaveBeenCalledTimes(1);
-    expect(providerRequest).toHaveBeenCalledTimes(1);
-
-    const timelinePanel = document.getElementById('createTimelineCard') as HTMLDetailsElement | null;
-    if (timelinePanel) {
-      timelinePanel.open = true;
-    }
-
-    const retryButton = document.getElementById('retryCreateStageBtn-start_indexer');
-    expect(retryButton).not.toBeNull();
-    fireEvent.click(retryButton as HTMLElement);
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Your voting process is live and ready for the world.' })).toBeInTheDocument();
-    });
-
-    expect(signerSendTransaction).toHaveBeenCalledTimes(1);
-    expect(providerRequest).toHaveBeenCalledTimes(1);
-    expect(contractsAttempts).toBe(2);
-  });
+      expect(screen.getByPlaceholderText('Type your question here...')).toHaveValue('');
+      expect(screen.getByPlaceholderText('Option 1')).toHaveValue('');
+      expect(screen.getByPlaceholderText('Option 2')).toHaveValue('');
+    },
+    10_000
+  );
 });

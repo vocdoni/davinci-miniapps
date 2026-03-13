@@ -125,4 +125,28 @@ describe('CreateRoute creator wallet persistence', () => {
     const faucetLink = screen.getByRole('link', { name: 'here' });
     expect(faucetLink).toHaveAttribute('href', 'https://stakely.io/faucet/celo-celo');
   });
+
+  it('restores in-progress create form values after refresh', async () => {
+    const firstRender = render(<CreateRoute />);
+
+    fireEvent.change(screen.getByPlaceholderText('Type your question here...'), {
+      target: { value: 'Should the city add more trees?' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Option 1'), {
+      target: { value: 'Yes' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Option 2'), {
+      target: { value: 'No' },
+    });
+
+    firstRender.unmount();
+
+    render(<CreateRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your question here...')).toHaveValue('Should the city add more trees?');
+      expect(screen.getByPlaceholderText('Option 1')).toHaveValue('Yes');
+      expect(screen.getByPlaceholderText('Option 2')).toHaveValue('No');
+    });
+  });
 });

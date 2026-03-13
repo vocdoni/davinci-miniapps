@@ -520,6 +520,78 @@ describe('VoteRoute identity popup', () => {
     });
   });
 
+  it('overlays the desktop registration qr with a success state when onchain registration is complete', async () => {
+    mockFetchOnchainWeight.mockResolvedValue(1n);
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+    });
+
+    expect(document.getElementById('voteRegistrationCompleteOverlay')).toBeInTheDocument();
+    expect(document.getElementById('voteSelfQrWrap')).toHaveClass('is-complete');
+  });
+
+  it('disables the mobile open self button when onchain registration is complete', async () => {
+    mockFetchOnchainWeight.mockResolvedValue(1n);
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 375,
+    });
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('max-width'),
+      }),
+    });
+
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: 'Open in Self app' })).toBeDisabled();
+  });
+
+  it('shows the submit vote progress guide with the submitting step inside the registration popup', async () => {
+    render(<VoteRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Yes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+    });
+
+    const registrationStatusGuide = document.getElementById('registrationStatusGuide');
+    expect(registrationStatusGuide).not.toBeNull();
+    expect(registrationStatusGuide).toHaveTextContent('Submit Vote Progress');
+    expect(registrationStatusGuide).toHaveTextContent('Submit vote');
+    expect(registrationStatusGuide).toHaveTextContent('Registration completed. Your vote is being submitted...');
+  });
+
   it('regenerates the registration self qr when the popup is reopened with a different wallet', async () => {
     const connectedAddress = '0x3333333333333333333333333333333333333333';
     mockConnectBrowserWallet.mockResolvedValue({

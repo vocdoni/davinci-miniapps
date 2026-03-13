@@ -49,6 +49,14 @@ describe('App sequencer maintenance guard', () => {
     });
   };
 
+  const advanceCheckWindow = async (ms: number) => {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
   beforeEach(() => {
     vi.useFakeTimers();
     mockCreateSequencerSdk.mockReset();
@@ -75,7 +83,9 @@ describe('App sequencer maintenance guard', () => {
     );
 
     await flushRender();
+    expect(screen.queryByRole('heading', { name: COPY.app.maintenance.title })).toBeNull();
 
+    await advanceCheckWindow(4_000);
     expect(screen.getByRole('heading', { name: COPY.app.maintenance.title })).toBeInTheDocument();
   });
 
@@ -89,7 +99,9 @@ describe('App sequencer maintenance guard', () => {
     );
 
     await flushRender();
+    expect(screen.queryByRole('heading', { name: COPY.app.maintenance.title })).toBeNull();
 
+    await advanceCheckWindow(4_000);
     expect(screen.getByRole('heading', { name: COPY.app.maintenance.title })).toBeInTheDocument();
   });
 
@@ -110,15 +122,33 @@ describe('App sequencer maintenance guard', () => {
 
     expect(screen.getByRole('heading', { name: COPY.app.maintenance.title })).toBeInTheDocument();
 
-    await act(async () => {
-      vi.advanceTimersByTime(10_000);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
+    await advanceCheckWindow(1_000);
     await flushRender();
 
     expect(screen.getByText('Create route')).toBeInTheDocument();
+  });
+
+  it('does not redirect to maintenance when the first failed check recovers during startup grace', async () => {
+    mockPingSequencer
+      .mockImplementationOnce(async () => {
+        throw new Error('temporary wake-up failure');
+      })
+      .mockImplementation(async () => undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/create']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await flushRender();
+    expect(screen.getByText('Create route')).toBeInTheDocument();
+
+    await advanceCheckWindow(1_000);
+    await flushRender();
+
+    expect(screen.getByText('Create route')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: COPY.app.maintenance.title })).toBeNull();
   });
 
   it('shows the support popup on the maintenance route', async () => {
