@@ -77,6 +77,21 @@ describe('ExploreRoute', () => {
     cleanup();
   });
 
+  it('shows Create and Explore links in the navbar', () => {
+    mockListProcessesFromSequencer.mockResolvedValue([]);
+
+    render(<ExploreRoute />);
+
+    const createLink = screen.getByRole('link', { name: 'Create' });
+    const exploreLink = screen.getByRole('link', { name: 'Explore' });
+
+    expect(createLink).toHaveAttribute('href', '/create');
+    expect(createLink.querySelector('.iconoir-plus')).not.toBeNull();
+
+    expect(exploreLink).toHaveAttribute('href', '/explore');
+    expect(exploreLink.querySelector('.iconoir-search')).not.toBeNull();
+  });
+
   it('renders compatible rows and links each item to vote page', async () => {
     const id1 = processIdFrom(1);
     const id2 = processIdFrom(2);

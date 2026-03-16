@@ -34,6 +34,7 @@ export const COPY = {
     dismiss: 'Dismiss support popup',
   },
   shared: {
+    create: 'Create',
     explore: 'Explore',
     copy: 'Copy',
     copied: 'Copied',
@@ -47,6 +48,125 @@ export const COPY = {
     completed: 'Completed',
     resultsPending: 'Computing results',
     advancedDetails: 'Advanced Details',
+  },
+  home: {
+    hero: {
+      eyebrow: 'Verified anonymous voting',
+      title: 'Ask a question. Let the world answer.',
+      introRich:
+        'Launch votes where participants prove they are real with <a href="https://self.xyz" target="_blank"><strong>Self.xyz</strong></a> and results are tallied through the <a href="https://davinci.vote" target="_blank"><strong>DAVINCI Protocol</strong></a>.<br /><br />Set the rules, share the link, and collect answers without exposing people\'s identity data.',
+      primaryCta: 'Start creating',
+      secondaryCta: 'Explore live votes',
+      signalsLabel: 'Landing page highlights',
+      signals: [
+        {
+          title: 'Verified participants',
+          description: 'Eligible voters prove who they are without handing raw documents to the vote creator.',
+        },
+        {
+          title: 'Private by design',
+          description: 'No public identity leak, no duplicate participation, and no manual voter lists to manage.',
+        },
+        {
+          title: 'Portable links',
+          description: 'Open a vote, share it anywhere, and let people participate from the same destination.',
+        },
+      ],
+    },
+    stack: {
+      ariaLabel: 'How the trust stack works',
+      eyebrow: 'Trust stack',
+      title: 'Real people. Private proof. Public outcomes.',
+      description:
+        'Ask The World combines identity verification, eligibility rules, and on-chain tallying into one flow that feels simple for creators and credible for participants.',
+      items: [
+        {
+          title: 'Define eligibility once',
+          description: 'Choose countries, a minimum age, and how long the process stays open.',
+        },
+        {
+          title: 'Let voters verify privately',
+          description: 'Participants use their ID or passport in Self.xyz and register anonymously.',
+        },
+        {
+          title: 'Publish a verifiable result',
+          description: 'Every vote is submitted through DAVINCI so the final tally stays transparent and auditable.',
+        },
+      ],
+    },
+    protocol: {
+      sectionEyebrow: 'Behind the app',
+      sectionTitle: 'What powers Ask the World',
+      sectionDescription:
+        'The experience above is the surface layer. Underneath, DAVINCI provides the privacy, verification, and settlement guarantees that make the app credible.',
+      eyebrow: 'Powered by DAVINCI',
+      title: 'A protocol shaped for serious governance.',
+      description:
+        'DAVINCI is built to keep voting private, auditable, neutral, and adaptable across very different governance contexts.',
+      tagsLabel: 'DAVINCI protocol tags',
+      tags: ['Cryptographic privacy', 'Shared infrastructure', 'EVM settlement'],
+      featuresLabel: 'DAVINCI protocol features',
+      features: [
+        {
+          title: 'Verifiable and anonymous',
+          description:
+            'Every vote is verified mathematically from cast to tally while Threshold Homomorphic Encryption protects voter privacy by design.',
+        },
+        {
+          title: 'Flexible and interoperable',
+          description: 'It adapts to different governance rules and identity systems, with settlement on Ethereum and other EVM chains.',
+        },
+        {
+          title: 'Scalable and affordable',
+          description: 'Shared infrastructure keeps setup simple and cost-efficient from dozens of voters to millions.',
+        },
+        {
+          title: 'Neutral and anti-coercion',
+          description: 'A decentralized, permissionless protocol designed to resist collusion, vote buying, and outside pressure.',
+        },
+      ],
+    },
+    flow: {
+      eyebrow: 'How it works',
+      title: 'Go from idea to verified vote in minutes.',
+      steps: [
+        {
+          title: 'Create the process',
+          description: 'Connect your wallet, write the question, and configure eligibility in the creator view.',
+        },
+        {
+          title: 'Share the vote link',
+          description: 'Send one URL to your community so people can verify and participate from the same place.',
+        },
+        {
+          title: 'Track participation and results',
+          description: 'Open the vote page or explore view to follow readiness, submissions, and the final tally.',
+        },
+      ],
+    },
+    audience: {
+      eyebrow: 'Who it is for',
+      title: 'Built for decisions that need legitimacy.',
+      description:
+        'Run public consultations, diaspora polls, community governance, research panels, and other votes where verified participation matters.',
+      tagsLabel: 'Suggested use cases',
+      tags: ['Cities and institutions', 'Communities and DAOs', 'Research and media', 'Diaspora coordination'],
+      cta: 'Open the creator',
+    },
+    demos: {
+      ariaLabel: 'Product demo slideshow',
+      title: 'Ask the World in action',
+      items: [
+        {
+          title: 'Create a voting process',
+          videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        },
+        {
+          title: 'Vote in a process',
+          videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        },
+      ],
+    },
   },
   createConstants: {
     eligibilityTooltip:

@@ -44,6 +44,10 @@ vi.mock('./routes/CreateRoute', () => ({
   default: () => <div>Create route</div>,
 }));
 
+vi.mock('./routes/HomeRoute', () => ({
+  default: () => <div>Home route</div>,
+}));
+
 vi.mock('./routes/VoteRoute', () => ({
   default: () => <div>Vote route</div>,
 }));
@@ -110,6 +114,19 @@ describe('App sequencer maintenance guard', () => {
     await advanceCheckWindow(1);
     expect(mockPingSequencer).toHaveBeenCalledTimes(2);
     expect(mockPingIndexer).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders the landing page on / without the support popup', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await flushRender();
+
+    expect(screen.getByText('Home route')).toBeInTheDocument();
+    expect(screen.getByTestId('support-popup')).toHaveTextContent('closed');
   });
 
   it('waits for a confirm round before entering maintenance when the sequencer stays down', async () => {

@@ -79,7 +79,21 @@ export default function ExploreRoute() {
   );
 
   const navLinks = useMemo(
-    () => [{ id: 'navExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
+    () => [
+      {
+        id: 'navCreateLink',
+        href: buildAppHref('/create'),
+        label: COPY.shared.create,
+        iconClass: 'iconoir-plus',
+        matchPathnames: [buildAppHref('/create')],
+      },
+      {
+        id: 'navExploreLink',
+        href: buildAppHref('/explore'),
+        label: COPY.shared.explore,
+        iconClass: 'iconoir-search',
+      },
+    ],
     [buildAppHref]
   );
   const countryFilterOptions = useMemo(

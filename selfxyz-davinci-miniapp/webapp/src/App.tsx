@@ -6,13 +6,13 @@ import SupportPopup from './components/SupportPopup';
 import SequencerMaintenanceGuard from './components/SequencerMaintenanceGuard';
 import MaintenanceRoute from './routes/MaintenanceRoute';
 
+const HomeRoute = lazy(() => import('./routes/HomeRoute'));
 const CreateRoute = lazy(() => import('./routes/CreateRoute'));
 const VoteRoute = lazy(() => import('./routes/VoteRoute'));
 const ExploreRoute = lazy(() => import('./routes/ExploreRoute'));
 
 function shouldShowSupportPopup(pathname: string): boolean {
   return (
-    pathname === '/' ||
     /^\/create(?:\/|$)/.test(pathname) ||
     /^\/vote(?:\/|$)/.test(pathname) ||
     pathname === '/maintenance'
@@ -32,15 +32,17 @@ function RouteLoadingFallback() {
 function AppLayout() {
   const location = useLocation();
   const inVoteView = /^\/vote(?:\/|$)/.test(location.pathname);
+  const inHomeView = location.pathname === '/';
   const [supportOpen, setSupportOpen] = useState(true);
   const withBase = (file: string) => buildAssetUrl(file);
   const showSupportPopup = shouldShowSupportPopup(location.pathname);
+  const routeShellClass = inVoteView ? 'route-vote' : inHomeView ? 'route-home' : 'route-create';
 
   return (
     <>
       <SequencerMaintenanceGuard />
 
-      <div className={`app-shell ${inVoteView ? 'route-vote' : 'route-create'}`}>
+      <div className={`app-shell ${routeShellClass}`}>
         <main id="mainContent">
           <Outlet />
         </main>
@@ -80,7 +82,7 @@ export default function App() {
           index
           element={
             <Suspense fallback={<RouteLoadingFallback />}>
-              <CreateRoute />
+              <HomeRoute />
             </Suspense>
           }
         />
@@ -117,7 +119,7 @@ export default function App() {
           }
         />
         <Route path="maintenance" element={<MaintenanceRoute />} />
-        <Route path="*" element={<Navigate to="/create" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );

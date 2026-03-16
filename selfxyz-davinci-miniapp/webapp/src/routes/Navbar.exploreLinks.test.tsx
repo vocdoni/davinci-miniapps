@@ -29,19 +29,28 @@ vi.mock('@selfxyz/qrcode', () => ({
   SelfQRcodeWrapper: () => null,
 }));
 
-describe('navbar explore links', () => {
+describe('navbar menu links', () => {
   afterEach(() => {
     cleanup();
   });
 
-  it('shows Explore link in create navbar', () => {
+  it('shows Create and Explore links in create navbar', () => {
+    window.history.pushState({}, '', '/create');
     render(<CreateRoute />);
 
-    const link = screen.getByRole('link', { name: 'Explore' });
-    expect(link).toHaveAttribute('href', '/explore');
+    const createLink = screen.getByRole('link', { name: 'Create' });
+    const exploreLink = screen.getByRole('link', { name: 'Explore' });
+
+    expect(createLink).toHaveAttribute('href', '/create');
+    expect(createLink).toHaveAttribute('aria-current', 'page');
+    expect(createLink.querySelector('.iconoir-plus')).not.toBeNull();
+
+    expect(exploreLink).toHaveAttribute('href', '/explore');
+    expect(exploreLink.querySelector('.iconoir-search')).not.toBeNull();
   });
 
-  it('shows Explore link in vote navbar', () => {
+  it('shows Create and Explore links in vote navbar', () => {
+    window.history.pushState({}, '', '/vote');
     render(
       <MemoryRouter initialEntries={['/vote']}>
         <Routes>
@@ -50,7 +59,13 @@ describe('navbar explore links', () => {
       </MemoryRouter>
     );
 
-    const link = screen.getByRole('link', { name: 'Explore' });
-    expect(link).toHaveAttribute('href', '/explore');
+    const createLink = screen.getByRole('link', { name: 'Create' });
+    const exploreLink = screen.getByRole('link', { name: 'Explore' });
+
+    expect(createLink).toHaveAttribute('href', '/create');
+    expect(createLink.querySelector('.iconoir-plus')).not.toBeNull();
+
+    expect(exploreLink).toHaveAttribute('href', '/explore');
+    expect(exploreLink.querySelector('.iconoir-search')).not.toBeNull();
   });
 });

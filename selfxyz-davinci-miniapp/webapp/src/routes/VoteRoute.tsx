@@ -406,7 +406,21 @@ export default function VoteRoute() {
     [baseUrl]
   );
   const navbarLinks = useMemo(
-    () => [{ id: 'voteExploreLink', href: buildAppHref('/explore'), label: COPY.shared.explore }],
+    () => [
+      {
+        id: 'voteCreateLink',
+        href: buildAppHref('/create'),
+        label: COPY.shared.create,
+        iconClass: 'iconoir-plus',
+        matchPathnames: [buildAppHref('/create')],
+      },
+      {
+        id: 'voteExploreLink',
+        href: buildAppHref('/explore'),
+        label: COPY.shared.explore,
+        iconClass: 'iconoir-search',
+      },
+    ],
     [buildAppHref]
   );
 

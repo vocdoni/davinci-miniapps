@@ -5,6 +5,8 @@ export interface AppNavbarLink {
   id?: string;
   href: string;
   label: string;
+  iconClass?: string;
+  matchPathnames?: string[];
 }
 
 interface AppNavbarProps {
@@ -37,33 +39,39 @@ export default function AppNavbar({ id, brandId, baseHref, logoSrc, brandLabel, 
 
   return (
     <nav className="app-navbar" id={id}>
-      <a href={baseHref} className="navbar-brand" id={brandId}>
-        <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
-        <span>{brandLabel}</span>
-      </a>
-      {navLinks.length > 0 && (
-        <div className="navbar-nav">
-          {navLinks.map((link) => {
-            const linkPathname = getHrefPathname(link.href);
-            const isActive = Boolean(
-              currentPathname &&
-                (currentPathname === linkPathname || currentPathname.startsWith(`${linkPathname}/`))
-            );
-            return (
-              <a
-                key={`${link.href}-${link.label}`}
-                id={link.id}
-                className={`navbar-link ${isActive ? 'is-active' : ''}`}
-                href={link.href}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {link.label}
-              </a>
-            );
-          })}
-        </div>
-      )}
-      <div className="navbar-actions">{children}</div>
+      <div className="app-navbar-inner">
+        <a href={baseHref} className="navbar-brand" id={brandId}>
+          <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
+          <span>{brandLabel}</span>
+        </a>
+        {navLinks.length > 0 && (
+          <div className="navbar-nav">
+            {navLinks.map((link) => {
+              const activePathnames =
+                link.matchPathnames?.map((pathname) => getHrefPathname(pathname)) || [getHrefPathname(link.href)];
+              const isActive = Boolean(
+                currentPathname &&
+                  activePathnames.some((pathname) => pathname === '/'
+                    ? currentPathname === pathname
+                    : currentPathname === pathname || currentPathname.startsWith(`${pathname}/`))
+              );
+              return (
+                <a
+                  key={`${link.href}-${link.label}`}
+                  id={link.id}
+                  className={`navbar-link ${isActive ? 'is-active' : ''}`}
+                  href={link.href}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {link.iconClass && <span className={`navbar-link-icon ${link.iconClass}`} aria-hidden="true" />}
+                  <span>{link.label}</span>
+                </a>
+              );
+            })}
+          </div>
+        )}
+        <div className="navbar-actions">{children}</div>
+      </div>
     </nav>
   );
 }
