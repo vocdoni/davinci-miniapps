@@ -27,6 +27,12 @@ vi.mock('../services/wallet', () => ({
 
 import CreateRoute from './CreateRoute';
 
+function shortenWalletAddress(address: string): string {
+  const normalized = String(address || '').trim();
+  if (!/^0x[a-fA-F0-9]{10,}$/.test(normalized)) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
 describe('CreateRoute creator wallet persistence', () => {
   beforeEach(() => {
     const storage = new Map<string, string>();
@@ -74,12 +80,26 @@ describe('CreateRoute creator wallet persistence', () => {
 
     const firstRender = render(<CreateRoute />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+    fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
 
     await waitFor(() => {
-      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(connectedAddress);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
       expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
+      expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
+        `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
+      );
     });
+
+    const walletButton = document.getElementById('createWalletWidget') as HTMLButtonElement;
+    expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+
+    fireEvent.mouseEnter(walletButton);
+    expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent('Disconnect');
+    expect(walletButton.querySelector('.iconoir-log-out')).not.toBeNull();
+
+    fireEvent.mouseLeave(walletButton);
+    expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+    expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
 
     firstRender.unmount();
 
@@ -96,7 +116,7 @@ describe('CreateRoute creator wallet persistence', () => {
         }),
         null
       );
-      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(connectedAddress);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
       expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
     });
   });
@@ -114,11 +134,14 @@ describe('CreateRoute creator wallet persistence', () => {
 
     render(<CreateRoute />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+    fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
 
     await waitFor(() => {
-      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(connectedAddress);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
       expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeDisabled();
+      expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
+        `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
+      );
       expect(screen.getByText(/almost there! creating a vote requires a tiny bit of celo/i)).toBeInTheDocument();
     });
 

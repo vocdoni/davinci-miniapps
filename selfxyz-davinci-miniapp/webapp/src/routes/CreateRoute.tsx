@@ -172,6 +172,12 @@ function createEmptyPipelineContext(): PipelineContext {
   };
 }
 
+function shortenCreatorWalletAddress(address: string): string {
+  const normalized = String(address || '').trim();
+  if (!/^0x[a-fA-F0-9]{10,}$/.test(normalized)) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
 export default function CreateRoute() {
   const initialDraftRef = useRef<CreateFormState | null>(loadCreateFormDraft());
   const [createSubmitting, setCreateSubmitting] = useState(false);
@@ -179,6 +185,7 @@ export default function CreateRoute() {
 
   const [creatorWalletStatus, setCreatorWalletStatus] = useState<string>(CREATOR_WALLET_STATUS_DEFAULT);
   const [creatorWalletBalanceState, setCreatorWalletBalanceState] = useState<CreatorWalletBalanceState>('idle');
+  const [creatorWalletButtonHovered, setCreatorWalletButtonHovered] = useState(false);
   const [creatorWallet, setCreatorWallet] = useState<CreatorWalletState>({
     provider: null,
     browserProvider: null,
@@ -221,6 +228,18 @@ export default function CreateRoute() {
   }, [form]);
 
   const creatorConnected = Boolean(creatorWallet.address);
+  const creatorWalletButtonShowsDisconnect = creatorConnected && creatorWalletButtonHovered;
+  const creatorWalletShortAddress = shortenCreatorWalletAddress(creatorWallet.address);
+  const creatorWalletButtonLabel = creatorConnected
+    ? creatorWalletButtonShowsDisconnect
+      ? COPY.create.navbar.disconnect
+      : creatorWalletShortAddress
+    : COPY.create.navbar.connectWalletToCreate;
+  const creatorWalletButtonIconClass = creatorConnected
+    ? creatorWalletButtonShowsDisconnect
+      ? 'iconoir-log-out'
+      : 'iconoir-user'
+    : 'iconoir-wallet';
   const creatorWalletFundingBlocked =
     creatorWalletBalanceState === 'checking' || creatorWalletBalanceState === 'insufficient';
   const timelineEntries = useMemo(() => timelineRows(pipeline), [pipeline]);
@@ -1275,41 +1294,31 @@ export default function CreateRoute() {
         brandLabel={COPY.brand.appName}
         navLinks={navbarLinks}
       >
-        <article
-          className="vote-lifecycle-card vote-lifecycle-header-card create-wallet-widget"
+        <button
+          type="button"
+          className="create-wallet-widget"
           id="createWalletWidget"
-          data-state={creatorConnected ? 'ready' : 'paused'}
+          data-connected={creatorConnected ? 'true' : 'false'}
+          data-hovering={creatorWalletButtonShowsDisconnect ? 'true' : 'false'}
+          title={creatorConnected ? creatorWallet.address : COPY.create.navbar.connectWalletToCreate}
+          onClick={() => void handleCreatorWalletButton()}
+          onMouseEnter={() => {
+            if (creatorConnected) setCreatorWalletButtonHovered(true);
+          }}
+          onMouseLeave={() => setCreatorWalletButtonHovered(false)}
+          onFocus={() => {
+            if (creatorConnected) setCreatorWalletButtonHovered(true);
+          }}
+          onBlur={() => setCreatorWalletButtonHovered(false)}
         >
-          <div className="vote-lifecycle-head">
-            <div className="create-wallet-summary">
-              <div className="vote-lifecycle-left">
-                <span className="vote-lifecycle-dot" aria-hidden="true" />
-                <strong id="createWalletWidgetTitle">{COPY.create.navbar.walletTitle}</strong>
-              </div>
-              <p
-                id="creatorWalletNavbarAddress"
-                className="create-wallet-address"
-                data-connected={creatorConnected ? 'true' : 'false'}
-                title={creatorConnected ? creatorWallet.address : COPY.create.navbar.disconnected}
-              >
-                {creatorConnected ? creatorWallet.address : COPY.create.navbar.disconnected}
-              </p>
-            </div>
-          </div>
-          {creatorConnected && (
-            <div className="vote-header-actions create-wallet-actions">
-              <button
-                id="disconnectCreatorWalletBtn"
-                type="button"
-                className="cta-btn secondary"
-                onClick={() => void handleCreatorWalletButton()}
-              >
-                <span className="btn-icon iconoir-log-out" aria-hidden="true" />
-                <span>{COPY.create.navbar.disconnect}</span>
-              </button>
-            </div>
-          )}
-        </article>
+          <span className={`btn-icon ${creatorWalletButtonIconClass}`} aria-hidden="true" />
+          <span
+            id="creatorWalletNavbarAddress"
+            className={`create-wallet-address ${creatorWalletButtonShowsDisconnect ? 'is-action' : ''}`}
+          >
+            {creatorWalletButtonLabel}
+          </span>
+        </button>
       </AppNavbar>
 
       <header className={`app-header create-header question-hero-header ${overlayVisible ? 'form-blurred' : ''}`} id="appHeader">
@@ -1678,10 +1687,22 @@ export default function CreateRoute() {
 
         <div className="create-actions">
           {creatorConnected ? (
-            <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked || creatorWalletFundingBlocked}>
-              <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-check-circle'}`} aria-hidden="true" />
-              <span>{createSubmitting ? COPY.create.form.creatingButton : COPY.create.form.createButton}</span>
-            </button>
+            <>
+              <button id="createBtn" type="submit" className="cta-btn" disabled={formLocked || creatorWalletFundingBlocked}>
+                <span className={`btn-icon ${createSubmitting ? 'iconoir-refresh' : 'iconoir-check-circle'}`} aria-hidden="true" />
+                <span>{createSubmitting ? COPY.create.form.creatingButton : COPY.create.form.createButton}</span>
+              </button>
+              <p className="field-helper create-wallet-connected-note" id="createWalletConnectedNote">
+                <span>Connected as </span>
+                <span className="create-wallet-connected-identity">
+                  <code className="create-wallet-connected-address" title={creatorWallet.address}>
+                    {creatorWalletShortAddress}
+                  </code>
+                  <span className="create-wallet-connected-punctuation">.</span>
+                </span>
+                <span>{` ${COPY.create.connectedWalletFootnote}`}</span>
+              </p>
+            </>
           ) : (
             <>
               <button

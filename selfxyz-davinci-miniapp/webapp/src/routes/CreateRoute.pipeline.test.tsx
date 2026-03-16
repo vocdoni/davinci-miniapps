@@ -168,7 +168,7 @@ describe('CreateRoute pipeline retries', () => {
 
       render(<CreateRoute />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Connect wallet to create' }));
+      fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeEnabled();

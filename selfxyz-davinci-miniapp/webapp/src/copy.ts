@@ -63,6 +63,7 @@ export const COPY = {
       'Almost there! Creating a vote requires a tiny bit of CELO for transaction fees. Don\'t have any? No worries, get some for free <a href="https://stakely.io/faucet/celo-celo" target="_blank">here</a>.',
     walletConnectPromptRich:
       'Connect your wallet. Every vote you create counts, and <strong>early builders won\'t go unnoticed</strong>.',
+    connectedWalletFootnote: "Early users won't be forgotten.",
     shareSocialText: 'Join this vote on Ask The World - DAVINCI',
     navbar: {
       walletTitle: 'Creator Wallet',

@@ -2931,59 +2931,100 @@ button.qr-copy-btn:focus-visible {
 #createView .create-wallet-widget {
   min-width: 200px;
   max-width: 240px;
-}
-
-#createView .create-wallet-widget .vote-lifecycle-head {
+  border-radius: 14px;
+  min-height: 40px;
+  padding: 9px 14px;
   justify-content: flex-start;
+  gap: 9px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)) padding-box,
+    linear-gradient(rgba(31, 42, 58, 0.16), rgba(31, 42, 58, 0.16)) border-box;
+  color: var(--accent);
+  border: 1px solid transparent;
+  box-shadow: 0 12px 28px rgba(31, 42, 58, 0.08);
+  transform: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  overflow: hidden;
+  cursor: pointer !important;
 }
 
-#createView .create-wallet-summary {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
+#createView .create-wallet-widget[data-connected='false'] {
+  background:
+    linear-gradient(135deg, #fbfdff 0%, #e4eeff 52%, #d2e3ff 100%) padding-box,
+    linear-gradient(135deg, rgba(74, 90, 239, 0.22), rgba(74, 90, 239, 0.1)) border-box;
+  color: var(--accent);
+  box-shadow: 0 14px 30px rgba(74, 90, 239, 0.16);
 }
 
-#createView .create-wallet-widget .vote-lifecycle-left {
-  flex-wrap: nowrap;
-  white-space: nowrap;
+#createView .create-wallet-widget:hover:not(:disabled),
+#createView .create-wallet-widget:focus-visible {
+  transform: none;
+  box-shadow: 0 14px 30px rgba(31, 42, 58, 0.12);
+  cursor: pointer !important;
 }
 
-#createView .create-wallet-widget .vote-lifecycle-left strong {
-  white-space: nowrap;
+#createView .create-wallet-widget[data-connected='false']:hover:not(:disabled),
+#createView .create-wallet-widget[data-connected='false']:focus-visible {
+  background:
+    linear-gradient(135deg, #f7fbff 0%, #dbe8ff 48%, #c4daff 100%) padding-box,
+    linear-gradient(135deg, rgba(74, 90, 239, 0.28), rgba(74, 90, 239, 0.14)) border-box;
+  box-shadow: 0 16px 32px rgba(74, 90, 239, 0.22);
+  cursor: pointer !important;
 }
 
-#createView .create-wallet-widget .vote-header-actions .cta-btn,
-#createView .create-wallet-widget .vote-header-actions .cta-btn.secondary {
-  min-height: 24px;
-  min-width: 0;
-  padding: 4px 9px;
-  gap: 4px;
-  border-radius: 999px;
-  font-size: 10px;
-  line-height: 1;
+#createView .create-wallet-widget[data-connected='true'][data-hovering='true'] {
+  background:
+    linear-gradient(rgba(255, 242, 242, 0.96), rgba(255, 242, 242, 0.96)) padding-box,
+    linear-gradient(rgba(143, 29, 29, 0.28), rgba(143, 29, 29, 0.28)) border-box;
+  color: #8f1d1d;
+  box-shadow: 0 14px 30px rgba(143, 29, 29, 0.14);
+  cursor: pointer !important;
 }
 
-#createView .create-wallet-widget .vote-header-actions .btn-icon {
-  font-size: 11px;
+#createView .create-wallet-widget .btn-icon,
+#createView .create-wallet-address {
+  cursor: pointer !important;
+}
+
+#createView .create-wallet-widget .btn-icon {
+  font-size: 16px;
+  flex: 0 0 auto;
 }
 
 #createView .create-wallet-address {
   margin: 0;
-  width: 100%;
-  max-width: 100%;
   min-width: 0;
-  font-size: 10px;
-  line-height: 1.25;
-  color: var(--muted);
+  max-width: 100%;
+  flex: 1 1 auto;
+  font-size: 12px;
+  line-height: 1;
+  color: currentColor;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
 }
 
-#createView .create-wallet-address[data-connected='false'] {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+#createView .create-wallet-address.is-action {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+}
+
+#createView .create-wallet-widget[data-connected='false'] {
+  justify-content: center;
+}
+
+#createView .create-wallet-widget[data-connected='false'] .create-wallet-address {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: currentColor;
+  text-align: center;
 }
 
 #createView .create-form {
@@ -3758,6 +3799,39 @@ button.qr-copy-btn:focus-visible {
   margin: -2px 0 0;
 }
 
+#createView .create-wallet-connected-note {
+  margin: -2px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+#createView .create-wallet-connected-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+}
+
+#createView .create-wallet-connected-address {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(74, 90, 239, 0.08);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+#createView .create-wallet-connected-punctuation {
+  margin-left: 2px;
+  white-space: nowrap;
+}
+
 #createView .create-wallet-connect-note strong {
   color: var(--ink);
 }
@@ -4411,49 +4485,12 @@ button.qr-copy-btn:focus-visible {
     min-width: 100%;
     max-width: 100%;
     align-self: stretch;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  #createView .create-wallet-widget .vote-lifecycle-head,
-  #voteView .vote-navbar-widget .vote-lifecycle-head {
-    margin: 0;
-    flex: 1;
-    min-width: 0;
-    justify-content: space-between;
-  }
-
-  #createView .create-wallet-summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-    justify-content: space-between;
-  }
-
-  #createView .create-wallet-widget .vote-lifecycle-left {
-    flex-wrap: nowrap;
-    min-width: 0;
+    justify-content: flex-start;
   }
 
   #createView .create-wallet-address {
     margin: 0;
-    max-width: 120px;
-    text-align: right;
-    flex: 0 1 auto;
-  }
-
-  #createView .create-wallet-widget .vote-header-actions,
-  #voteView .vote-navbar-widget .vote-header-actions {
-    margin-top: 0;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-    gap: 4px;
+    max-width: none;
   }
 
   #voteView .vote-navbar-widget .vote-lifecycle-left,
