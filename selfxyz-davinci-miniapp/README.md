@@ -314,6 +314,9 @@ Edit `webapp/.env`:
 VITE_NETWORK="celo" # or staging_celo (Celo Sepolia)
 VITE_ONCHAIN_CENSUS_INDEXER_URL="https://your-indexer.example.org"
 VITE_DAVINCI_SEQUENCER_URL="https://sequencer.example.org"
+VITE_PINATA_JWT="" # client-visible Pinata JWT for public metadata uploads
+VITE_PINATA_GATEWAY_URL="example-gateway.mypinata.cloud" # dedicated gateway host/domain, no https:// prefix
+VITE_PINATA_PUBLIC_GATEWAY_URL="https://gateway.pinata.cloud" # public gateway base used in stored metadata URLs
 VITE_SELF_APP_NAME="Ask The World - DAVINCI" # optional
 VITE_WALLETCONNECT_PROJECT_ID="" # required when no injected wallet is available
 ```
@@ -332,9 +335,16 @@ Test config for Celo Sepolia (testnet):
 VITE_NETWORK="staging_celo"
 VITE_ONCHAIN_CENSUS_INDEXER_URL="https://your-indexer.example.org"
 VITE_DAVINCI_SEQUENCER_URL="https://sequencer.example.org"
+VITE_PINATA_JWT=""
+VITE_PINATA_GATEWAY_URL="example-gateway.mypinata.cloud"
+VITE_PINATA_PUBLIC_GATEWAY_URL="https://gateway.pinata.cloud"
 VITE_SELF_APP_NAME="Ask The World - DAVINCI (Test)" # optional
 VITE_WALLETCONNECT_PROJECT_ID=""
 ```
+
+Metadata uploads in the create flow now go through Pinata from the browser and store an HTTP gateway URL in the process metadata. Because this implementation intentionally uses a client-visible JWT, prefer a token scoped narrowly for public uploads.
+During local `npm run dev`, the Vite dev server proxies Pinata upload requests through `/pinata-upload` so the browser does not hit `uploads.pinata.cloud` directly.
+Stored metadata URLs default to the public Pinata gateway to avoid dedicated-gateway access control issues on explore and vote pages.
 
 ### 3) Run the web app
 

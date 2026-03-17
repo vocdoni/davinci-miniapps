@@ -34,6 +34,7 @@ import {
 } from '../lib/occ';
 import { isValidCountryCode, normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
 import { buildAssetUrl } from '../utils/assets';
+import { uploadElectionMetadata } from '../services/pinata';
 import { createSequencerSdk, getProcessFromSequencer, listProcessesFromSequencer } from '../services/sequencer';
 import {
   connectBrowserWallet,
@@ -452,6 +453,11 @@ export default function CreateRoute() {
           }
 
           const stageLabel = PIPELINE_STAGES.find((stage) => stage.id === stageId)?.label || stageId;
+          console.error(`Create pipeline stage failed: ${stageLabel}`, {
+            stageId,
+            attempt,
+            error,
+          });
           updateStage(stageId, {
             status: 'error',
             message: COPY.create.status.stageFailed(stageLabel),
@@ -1054,8 +1060,7 @@ export default function CreateRoute() {
       }),
     };
 
-    const hash = await sdk.api.sequencer.pushMetadata(metadata);
-    const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
+    const metadataUri = await uploadElectionMetadata(metadata);
 
     const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
     const processConfig = {

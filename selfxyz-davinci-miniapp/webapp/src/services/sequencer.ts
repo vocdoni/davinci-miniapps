@@ -1,6 +1,8 @@
 import { DavinciSDK } from '@vocdoni/davinci-sdk';
 import type { ElectionMetadata, GetProcessResponse } from '@vocdoni/davinci-sdk';
 
+import { CONFIG } from '../lib/occ';
+import { buildMetadataFetchCandidates } from '../utils/ipfs';
 import { normalizeProcessId } from '../utils/normalization';
 import type { SequencerProcessConfigDTO } from '../types/state';
 
@@ -64,12 +66,19 @@ export async function fetchProcessMetadata(sdk: DavinciSDK, process: SequencerPr
   const metadataUri = String(process.metadataURI || (process as LegacyMetadataUriCarrier).metadataUri || '').trim();
   if (!metadataUri || !sdk?.api?.sequencer?.getMetadata) return null;
 
-  try {
-    const metadata = await sdk.api.sequencer.getMetadata(metadataUri);
-    return metadata && typeof metadata === 'object' ? (metadata as SequencerMetadata) : null;
-  } catch {
-    return null;
+  const candidates = buildMetadataFetchCandidates(metadataUri, CONFIG.pinataPublicGatewayUrl);
+  for (const candidate of candidates) {
+    try {
+      const metadata = await sdk.api.sequencer.getMetadata(candidate);
+      if (metadata && typeof metadata === 'object') {
+        return metadata as SequencerMetadata;
+      }
+    } catch {
+      // Try the next candidate URL, if any.
+    }
   }
+
+  return null;
 }
 
 export async function listProcessesFromSequencer(sdk: DavinciSDK): Promise<string[]> {

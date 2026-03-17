@@ -10,6 +10,7 @@ const mockCreateSequencerSdk = vi.fn();
 const mockGetProcessFromSequencer = vi.fn();
 const mockListProcessesFromSequencer = vi.fn();
 const mockComputeConfigId = vi.fn();
+const mockUploadElectionMetadata = vi.fn();
 
 vi.mock('@vocdoni/davinci-sdk', () => ({
   ProcessStatus: {
@@ -37,6 +38,10 @@ vi.mock('../services/sequencer', () => ({
   createSequencerSdk: (...args: unknown[]) => mockCreateSequencerSdk(...args),
   getProcessFromSequencer: (...args: unknown[]) => mockGetProcessFromSequencer(...args),
   listProcessesFromSequencer: (...args: unknown[]) => mockListProcessesFromSequencer(...args),
+}));
+
+vi.mock('../services/pinata', () => ({
+  uploadElectionMetadata: (...args: unknown[]) => mockUploadElectionMetadata(...args),
 }));
 
 vi.mock('../lib/occ', async () => {
@@ -80,6 +85,7 @@ describe('CreateRoute pipeline retries', () => {
     mockComputeConfigId.mockReset();
     mockComputeConfigId.mockReturnValue(`0x${'1'.repeat(64)}`);
     mockListProcessesFromSequencer.mockReset();
+    mockUploadElectionMetadata.mockReset();
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -116,18 +122,14 @@ describe('CreateRoute pipeline retries', () => {
 
       const sdk = {
         init: vi.fn().mockResolvedValue(undefined),
-        api: {
-          sequencer: {
-            pushMetadata: vi.fn().mockResolvedValue('metadata-hash'),
-            getMetadataUrl: vi.fn().mockReturnValue('ipfs://metadata-hash'),
-          },
-        },
+        api: { sequencer: {} },
         createProcess: vi.fn().mockResolvedValue({
           processId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           transactionHash: '0xprocesstx',
         }),
       };
 
+      mockUploadElectionMetadata.mockResolvedValue('https://gateway.example.mypinata.cloud/ipfs/bafy-metadata');
       mockCreateSequencerSdk.mockReturnValue(sdk);
       mockListProcessesFromSequencer.mockResolvedValue([
         '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -218,6 +220,13 @@ describe('CreateRoute pipeline retries', () => {
       await waitFor(() => {
         expect(sdk.createProcess).toHaveBeenCalledTimes(1);
       });
+
+      expect(mockUploadElectionMetadata).toHaveBeenCalledTimes(1);
+      expect(sdk.createProcess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadataUri: 'https://gateway.example.mypinata.cloud/ipfs/bafy-metadata',
+        })
+      );
 
       await waitFor(() => {
         expect(mockListProcessesFromSequencer).toHaveBeenCalledTimes(1);
