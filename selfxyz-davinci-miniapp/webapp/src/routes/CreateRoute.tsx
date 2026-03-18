@@ -13,6 +13,7 @@ import {
   PIPELINE_STAGES,
   buildCensusUri,
   buildDeployData,
+  buildTxExplorerUrl,
   buildVoteUrl,
   collectErrorMessages,
   computeConfigId,
@@ -106,6 +107,17 @@ interface ShareTarget {
   iconFallbackSrc?: string;
   fallbackText: string;
 }
+
+type ProcessStreamEvent = {
+  status?: unknown;
+  hash?: unknown;
+  response?: {
+    processId?: unknown;
+    transactionHash?: unknown;
+  } | null;
+  error?: unknown;
+  reason?: unknown;
+};
 
 type CreatorWalletBalanceState = 'idle' | 'checking' | 'funded' | 'insufficient' | 'unknown';
 
@@ -251,6 +263,7 @@ export default function CreateRoute() {
   const overlayVisible = showTimeline && !overlayState.dismissed;
   const spinnerActive = !hasSuccessOutput && !hasError && (createSubmitting || hasActivity);
   const outputsVisible = hasAnyOutputs(outputs);
+  const processTxExplorerUrl = useMemo(() => buildTxExplorerUrl(outputs.processTxHash), [outputs.processTxHash]);
   const formLocked = createSubmitting;
   const selectedCountriesCount = form.countries.length;
   const countriesLimitReached = selectedCountriesCount >= MAX_NATIONALITIES;
@@ -997,92 +1010,153 @@ export default function CreateRoute() {
     throw new Error(`Indexer readiness timeout. Last error: ${lastError}`);
   }, []);
 
-  const createDavinciProcess = useCallback(async (ctx: PipelineContext) => {
-    if (!CONFIG.davinciSequencerUrl) {
-      throw new Error(COPY.create.errors.missingSequencerUrl);
-    }
-    if (!ctx.values || !ctx.signer) {
-      throw new Error(COPY.create.errors.missingSignerOrValues);
-    }
+  const createDavinciProcess = useCallback(
+    async (ctx: PipelineContext) => {
+      if (!CONFIG.davinciSequencerUrl) {
+        throw new Error(COPY.create.errors.missingSequencerUrl);
+      }
+      if (!ctx.values || !ctx.signer) {
+        throw new Error(COPY.create.errors.missingSignerOrValues);
+      }
 
-    const sdk = createSequencerSdk({
-      signer: ctx.signer,
-      sequencerUrl: CONFIG.davinciSequencerUrl,
-    });
-    await sdk.init();
+      const sdk = createSequencerSdk({
+        signer: ctx.signer,
+        sequencerUrl: CONFIG.davinciSequencerUrl,
+      });
+      await sdk.init();
 
-    const sequencerCensusUri = toSequencerCensusUri(ctx.censusUri);
-    if (!sequencerCensusUri) {
-      throw new Error(COPY.create.errors.missingCensusUri);
-    }
+      const sequencerCensusUri = toSequencerCensusUri(ctx.censusUri);
+      if (!sequencerCensusUri) {
+        throw new Error(COPY.create.errors.missingCensusUri);
+      }
 
-    const question = ctx.values.question;
-    const questions = [
-      {
-        title: { default: question.title },
-        description: { default: question.description || '' },
-        choices: question.choices.map((choice) => ({
-          title: { default: choice.title },
-          value: choice.value,
-          meta: {},
-        })),
-      },
-    ];
-
-    const metadata: ElectionMetadata = {
-      media: {
-        header: '',
-        logo: '',
-      },
-      title: { default: ctx.values.title },
-      description: { default: ctx.values.description || '' },
-      questions,
-      type: {
-        name: ElectionResultsTypeNames.SINGLE_CHOICE_MULTIQUESTION,
-        properties: {},
-      },
-      version: '1.2',
-      meta: stringifyMetaValues({
-        selfConfig: {
-          scope: normalizeScope(ctx.values.scopeSeed),
-          countries: ctx.values.countries,
-          minAge: ctx.values.minAge,
-          country: normalizeCountry(ctx.values.country),
+      const question = ctx.values.question;
+      const questions = [
+        {
+          title: { default: question.title },
+          description: { default: question.description || '' },
+          choices: question.choices.map((choice) => ({
+            title: { default: choice.title },
+            value: choice.value,
+            meta: {},
+          })),
         },
-        listInExplore: ctx.values.listInExplore,
-        network: CONFIG.network,
-      }),
-    };
+      ];
 
-    const hash = await sdk.api.sequencer.pushMetadata(metadata);
-    const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
+      const metadata: ElectionMetadata = {
+        media: {
+          header: '',
+          logo: '',
+        },
+        title: { default: ctx.values.title },
+        description: { default: ctx.values.description || '' },
+        questions,
+        type: {
+          name: ElectionResultsTypeNames.SINGLE_CHOICE_MULTIQUESTION,
+          properties: {},
+        },
+        version: '1.2',
+        meta: stringifyMetaValues({
+          selfConfig: {
+            scope: normalizeScope(ctx.values.scopeSeed),
+            countries: ctx.values.countries,
+            minAge: ctx.values.minAge,
+            country: normalizeCountry(ctx.values.country),
+          },
+          listInExplore: ctx.values.listInExplore,
+          network: CONFIG.network,
+        }),
+      };
 
-    const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
-    const processConfig = {
-      metadataUri,
-      census,
-      maxVoters: ctx.values.maxVoters,
-      ballot: ctx.values.ballot,
-      timing: {
-        duration: ctx.values.duration,
-      },
-    };
+      const hash = await sdk.api.sequencer.pushMetadata(metadata);
+      const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
 
-    const result = await sdk.createProcess(processConfig);
-    const processId = normalizeProcessId(result.processId);
-    if (!processId) throw new Error(COPY.create.errors.missingProcessId);
+      const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
+      const processConfig = {
+        metadataUri,
+        census,
+        maxVoters: ctx.values.maxVoters,
+        ballot: ctx.values.ballot,
+        timing: {
+          duration: ctx.values.duration,
+        },
+      };
 
-    ctx.sdk = sdk;
-    ctx.processId = processId;
+      let processId = '';
+      let processTxHash = '';
+      const streamFactory = (sdk as DavinciSDK & { createProcessStream?: (config: unknown) => unknown }).createProcessStream;
 
-    setOutputs((previous) => ({
-      ...previous,
-      processId,
-      processTxHash: result.transactionHash,
-    }));
+      if (typeof streamFactory === 'function') {
+        const stream = streamFactory.call(sdk, processConfig);
+        const isAsyncIterable = Boolean(stream && typeof (stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function');
+        if (!isAsyncIterable) {
+          throw new Error('createProcessStream did not return an async iterable.');
+        }
 
-    return `Process created (${processId})`;
-  }, []);
+        for await (const item of stream as AsyncIterable<ProcessStreamEvent>) {
+          const event = item || {};
+          const status = String(event.status ?? '').trim().toLowerCase();
+          const pendingHash = String(event.hash ?? '').trim();
+          const response = event.response || {};
+          const responseProcessId = String(response.processId ?? '').trim();
+          const responseTxHash = String(response.transactionHash ?? '').trim();
+          const isCompleted = status === 'completed' || Boolean(responseProcessId);
+          const isFailed = status === 'failed' || event.error !== undefined;
+          const isReverted = status === 'reverted' || event.reason !== undefined;
+          const isPending = status === 'pending' || (!status && Boolean(pendingHash) && !isCompleted);
+
+          if (isCompleted) {
+            processId = normalizeProcessId(responseProcessId);
+            if (responseTxHash) {
+              processTxHash = responseTxHash;
+            }
+            continue;
+          }
+
+          if (isPending && pendingHash) {
+            processTxHash = pendingHash;
+            setOutputs((previous) => ({
+              ...previous,
+              processTxHash: pendingHash,
+            }));
+            updateStage('create_davinci_process', {
+              status: 'running',
+              message: COPY.create.status.processTxSubmitted,
+            });
+            continue;
+          }
+
+          if (isReverted) {
+            const reason = String(event.reason ?? '').trim();
+            throw new Error(reason ? `Process transaction reverted: ${reason}` : 'Process transaction reverted.');
+          }
+
+          if (isFailed) {
+            const errorText = event.error instanceof Error ? event.error.message : String(event.error ?? '').trim();
+            throw new Error(errorText || 'Process transaction failed.');
+          }
+        }
+      } else {
+        const result = await sdk.createProcess(processConfig);
+        processId = normalizeProcessId(result.processId);
+        processTxHash = String(result.transactionHash || '').trim();
+      }
+
+      if (!processId) throw new Error(COPY.create.errors.missingProcessId);
+
+      ctx.sdk = sdk;
+      ctx.processId = processId;
+
+      setOutputs((previous) => ({
+        ...previous,
+        processId,
+        processTxHash: processTxHash || previous.processTxHash,
+      }));
+
+      return COPY.create.status.processCreated(processId);
+    },
+    [updateStage]
+  );
 
   const waitProcessReadyInSequencer = useCallback(async (ctx: PipelineContext) => {
     const timeoutMs = 90_000;
@@ -1822,6 +1896,22 @@ export default function CreateRoute() {
                           </button>
                         )}
                       </div>
+                      {entry.stage.id === 'create_davinci_process' &&
+                        Boolean(outputs.processTxHash) &&
+                        Boolean(processTxExplorerUrl) && (
+                          <p id="timelineProcessTxWrap" className="timeline-meta">
+                            <a
+                              id="timelineProcessTxLink"
+                              className="field-link"
+                              href={processTxExplorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={COPY.create.overlay.viewTxOnExplorer}
+                            >
+                              {outputs.processTxHash}
+                            </a>
+                          </p>
+                        )}
                       {entry.stage.id === 'done' && entry.status.status === 'success' && Boolean(outputs.voteUrl) && (
                         <div id="timelineVoteUrlWrap" className="timeline-vote-url">
                           <div className="output-link-actions">
@@ -1965,7 +2055,19 @@ export default function CreateRoute() {
               <div id="outputProcessTxItem" className="output-item" hidden={!outputs.processTxHash}>
                 <dt>{COPY.create.outputs.processTx}</dt>
                 <dd id="outProcessTx" className="output-scroll">
-                  {outputs.processTxHash || '-'}
+                  {processTxExplorerUrl ? (
+                    <a
+                      className="field-link"
+                      href={processTxExplorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={COPY.create.overlay.viewTxOnExplorer}
+                    >
+                      {outputs.processTxHash || '-'}
+                    </a>
+                  ) : (
+                    outputs.processTxHash || '-'
+                  )}
                 </dd>
               </div>
             </dl>

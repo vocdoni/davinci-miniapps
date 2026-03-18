@@ -243,6 +243,7 @@ export const COPY = {
       walletKeepOpen:
         'Keep your wallet open. You will be prompted to confirm transactions and sign messages during setup.',
       copyLink: 'Copy link',
+      viewTxOnExplorer: 'View transaction on explorer',
     },
     success: {
       title: 'Your voting process is live and ready for the world.',
@@ -270,6 +271,8 @@ export const COPY = {
       processNotAcceptingVotesYet: 'Process is not accepting votes yet',
       sequencerLookupFailed: 'Sequencer lookup failed',
       formValidated: 'Form validated',
+      processTxSubmitted: 'Transaction submitted. Waiting for confirmation...',
+      processCreated: (processId: string) => `Process created (${processId})`,
     },
     errors: {
       missingWalletContextSelfConfig: 'Missing wallet context for Self config registration.',
