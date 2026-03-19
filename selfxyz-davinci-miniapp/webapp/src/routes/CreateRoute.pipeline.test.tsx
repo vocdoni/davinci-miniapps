@@ -43,8 +43,16 @@ vi.mock('../services/sequencer', () => ({
 
 vi.mock('../lib/occ', async () => {
   const actual = await vi.importActual('../lib/occ');
+  const typedActual = actual as typeof import('../lib/occ');
   return {
-    ...actual,
+    ...typedActual,
+    CONFIG: {
+      ...typedActual.CONFIG,
+      onchainIndexerUrl: 'https://indexer.test',
+      davinciSequencerUrl: 'https://sequencer.test',
+    },
+    buildCensusUri: (contractAddress: string) =>
+      `https://indexer.test/42220/${String(contractAddress || '').toLowerCase()}/graphql`,
     computeConfigId: (...args: unknown[]) => mockComputeConfigId(...args),
   };
 });

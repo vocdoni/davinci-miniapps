@@ -18,6 +18,7 @@ export interface NetworkConfig {
   hubAddress: string;
   poseidonT3Address: string;
   rpcUrl: string;
+  explorerBaseUrl: string;
 }
 
 export const NETWORKS: Record<string, NetworkConfig> = {
@@ -28,6 +29,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     hubAddress: '0xe57F4773bd9c9d8b6Cd70431117d353298B9f5BF',
     poseidonT3Address: '0xF134707a4C4a3a76b8410fC0294d620A7c341581',
     rpcUrl: 'https://forno.celo.org',
+    explorerBaseUrl: 'https://celoscan.io',
   },
   staging_celo: {
     chainId: 44787,
@@ -36,6 +38,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     hubAddress: '0x16ECBA51e18a4a7e61fdC417f0d47AFEeDfbed74',
     poseidonT3Address: '0x0A782f7F9f8AaC6E0BACAF3cd4Aa292C3275c6F2',
     rpcUrl: 'https://forno.celo-sepolia.celo-testnet.org',
+    explorerBaseUrl: 'https://celo-sepolia.blockscout.com',
   },
 };
 
@@ -45,6 +48,7 @@ export const CONFIG = {
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
   selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
+  txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
 };
 
 export const ACTIVE_NETWORK = NETWORKS[CONFIG.network] || NETWORKS.celo;
@@ -1137,6 +1141,18 @@ export function buildVoteUrl(processId: string): string {
     return `${window.location.origin}${encodeBasePath('/vote')}`;
   }
   return `${window.location.origin}${encodeBasePath(`/vote/${encodeURIComponent(normalized)}`)}`;
+}
+
+export function buildTxExplorerUrl(txHash: string): string {
+  const normalized = String(txHash || '').trim();
+  if (!/^0x[a-fA-F0-9]{64}$/.test(normalized)) return '';
+
+  const configuredBase = trimTrailingSlash(CONFIG.txExplorerBaseUrl);
+  const networkBase = trimTrailingSlash(ACTIVE_NETWORK.explorerBaseUrl);
+  const base = configuredBase || networkBase;
+  if (!base) return '';
+
+  return `${base}/tx/${normalized}`;
 }
 
 export function normalizeProcessResultValues(rawResult: unknown): bigint[] {
