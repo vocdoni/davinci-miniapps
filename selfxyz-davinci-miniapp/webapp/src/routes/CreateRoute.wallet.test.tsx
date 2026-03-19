@@ -5,6 +5,7 @@ const mockConnectBrowserWallet = vi.fn();
 const mockResumeConnectedBrowserWallet = vi.fn();
 const mockDisconnectWalletConnection = vi.fn();
 const mockGetInjectedProvider = vi.fn();
+const mockEnsureProviderChain = vi.fn();
 
 vi.mock('@vocdoni/davinci-sdk', () => ({
   ProcessStatus: {
@@ -23,6 +24,7 @@ vi.mock('../services/wallet', () => ({
   resumeConnectedBrowserWallet: (...args: unknown[]) => mockResumeConnectedBrowserWallet(...args),
   disconnectWalletConnection: (...args: unknown[]) => mockDisconnectWalletConnection(...args),
   getInjectedProvider: (...args: unknown[]) => mockGetInjectedProvider(...args),
+  ensureProviderChain: (...args: unknown[]) => mockEnsureProviderChain(...args),
 }));
 
 import CreateRoute from './CreateRoute';
@@ -56,8 +58,10 @@ describe('CreateRoute creator wallet persistence', () => {
     mockResumeConnectedBrowserWallet.mockReset();
     mockDisconnectWalletConnection.mockReset();
     mockGetInjectedProvider.mockReset();
+    mockEnsureProviderChain.mockReset();
     mockGetInjectedProvider.mockReturnValue(null);
     mockResumeConnectedBrowserWallet.mockResolvedValue(null);
+    mockEnsureProviderChain.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

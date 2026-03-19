@@ -13,11 +13,9 @@ import {
   CONFIG,
   DEFAULT_DOCUMENT_TITLE,
   NETWORKS,
-  PROCESS_STATUS_INFO,
   VOTE_POLL_MS,
   VOTE_STATUS_FLOW,
   VOTE_STATUS_INFO,
-  buildCensusUri,
   clearConnectedWalletPreference,
   extractCensusContract,
   extractCensusUri,
@@ -56,7 +54,7 @@ import {
 } from '../lib/occ';
 import { getUniversalLink } from '../selfApp';
 import { buildAssetUrl } from '../utils/assets';
-import { isValidCountryCode, isValidProcessId, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
+import { isValidCountryCode, isValidProcessId, normalizeCountry, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { ethCall, fetchOnchainWeight } from '../services/readiness';
 import {
   createSequencerSdk,
@@ -1791,7 +1789,6 @@ export default function VoteRoute() {
           : COPY.vote.buttons.pauseProcess;
   const stopProcessButtonLabel =
     voteAdmin.action === 'stop' ? COPY.vote.buttons.stoppingProcess : COPY.vote.buttons.stopProcess;
-  const sequencerEligible = voteResolution.sequencerWeight > 0n;
 
   const hasStoredVoteId = Boolean(voteBallot.submissionId);
   const overwriteAllowed = canOverwriteVote(voteBallot);

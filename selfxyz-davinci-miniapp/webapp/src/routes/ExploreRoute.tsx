@@ -3,6 +3,7 @@ import type { DavinciSDK } from '@vocdoni/davinci-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
+import InternalLink from '../components/InternalLink';
 import RichText from '../components/RichText';
 import { COPY } from '../copy';
 import { CONFIG } from '../lib/occ';
@@ -416,7 +417,7 @@ export default function ExploreRoute() {
                   const showRemaining = row.statusCode === ProcessStatus.READY;
                   return (
                     <li className="explore-row" key={row.processId}>
-                      <a className="explore-row-link" href={row.voteHref}>
+                      <InternalLink className="explore-row-link" to={row.voteHref}>
                         <div className="explore-row-main">
                           <p className="explore-row-question">{row.questionTitle}</p>
                           <span className={`explore-row-status is-${statusClassName(row.statusCode)}`}>{row.statusLabel}</span>
@@ -426,7 +427,7 @@ export default function ExploreRoute() {
                           {row.minAge}
                           {showRemaining ? ` | ${COPY.explore.requirementsClosesIn} ${row.readyTimeRemainingLabel}` : ''}
                         </p>
-                      </a>
+                      </InternalLink>
                     </li>
                   );
                 })}

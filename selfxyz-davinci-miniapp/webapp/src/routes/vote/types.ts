@@ -1,8 +1,8 @@
 export type VoteSubmitGateResult = 'ready' | 'needs_registration' | 'blocked';
 
-export type RegistrationModalStatus = 'idle' | 'waiting' | 'ready' | 'submitting' | 'error';
+type RegistrationModalStatus = 'idle' | 'waiting' | 'ready' | 'submitting' | 'error';
 
-export type RegistrationModalDismissReason =
+type RegistrationModalDismissReason =
   | ''
   | 'backdrop'
   | 'close'

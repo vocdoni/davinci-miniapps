@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { COPY } from '../copy';
 
-export interface AppNavbarLink {
+interface AppNavbarLink {
   id?: string;
   href: string;
   label: string;
@@ -34,16 +35,24 @@ function getHrefPathname(href: string): string {
 }
 
 export default function AppNavbar({ id, brandId, baseHref, logoSrc, brandLabel, navLinks = [], children }: AppNavbarProps) {
+  const inRouter = useInRouterContext();
   const currentPathname =
     typeof window !== 'undefined' && window.location ? normalizePathname(window.location.pathname) : '';
 
   return (
     <nav className="app-navbar" id={id}>
       <div className="app-navbar-inner">
-        <a href={baseHref} className="navbar-brand" id={brandId}>
-          <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
-          <span>{brandLabel}</span>
-        </a>
+        {inRouter ? (
+          <Link to={baseHref} className="navbar-brand" id={brandId}>
+            <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
+            <span>{brandLabel}</span>
+          </Link>
+        ) : (
+          <a href={baseHref} className="navbar-brand" id={brandId}>
+            <img className="navbar-logo" src={logoSrc} alt={COPY.brand.davinciLogoAlt} />
+            <span>{brandLabel}</span>
+          </a>
+        )}
         {navLinks.length > 0 && (
           <div className="navbar-nav">
             {navLinks.map((link) => {
@@ -56,16 +65,29 @@ export default function AppNavbar({ id, brandId, baseHref, logoSrc, brandLabel, 
                     : currentPathname === pathname || currentPathname.startsWith(`${pathname}/`))
               );
               return (
-                <a
-                  key={`${link.href}-${link.label}`}
-                  id={link.id}
-                  className={`navbar-link ${isActive ? 'is-active' : ''}`}
-                  href={link.href}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  {link.iconClass && <span className={`navbar-link-icon ${link.iconClass}`} aria-hidden="true" />}
-                  <span>{link.label}</span>
-                </a>
+                inRouter ? (
+                  <Link
+                    key={`${link.href}-${link.label}`}
+                    id={link.id}
+                    className={`navbar-link ${isActive ? 'is-active' : ''}`}
+                    to={link.href}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {link.iconClass && <span className={`navbar-link-icon ${link.iconClass}`} aria-hidden="true" />}
+                    <span>{link.label}</span>
+                  </Link>
+                ) : (
+                  <a
+                    key={`${link.href}-${link.label}`}
+                    id={link.id}
+                    className={`navbar-link ${isActive ? 'is-active' : ''}`}
+                    href={link.href}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {link.iconClass && <span className={`navbar-link-icon ${link.iconClass}`} aria-hidden="true" />}
+                    <span>{link.label}</span>
+                  </a>
+                )
               );
             })}
           </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
+import InternalLink from '../components/InternalLink';
 import ProtocolFeatureList from '../components/ProtocolFeatureList';
 import RichText from '../components/RichText';
 import { COPY } from '../copy';
@@ -55,14 +56,14 @@ export default function HomeRoute() {
           </p>
 
           <div className="home-actions">
-            <a id="homeCreateCta" className="home-cta" href={buildAppHref('/create')}>
+            <InternalLink id="homeCreateCta" className="home-cta" to={buildAppHref('/create')}>
               <span className="iconoir-plus" aria-hidden="true" />
               <span>{COPY.home.hero.primaryCta}</span>
-            </a>
-            <a className="home-cta secondary" href={buildAppHref('/explore')}>
+            </InternalLink>
+            <InternalLink className="home-cta secondary" to={buildAppHref('/explore')}>
               <span className="iconoir-search" aria-hidden="true" />
               <span>{COPY.home.hero.secondaryCta}</span>
-            </a>
+            </InternalLink>
           </div>
 
           <ul className="home-signal-grid" aria-label={COPY.home.hero.signalsLabel}>
@@ -121,10 +122,10 @@ export default function HomeRoute() {
               </span>
             ))}
           </div>
-          <a className="home-cta" href={buildAppHref('/create')}>
+          <InternalLink className="home-cta" to={buildAppHref('/create')}>
             <span className="iconoir-plus" aria-hidden="true" />
             <span>{COPY.home.audience.cta}</span>
-          </a>
+          </InternalLink>
         </article>
       </section>
 

@@ -1,4 +1,4 @@
-import { BrowserProvider, type Eip1193Provider, type JsonRpcSigner, Wallet } from 'ethers';
+import { BrowserProvider, type Eip1193Provider, type JsonRpcSigner } from 'ethers';
 import EthereumProvider from '@walletconnect/ethereum-provider';
 
 import { COPY } from '../copy';
@@ -23,22 +23,7 @@ export interface CreatorWalletConnection {
   connectorType: 'injected' | 'walletconnect';
 }
 
-export interface ManagedWalletSnapshot {
-  address: string;
-  privateKey: string;
-  source: 'derived' | 'imported';
-}
-
-export function walletFromPrivateKey(privateKey: string, source: ManagedWalletSnapshot['source']): ManagedWalletSnapshot {
-  const wallet = new Wallet(privateKey);
-  return {
-    address: wallet.address,
-    privateKey: wallet.privateKey,
-    source,
-  };
-}
-
-export function getInjectedProvider(): OCCProvider | null {
+function getInjectedProvider(): OCCProvider | null {
   const ethereum = (window as Window & { ethereum?: OCCProvider }).ethereum;
   if (!ethereum) return null;
 
@@ -50,7 +35,7 @@ export function getInjectedProvider(): OCCProvider | null {
   return ethereum;
 }
 
-export function getWalletSourceLabel(provider: OCCProvider, fallback: string = COPY.walletService.walletConnectFallbackSource): string {
+function getWalletSourceLabel(provider: OCCProvider, fallback: string = COPY.walletService.walletConnectFallbackSource): string {
   if (provider?.isMetaMask) return COPY.walletService.metaMask;
   if (provider?.isCoinbaseWallet) return COPY.walletService.coinbaseWallet;
   return fallback;
@@ -68,7 +53,7 @@ export async function ensureProviderChain(provider: OCCProvider, chainHex = ACTI
   });
 }
 
-export async function createWalletConnectProvider(): Promise<OCCProvider> {
+async function createWalletConnectProvider(): Promise<OCCProvider> {
   if (!CONFIG.walletConnectProjectId) {
     throw new Error(COPY.walletService.missingProjectId);
   }
@@ -105,7 +90,7 @@ export async function createWalletConnectProvider(): Promise<OCCProvider> {
   })) as OCCProvider;
 }
 
-export async function connectInjectedWallet(provider: OCCProvider): Promise<CreatorWalletConnection> {
+async function connectInjectedWallet(provider: OCCProvider): Promise<CreatorWalletConnection> {
   const accounts = await provider.request({ method: 'eth_requestAccounts' });
   if (!Array.isArray(accounts) || !accounts.length) {
     throw new Error(COPY.walletService.noWalletAccount);
@@ -127,7 +112,7 @@ export async function connectInjectedWallet(provider: OCCProvider): Promise<Crea
   };
 }
 
-export async function connectWalletConnect(existingProvider?: OCCProvider | null): Promise<CreatorWalletConnection> {
+async function connectWalletConnect(existingProvider?: OCCProvider | null): Promise<CreatorWalletConnection> {
   let provider = existingProvider || null;
 
   if (!provider || typeof provider.enable !== 'function') {
@@ -182,6 +167,8 @@ export async function resumeConnectedBrowserWallet(
     const accounts = await getAuthorizedAccounts(provider);
     if (!accounts.length) return null;
 
+    await ensureProviderChain(provider);
+
     const preferredAccount = accounts.find((account) => account.toLowerCase() === expectedAddress) || accounts[0];
     const browserProvider = new BrowserProvider(provider, 'any');
     const signer = await browserProvider.getSigner(preferredAccount);
@@ -213,6 +200,8 @@ export async function resumeConnectedBrowserWallet(
       : await getAuthorizedAccounts(provider);
 
   if (!walletConnectProvider.session || !accounts.length) return null;
+
+  await ensureProviderChain(provider);
 
   const preferredAccount = accounts.find((account) => account.toLowerCase() === expectedAddress) || accounts[0];
   const browserProvider = new BrowserProvider(provider, 'any');
