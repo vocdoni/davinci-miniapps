@@ -278,12 +278,9 @@ export const COPY = {
       missingIndexerUrl: 'Missing VITE_ONCHAIN_CENSUS_INDEXER_URL.',
       missingProcessValuesIndexer: 'Missing process values for indexer bootstrap.',
       missingSequencerUrl: 'Missing VITE_DAVINCI_SEQUENCER_URL.',
-      missingPinataJwt: 'Missing VITE_PINATA_JWT.',
-      missingPinataGatewayUrl: 'Missing VITE_PINATA_GATEWAY_URL.',
       missingSignerOrValues: 'Missing signer or process values for sequencer process creation.',
       missingCensusUri: 'Missing census URI for sequencer process creation.',
       missingProcessId: 'Process creation did not return a process ID.',
-      pinataMetadataUploadFailed: 'Pinata metadata upload failed.',
     },
   },
   explore: {

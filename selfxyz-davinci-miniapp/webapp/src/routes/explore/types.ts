@@ -1,4 +1,4 @@
-export type ExploreFilterReason =
+type ExploreFilterReason =
   | 'ok'
   | 'not_listed'
   | 'missing_scope'

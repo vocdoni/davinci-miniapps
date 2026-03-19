@@ -6,11 +6,11 @@ const mockConnectBrowserWallet = vi.fn();
 const mockResumeConnectedBrowserWallet = vi.fn();
 const mockDisconnectWalletConnection = vi.fn();
 const mockGetInjectedProvider = vi.fn();
+const mockEnsureProviderChain = vi.fn();
 const mockCreateSequencerSdk = vi.fn();
+const mockCacheProcessMetadata = vi.fn();
 const mockGetProcessFromSequencer = vi.fn();
-const mockListProcessesFromSequencer = vi.fn();
 const mockComputeConfigId = vi.fn();
-const mockUploadElectionMetadata = vi.fn();
 
 vi.mock('@vocdoni/davinci-sdk', () => ({
   ProcessStatus: {
@@ -32,16 +32,13 @@ vi.mock('../services/wallet', () => ({
   resumeConnectedBrowserWallet: (...args: unknown[]) => mockResumeConnectedBrowserWallet(...args),
   disconnectWalletConnection: (...args: unknown[]) => mockDisconnectWalletConnection(...args),
   getInjectedProvider: (...args: unknown[]) => mockGetInjectedProvider(...args),
+  ensureProviderChain: (...args: unknown[]) => mockEnsureProviderChain(...args),
 }));
 
 vi.mock('../services/sequencer', () => ({
+  cacheProcessMetadata: (...args: unknown[]) => mockCacheProcessMetadata(...args),
   createSequencerSdk: (...args: unknown[]) => mockCreateSequencerSdk(...args),
   getProcessFromSequencer: (...args: unknown[]) => mockGetProcessFromSequencer(...args),
-  listProcessesFromSequencer: (...args: unknown[]) => mockListProcessesFromSequencer(...args),
-}));
-
-vi.mock('../services/pinata', () => ({
-  uploadElectionMetadata: (...args: unknown[]) => mockUploadElectionMetadata(...args),
 }));
 
 vi.mock('../lib/occ', async () => {
@@ -77,15 +74,16 @@ describe('CreateRoute pipeline retries', () => {
     mockResumeConnectedBrowserWallet.mockReset();
     mockDisconnectWalletConnection.mockReset();
     mockGetInjectedProvider.mockReset();
+    mockEnsureProviderChain.mockReset();
     mockCreateSequencerSdk.mockReset();
+    mockCacheProcessMetadata.mockReset();
     mockGetProcessFromSequencer.mockReset();
 
     mockGetInjectedProvider.mockReturnValue(null);
     mockResumeConnectedBrowserWallet.mockResolvedValue(null);
+    mockEnsureProviderChain.mockResolvedValue(undefined);
     mockComputeConfigId.mockReset();
     mockComputeConfigId.mockReturnValue(`0x${'1'.repeat(64)}`);
-    mockListProcessesFromSequencer.mockReset();
-    mockUploadElectionMetadata.mockReset();
     vi.stubGlobal('fetch', vi.fn());
   });
 
@@ -122,18 +120,19 @@ describe('CreateRoute pipeline retries', () => {
 
       const sdk = {
         init: vi.fn().mockResolvedValue(undefined),
-        api: { sequencer: {} },
+        api: {
+          sequencer: {
+            pushMetadata: vi.fn().mockResolvedValue('metadata-hash'),
+            getMetadataUrl: vi.fn().mockReturnValue('ipfs://metadata-hash'),
+          },
+        },
         createProcess: vi.fn().mockResolvedValue({
           processId: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           transactionHash: '0xprocesstx',
         }),
       };
 
-      mockUploadElectionMetadata.mockResolvedValue('https://gateway.example.mypinata.cloud/ipfs/bafy-metadata');
       mockCreateSequencerSdk.mockReturnValue(sdk);
-      mockListProcessesFromSequencer.mockResolvedValue([
-        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      ]);
       mockGetProcessFromSequencer.mockResolvedValue({ isAcceptingVotes: true });
 
       let contractsAttempts = 0;
@@ -221,17 +220,23 @@ describe('CreateRoute pipeline retries', () => {
         expect(sdk.createProcess).toHaveBeenCalledTimes(1);
       });
 
-      expect(mockUploadElectionMetadata).toHaveBeenCalledTimes(1);
+      expect(sdk.api.sequencer.pushMetadata).toHaveBeenCalledTimes(1);
+      expect(sdk.api.sequencer.getMetadataUrl).toHaveBeenCalledWith('metadata-hash');
+      expect(mockCacheProcessMetadata).toHaveBeenCalledTimes(1);
       expect(sdk.createProcess).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadataUri: 'https://gateway.example.mypinata.cloud/ipfs/bafy-metadata',
+          metadataUri: 'ipfs://metadata-hash',
         })
       );
 
       await waitFor(() => {
-        expect(mockListProcessesFromSequencer).toHaveBeenCalledTimes(1);
         expect(mockGetProcessFromSequencer).toHaveBeenCalledTimes(1);
       });
+
+      expect(mockGetProcessFromSequencer).toHaveBeenCalledWith(
+        sdk,
+        '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      );
 
       await waitFor(() => {
         expect(screen.getByRole('heading', { name: 'Your voting process is live and ready for the world.' })).toBeInTheDocument();

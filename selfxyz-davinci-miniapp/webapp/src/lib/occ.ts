@@ -43,9 +43,6 @@ export const CONFIG = {
   network: String(env.VITE_NETWORK || 'celo').trim(),
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
-  pinataJwt: String(env.VITE_PINATA_JWT || '').trim(),
-  pinataGatewayUrl: String(env.VITE_PINATA_GATEWAY_URL || '').trim(),
-  pinataPublicGatewayUrl: String(env.VITE_PINATA_PUBLIC_GATEWAY_URL || 'https://gateway.pinata.cloud').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
   selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
 };

@@ -99,19 +99,9 @@ Copy `.env.example` to `.env` and configure:
 | `VITE_NETWORK` | Yes | Network key. Supported in code: `celo`, `staging_celo`. |
 | `VITE_ONCHAIN_CENSUS_INDEXER_URL` | Yes | Base URL for census indexer. |
 | `VITE_DAVINCI_SEQUENCER_URL` | Yes | Sequencer API URL. |
-| `VITE_PINATA_JWT` | Yes | Client-visible Pinata JWT used for public metadata uploads in the create flow. |
-| `VITE_PINATA_GATEWAY_URL` | Yes | Dedicated Pinata gateway domain/host used by the SDK (for example `example-gateway.mypinata.cloud`). |
-| `VITE_PINATA_PUBLIC_GATEWAY_URL` | No | Public gateway base URL used for stored metadata URLs and read fallbacks. Defaults to `https://gateway.pinata.cloud`. |
 | `VITE_DAVINCI_CENSUS_URL` | No | Census API URL used for proof generation. Falls back to indexer URL when empty. |
 | `VITE_SELF_APP_NAME` | No | Display name used in Self payloads. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | Conditional | Required only when no injected wallet is available in creator flow. |
-
-Notes:
-- Metadata upload now uses Pinata from the browser and stores an HTTP gateway URL in the process metadata.
-- The current implementation intentionally uses a client-visible JWT for this flow, so use a token scoped appropriately for public uploads.
-- `VITE_PINATA_GATEWAY_URL` should be the gateway host/domain, not a full `https://` URL.
-- Stored metadata URLs default to the public Pinata gateway so voting/explore pages are not blocked by dedicated-gateway access controls.
-- During local `npm run dev`, Vite proxies Pinata uploads through `/pinata-upload` to avoid browser CORS failures against `uploads.pinata.cloud`.
 
 ## Development
 ```bash

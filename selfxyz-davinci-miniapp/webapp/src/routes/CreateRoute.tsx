@@ -34,12 +34,11 @@ import {
 } from '../lib/occ';
 import { isValidCountryCode, normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
 import { buildAssetUrl } from '../utils/assets';
-import { uploadElectionMetadata } from '../services/pinata';
-import { createSequencerSdk, getProcessFromSequencer, listProcessesFromSequencer } from '../services/sequencer';
+import { cacheProcessMetadata, createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
 import {
   connectBrowserWallet,
   disconnectWalletConnection,
-  getInjectedProvider,
+  ensureProviderChain,
   resumeConnectedBrowserWallet,
   type CreatorWalletConnection,
   type OCCProvider,
@@ -135,6 +134,27 @@ function hasPipelineActivity(pipeline: PipelineStageState[]): boolean {
 
 function hasPipelineError(pipeline: PipelineStageState[]): boolean {
   return pipeline.some((stage) => stage.status === 'error');
+}
+
+function isMissingSequencerProcess(error: unknown): boolean {
+  const status =
+    typeof error === 'object' && error !== null
+      ? Number(
+          (
+            error as {
+              status?: unknown;
+              response?: { status?: unknown };
+            }
+          ).response?.status ?? (error as { status?: unknown }).status
+        )
+      : NaN;
+
+  if (status === 404) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /\b404\b|not found|process.+missing/i.test(message);
 }
 
 function timelineRows(pipeline: PipelineStageState[]) {
@@ -855,6 +875,10 @@ export default function CreateRoute() {
       return `Connected ${connection.address}`;
     }
 
+    if (walletRef.current.provider) {
+      await ensureProviderChain(walletRef.current.provider);
+    }
+
     ctx.provider = walletRef.current.provider;
     ctx.browserProvider = walletRef.current.browserProvider;
     ctx.signer = walletRef.current.signer;
@@ -1060,7 +1084,9 @@ export default function CreateRoute() {
       }),
     };
 
-    const metadataUri = await uploadElectionMetadata(metadata);
+    const hash = await sdk.api.sequencer.pushMetadata(metadata);
+    const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
+    cacheProcessMetadata(metadataUri, metadata);
 
     const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
     const processConfig = {
@@ -1094,33 +1120,30 @@ export default function CreateRoute() {
     const start = Date.now();
     let lastError = '';
     const sdk = ctx.sdk;
+    const processId = normalizeProcessId(ctx.processId);
 
     if (!sdk) {
       throw new Error('Missing sequencer SDK instance for process readiness check.');
     }
+    if (!processId) {
+      throw new Error(COPY.create.errors.missingProcessId);
+    }
 
     while (Date.now() - start < timeoutMs) {
       try {
-        const processIds = await listProcessesFromSequencer(sdk);
-        const processIsListed = processIds.some(
-          (processId) => String(processId || '').toLowerCase() === String(ctx.processId || '').toLowerCase()
-        );
-
-        if (!processIsListed) {
-          lastError = COPY.create.status.processNotAcceptingVotesYet;
-          await wait(3_000);
-          continue;
-        }
-
-        const process = await getProcessFromSequencer(sdk, ctx.processId);
+        const process = await getProcessFromSequencer(sdk, processId);
         if (process && process.isAcceptingVotes === true) {
-          const voteUrl = buildVoteUrl(ctx.processId);
+          const voteUrl = buildVoteUrl(processId);
           setOutputs((previous) => ({ ...previous, voteUrl }));
           return COPY.create.status.processReadyInSequencer;
         }
         lastError = COPY.create.status.processNotAcceptingVotesYet;
       } catch (error) {
-        lastError = error instanceof Error ? error.message : COPY.create.status.sequencerLookupFailed;
+        lastError = isMissingSequencerProcess(error)
+          ? COPY.create.status.processNotAcceptingVotesYet
+          : error instanceof Error
+            ? error.message
+            : COPY.create.status.sequencerLookupFailed;
       }
       await wait(3_000);
     }
