@@ -35,7 +35,7 @@ import {
 } from '../lib/occ';
 import { isValidCountryCode, normalizeCountry, normalizeProcessId, normalizeScope, stripNonAscii } from '../utils/normalization';
 import { buildAssetUrl } from '../utils/assets';
-import { cacheProcessMetadata, createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
+import { createSequencerSdk, getProcessFromSequencer } from '../services/sequencer';
 import {
   connectBrowserWallet,
   disconnectWalletConnection,

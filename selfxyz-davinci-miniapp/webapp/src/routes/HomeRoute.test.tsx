@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import HomeRoute from './HomeRoute';
@@ -6,6 +6,8 @@ import HomeRoute from './HomeRoute';
 describe('HomeRoute', () => {
   beforeEach(() => {
     window.history.pushState({}, '', '/');
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -22,13 +24,33 @@ describe('HomeRoute', () => {
 
     const createLink = screen.getByRole('link', { name: 'Start creating' });
     const exploreLink = screen.getByRole('link', { name: 'Explore live votes' });
+    const createDemoTab = screen.getByRole('button', { name: 'Create a voting process' });
+    const voteDemoTab = screen.getByRole('button', { name: 'Vote in a process' });
+    const createDemo = screen.getByLabelText('Create a voting process demo video') as HTMLVideoElement;
 
     expect(createLink).toHaveAttribute('href', '/create');
     expect(exploreLink).toHaveAttribute('href', '/explore');
 
     expect(screen.getByRole('link', { name: 'Create' })).toHaveAttribute('href', '/create');
     expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/explore');
-    expect(screen.queryByLabelText('Product demo slideshow')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Product demo slideshow')).toBeInTheDocument();
+    expect(createDemoTab).toHaveAttribute('aria-pressed', 'true');
+    expect(voteDemoTab).toHaveAttribute('aria-pressed', 'false');
+    expect(createDemo).toHaveAttribute(
+      'src',
+      'https://davinci-assets.fra1.cdn.digitaloceanspaces.com/demo-create-ask-the-world.mp4'
+    );
+    expect(createDemo.controls).toBe(false);
+    expect(createDemo.loop).toBe(true);
+    expect(createDemo.muted).toBe(true);
+
+    fireEvent.click(voteDemoTab);
+
+    expect(voteDemoTab).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Vote in a process demo video')).toHaveAttribute(
+      'src',
+      'https://davinci-assets.fra1.cdn.digitaloceanspaces.com/demo-vote-ask-the-world.mp4'
+    );
   });
 
   it('rotates the visible protocol description through the list', async () => {

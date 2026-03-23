@@ -159,11 +159,11 @@ export const COPY = {
       items: [
         {
           title: 'Create a voting process',
-          videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+          videoUrl: 'https://davinci-assets.fra1.cdn.digitaloceanspaces.com/demo-create-ask-the-world.mp4',
         },
         {
           title: 'Vote in a process',
-          videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+          videoUrl: 'https://davinci-assets.fra1.cdn.digitaloceanspaces.com/demo-vote-ask-the-world.mp4',
         },
       ],
     },

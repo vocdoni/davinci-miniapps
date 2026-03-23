@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 
 import AppNavbar from '../components/AppNavbar';
+import DemoVideoSection from '../components/DemoVideoSection';
 import InternalLink from '../components/InternalLink';
 import ProtocolFeatureList from '../components/ProtocolFeatureList';
 import RichText from '../components/RichText';
@@ -96,6 +97,12 @@ export default function HomeRoute() {
           </ol>
         </aside>
       </header>
+
+      <DemoVideoSection
+        ariaLabel={COPY.home.demos.ariaLabel}
+        title={COPY.home.demos.title}
+        items={COPY.home.demos.items}
+      />
 
       <section className="home-story-grid">
         <article className="card home-flow-card">

@@ -8,7 +8,6 @@ const mockDisconnectWalletConnection = vi.fn();
 const mockGetInjectedProvider = vi.fn();
 const mockEnsureProviderChain = vi.fn();
 const mockCreateSequencerSdk = vi.fn();
-const mockCacheProcessMetadata = vi.fn();
 const mockGetProcessFromSequencer = vi.fn();
 const mockComputeConfigId = vi.fn();
 
@@ -36,7 +35,6 @@ vi.mock('../services/wallet', () => ({
 }));
 
 vi.mock('../services/sequencer', () => ({
-  cacheProcessMetadata: (...args: unknown[]) => mockCacheProcessMetadata(...args),
   createSequencerSdk: (...args: unknown[]) => mockCreateSequencerSdk(...args),
   getProcessFromSequencer: (...args: unknown[]) => mockGetProcessFromSequencer(...args),
 }));
@@ -84,7 +82,6 @@ describe('CreateRoute pipeline retries', () => {
     mockGetInjectedProvider.mockReset();
     mockEnsureProviderChain.mockReset();
     mockCreateSequencerSdk.mockReset();
-    mockCacheProcessMetadata.mockReset();
     mockGetProcessFromSequencer.mockReset();
 
     mockGetInjectedProvider.mockReturnValue(null);
@@ -230,7 +227,6 @@ describe('CreateRoute pipeline retries', () => {
 
       expect(sdk.api.sequencer.pushMetadata).toHaveBeenCalledTimes(1);
       expect(sdk.api.sequencer.getMetadataUrl).toHaveBeenCalledWith('metadata-hash');
-      expect(mockCacheProcessMetadata).toHaveBeenCalledTimes(1);
       expect(sdk.createProcess).toHaveBeenCalledWith(
         expect.objectContaining({
           metadataUri: 'ipfs://metadata-hash',

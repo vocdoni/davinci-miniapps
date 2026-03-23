@@ -3236,7 +3236,7 @@ button.qr-copy-btn:focus-visible {
 
 #homeView .home-demo-slideshow {
   display: grid;
-  margin-top: clamp(28px, 6vw, 72px) 0;
+  margin: clamp(28px, 6vw, 72px) 0;
 }
 
 #homeView .home-demo-header {
@@ -3245,7 +3245,7 @@ button.qr-copy-btn:focus-visible {
 }
 
 #homeView .home-demo-title {
-  margin: 0;
+  margin-top: 0;
   font-family: 'Inter', sans-serif;
   font-size: clamp(30px, 5vw, 44px);
   font-weight: 700;
@@ -3330,6 +3330,7 @@ button.qr-copy-btn:focus-visible {
   border-radius: 28px;
   background: #060a14;
   box-shadow: 0 28px 54px rgba(18, 25, 43, 0.16);
+  border: 6px solid var(--accent-soft);
 }
 
 #homeView .home-demo-video {
