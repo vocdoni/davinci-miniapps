@@ -230,6 +230,9 @@ describe('CreateRoute pipeline retries', () => {
       expect(sdk.createProcess).toHaveBeenCalledWith(
         expect.objectContaining({
           metadataUri: 'ipfs://metadata-hash',
+          ballot: expect.not.objectContaining({
+            costFromWeight: expect.anything(),
+          }),
         })
       );
 

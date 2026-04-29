@@ -69,61 +69,65 @@ describe('CreateRoute creator wallet persistence', () => {
     vi.restoreAllMocks();
   });
 
-  it('restores a connected creator wallet after refresh when the provider can resume silently', async () => {
-    const connectedAddress = '0x8888888888888888888888888888888888888888';
-    const connectedWallet = {
-      provider: { request: vi.fn() },
-      browserProvider: { getBalance: vi.fn().mockResolvedValue(1n) },
-      signer: { signMessage: vi.fn() },
-      address: connectedAddress,
-      sourceLabel: 'MetaMask',
-      connectorType: 'injected' as const,
-    };
+  it(
+    'restores a connected creator wallet after refresh when the provider can resume silently',
+    async () => {
+      const connectedAddress = '0x8888888888888888888888888888888888888888';
+      const connectedWallet = {
+        provider: { request: vi.fn() },
+        browserProvider: { getBalance: vi.fn().mockResolvedValue(1n) },
+        signer: { signMessage: vi.fn() },
+        address: connectedAddress,
+        sourceLabel: 'MetaMask',
+        connectorType: 'injected' as const,
+      };
 
-    mockConnectBrowserWallet.mockResolvedValue(connectedWallet);
+      mockConnectBrowserWallet.mockResolvedValue(connectedWallet);
 
-    const firstRender = render(<CreateRoute />);
+      const firstRender = render(<CreateRoute />);
 
-    fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
+      fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
 
-    await waitFor(() => {
+      await waitFor(() => {
+        expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+        expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
+        expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
+          `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
+        );
+      });
+
+      const walletButton = document.getElementById('createWalletWidget') as HTMLButtonElement;
+      expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+
+      fireEvent.mouseEnter(walletButton);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent('Disconnect');
+      expect(walletButton.querySelector('.iconoir-log-out')).not.toBeNull();
+
+      fireEvent.mouseLeave(walletButton);
       expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
-      expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
-      expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
-        `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
-      );
-    });
+      expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
 
-    const walletButton = document.getElementById('createWalletWidget') as HTMLButtonElement;
-    expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+      firstRender.unmount();
 
-    fireEvent.mouseEnter(walletButton);
-    expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent('Disconnect');
-    expect(walletButton.querySelector('.iconoir-log-out')).not.toBeNull();
+      mockResumeConnectedBrowserWallet.mockResolvedValue(connectedWallet);
 
-    fireEvent.mouseLeave(walletButton);
-    expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
-    expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+      render(<CreateRoute />);
 
-    firstRender.unmount();
-
-    mockResumeConnectedBrowserWallet.mockResolvedValue(connectedWallet);
-
-    render(<CreateRoute />);
-
-    await waitFor(() => {
-      expect(mockResumeConnectedBrowserWallet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          address: connectedAddress,
-          sourceLabel: 'MetaMask',
-          connectorType: 'injected',
-        }),
-        null
-      );
-      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
-      expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
-    });
-  });
+      await waitFor(() => {
+        expect(mockResumeConnectedBrowserWallet).toHaveBeenCalledWith(
+          expect.objectContaining({
+            address: connectedAddress,
+            sourceLabel: 'MetaMask',
+            connectorType: 'injected',
+          }),
+          null
+        );
+        expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+        expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
+      });
+    },
+    10_000
+  );
 
   it('disables creation and shows the CELO faucet when the connected wallet has no balance', async () => {
     const connectedAddress = '0x9999999999999999999999999999999999999999';

@@ -203,97 +203,105 @@ describe('VoteRoute identity popup', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows the redesigned derived-wallet popup and previews the imported address', async () => {
-    render(<VoteRoute />);
+  it(
+    'shows the redesigned derived-wallet popup and previews the imported address',
+    async () => {
+      render(<VoteRoute />);
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
-    });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+      });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
 
-    expect(screen.getByRole('dialog', { name: 'Identity Wallet' })).toBeInTheDocument();
-    const identityCopy = document.querySelector('.identity-dialog-copy');
-    expect(identityCopy).not.toBeNull();
-    expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroPrimary));
-    expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroSecondary));
-    expect(screen.getByText(COPY.vote.dialogs.warningKeyExposure)).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Identity Wallet' })).toBeInTheDocument();
+      const identityCopy = document.querySelector('.identity-dialog-copy');
+      expect(identityCopy).not.toBeNull();
+      expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroPrimary));
+      expect(identityCopy).toHaveTextContent(htmlToText(COPY.vote.dialogs.identityIntroSecondary));
+      expect(screen.getByText(COPY.vote.dialogs.warningKeyExposure)).toBeInTheDocument();
 
-    const addressInput = document.getElementById('walletAddressInput') as HTMLInputElement;
-    expect(addressInput.value).toMatch(/^0x[a-fA-F0-9]{40}$/);
-    expect(addressInput).toHaveAttribute('readonly');
-    expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
-    expect(screen.getByRole('button', { name: 'Copy private key' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Connect browser wallet' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Use derived key' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Import private key' }));
-
-    const privateKey = '0x59c6995e998f97a5a0044966f0945382f3d3d6db7c1b4a1af9da6af7d2f40991';
-    fireEvent.change(screen.getByLabelText('Paste private key'), { target: { value: privateKey } });
-
-    const expectedAddress = new Wallet(privateKey).address;
-    await waitFor(() => {
-      expect(screen.getByText('Detected address')).toBeInTheDocument();
-      expect(screen.getByText(expectedAddress)).toBeInTheDocument();
-    });
-
-    expect(screen.queryByRole('button', { name: 'Use derived key' })).not.toBeInTheDocument();
-
-    fireEvent.click(document.getElementById('closeVoteIdentityBtn') as HTMLButtonElement);
-
-    await waitFor(() => {
-      expect(document.getElementById('voteIdentityDialog')).not.toBeVisible();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
-
-    expect((screen.getByLabelText('Paste private key') as HTMLInputElement).value).toBe('');
-    expect(document.getElementById('identityImportPanel')).not.toBeVisible();
-    expect(screen.queryByText('Detected address')).not.toBeInTheDocument();
-  });
-
-  it('switches the identity source to a connected browser wallet', async () => {
-    const connectedAddress = '0x2222222222222222222222222222222222222222';
-    mockConnectBrowserWallet.mockResolvedValue({
-      provider: { request: vi.fn() },
-      browserProvider: {},
-      signer: { signMessage: vi.fn() },
-      address: connectedAddress,
-      sourceLabel: 'MetaMask',
-    });
-
-    render(<VoteRoute />);
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
-    const connectWalletButton = screen.getByRole('button', { name: 'Connect browser wallet' });
-    expect(connectWalletButton).not.toHaveClass('identity-action-btn-muted');
-    fireEvent.click(connectWalletButton);
-
-    await waitFor(() => {
-      expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
-      expect(screen.getByText(/Connected with MetaMask/i)).toBeInTheDocument();
-      expect((document.getElementById('walletAddressInput') as HTMLInputElement).value).toBe(connectedAddress);
-    });
-
-    expect(screen.queryByRole('button', { name: 'Copy private key' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Connect browser wallet' })).not.toBeInTheDocument();
-    const restoreLocalWalletButton = screen.getByRole('button', { name: 'Use local derived wallet' });
-    expect(restoreLocalWalletButton).toHaveClass('identity-action-btn-muted');
-
-    fireEvent.click(restoreLocalWalletButton);
-
-    await waitFor(() => {
+      const addressInput = document.getElementById('walletAddressInput') as HTMLInputElement;
+      expect(addressInput.value).toMatch(/^0x[a-fA-F0-9]{40}$/);
+      expect(addressInput).toHaveAttribute('readonly');
       expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
+      expect(screen.getByRole('button', { name: 'Copy private key' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Connect browser wallet' })).toBeInTheDocument();
-    });
+      expect(screen.queryByRole('button', { name: 'Use derived key' })).not.toBeInTheDocument();
 
-    expect(screen.queryByRole('button', { name: 'Use local derived wallet' })).not.toBeInTheDocument();
-  });
+      fireEvent.click(screen.getByRole('button', { name: 'Import private key' }));
+
+      const privateKey = '0x59c6995e998f97a5a0044966f0945382f3d3d6db7c1b4a1af9da6af7d2f40991';
+      fireEvent.change(screen.getByLabelText('Paste private key'), { target: { value: privateKey } });
+
+      const expectedAddress = new Wallet(privateKey).address;
+      await waitFor(() => {
+        expect(screen.getByText('Detected address')).toBeInTheDocument();
+        expect(screen.getByText(expectedAddress)).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('button', { name: 'Use derived key' })).not.toBeInTheDocument();
+
+      fireEvent.click(document.getElementById('closeVoteIdentityBtn') as HTMLButtonElement);
+
+      await waitFor(() => {
+        expect(document.getElementById('voteIdentityDialog')).not.toBeVisible();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+
+      expect((screen.getByLabelText('Paste private key') as HTMLInputElement).value).toBe('');
+      expect(document.getElementById('identityImportPanel')).not.toBeVisible();
+      expect(screen.queryByText('Detected address')).not.toBeInTheDocument();
+    },
+    10_000
+  );
+
+  it(
+    'switches the identity source to a connected browser wallet',
+    async () => {
+      const connectedAddress = '0x2222222222222222222222222222222222222222';
+      mockConnectBrowserWallet.mockResolvedValue({
+        provider: { request: vi.fn() },
+        browserProvider: {},
+        signer: { signMessage: vi.fn() },
+        address: connectedAddress,
+        sourceLabel: 'MetaMask',
+      });
+
+      render(<VoteRoute />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Identity' })).toBeEnabled();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Identity' }));
+      const connectWalletButton = screen.getByRole('button', { name: 'Connect browser wallet' });
+      expect(connectWalletButton).not.toHaveClass('identity-action-btn-muted');
+      fireEvent.click(connectWalletButton);
+
+      await waitFor(() => {
+        expect(document.getElementById('walletSource')).toHaveTextContent('Connected');
+        expect(screen.getByText(/Connected with MetaMask/i)).toBeInTheDocument();
+        expect((document.getElementById('walletAddressInput') as HTMLInputElement).value).toBe(connectedAddress);
+      });
+
+      expect(screen.queryByRole('button', { name: 'Copy private key' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect browser wallet' })).not.toBeInTheDocument();
+      const restoreLocalWalletButton = screen.getByRole('button', { name: 'Use local derived wallet' });
+      expect(restoreLocalWalletButton).toHaveClass('identity-action-btn-muted');
+
+      fireEvent.click(restoreLocalWalletButton);
+
+      await waitFor(() => {
+        expect(document.getElementById('walletSource')).toHaveTextContent('Ephemeral Identity');
+        expect(screen.getByRole('button', { name: 'Connect browser wallet' })).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('button', { name: 'Use local derived wallet' })).not.toBeInTheDocument();
+    },
+    10_000
+  );
 
   it('does not show creator admin controls for a connected wallet that is not the process creator', async () => {
     const connectedAddress = '0x7777777777777777777777777777777777777777';

@@ -1,5 +1,5 @@
 import { DavinciSDK } from '@vocdoni/davinci-sdk';
-import type { ElectionMetadata, GetProcessResponse } from '@vocdoni/davinci-sdk';
+import type { DavinciSDKConfig, ElectionMetadata, GetProcessResponse } from '@vocdoni/davinci-sdk';
 
 import { normalizeProcessId } from '../utils/normalization';
 
@@ -25,12 +25,16 @@ type LegacySequencerApi = DavinciSDK['api']['sequencer'] & {
   getProcessAddressWeight?: (processId: string, address: string) => Promise<string | number | bigint | SequencerWeightResponse>;
 };
 
+type SequencerSdkOptions = Omit<DavinciSDKConfig, 'signer'> & {
+  signer?: DavinciSDKConfig['signer'];
+};
+
 function isSequencerMetadata(value: unknown): value is SequencerMetadata {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function createSequencerSdk(options: { sequencerUrl: string; signer?: unknown; censusUrl?: string }): DavinciSDK {
-  return new DavinciSDK(options as any);
+export function createSequencerSdk(options: SequencerSdkOptions): DavinciSDK {
+  return new DavinciSDK(options as DavinciSDKConfig);
 }
 
 export async function pingSequencer(sdk: DavinciSDK): Promise<void> {

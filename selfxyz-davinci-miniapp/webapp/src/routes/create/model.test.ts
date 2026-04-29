@@ -52,6 +52,16 @@ describe('create route model', () => {
         { title: 'Abstain', value: 2 },
       ],
     });
+    expect(values.ballot).toEqual({
+      numFields: 1,
+      groupSize: 1,
+      maxValue: '2',
+      minValue: '0',
+      uniqueValues: false,
+      costExponent: 1,
+      maxValueSum: '2',
+      minValueSum: '0',
+    });
   });
 
   it('keeps at least two options and reindexes after removal', () => {
