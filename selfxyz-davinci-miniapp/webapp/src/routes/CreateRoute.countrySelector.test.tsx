@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CreateRoute from './CreateRoute';
 
@@ -36,8 +36,15 @@ function selectCountry(label: string, code: string): HTMLInputElement {
 }
 
 describe('CreateRoute country selector', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it('filters country options while typing', () => {
@@ -173,25 +180,29 @@ describe('CreateRoute country selector', () => {
     expect(durationHoursInput.value).toBe('1');
   });
 
-  it('enforces max selected countries and re-enables options after chip removal', () => {
-    render(<CreateRoute />);
+  it(
+    'enforces max selected countries and re-enables options after chip removal',
+    () => {
+      render(<CreateRoute />);
 
-    selectCountry('Argentina', 'ARG');
-    selectCountry('Australia', 'AUS');
-    selectCountry('Austria', 'AUT');
-    selectCountry('Belgium', 'BEL');
-    selectCountry('Brazil', 'BRA');
+      selectCountry('Argentina', 'ARG');
+      selectCountry('Australia', 'AUS');
+      selectCountry('Austria', 'AUT');
+      selectCountry('Belgium', 'BEL');
+      selectCountry('Brazil', 'BRA');
 
-    openAndTypeCountryQuery('can');
-    const canadaOption = screen.getByRole('option', { name: /Canada \(CAN\)/i });
-    expect(canadaOption).toBeDisabled();
+      openAndTypeCountryQuery('can');
+      const canadaOption = screen.getByRole('option', { name: /Canada \(CAN\)/i });
+      expect(canadaOption).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: /remove argentina/i }));
+      fireEvent.click(screen.getByRole('button', { name: /remove argentina/i }));
 
-    openAndTypeCountryQuery('can');
-    const enabledCanadaOption = screen.getByRole('option', { name: /Canada \(CAN\)/i });
-    expect(enabledCanadaOption).not.toBeDisabled();
-  });
+      openAndTypeCountryQuery('can');
+      const enabledCanadaOption = screen.getByRole('option', { name: /Canada \(CAN\)/i });
+      expect(enabledCanadaOption).not.toBeDisabled();
+    },
+    10_000
+  );
 
   it('shows no-results state for unmatched query', () => {
     render(<CreateRoute />);

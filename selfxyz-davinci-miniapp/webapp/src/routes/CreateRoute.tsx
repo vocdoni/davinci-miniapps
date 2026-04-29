@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DavinciSDK, ElectionResultsTypeNames, OnchainCensus } from '@vocdoni/davinci-sdk';
-import type { ElectionMetadata } from '@vocdoni/davinci-sdk';
+import type { ElectionMetadata, ProcessConfig } from '@vocdoni/davinci-sdk';
 
 import { COPY } from '../copy';
 import {
@@ -1102,7 +1102,7 @@ export default function CreateRoute() {
       const metadataUri = sdk.api.sequencer.getMetadataUrl(hash);
 
       const census = new OnchainCensus(ctx.contractAddress, sequencerCensusUri);
-      const processConfig = {
+      const processConfig: ProcessConfig = {
         metadataUri,
         census,
         maxVoters: ctx.values.maxVoters,
