@@ -24,10 +24,10 @@ function buildBallotFromChoices(numChoices: number): CreateValues['ballot'] {
   const maxValue = Math.max(0, numChoices - 1);
   return {
     numFields: 1,
+    groupSize: 1,
     maxValue: String(maxValue),
     minValue: '0',
     uniqueValues: false,
-    costFromWeight: false,
     costExponent: 1,
     maxValueSum: String(maxValue),
     minValueSum: '0',

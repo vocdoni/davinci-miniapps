@@ -1,5 +1,6 @@
 import { AbiCoder, Interface, Wallet, keccak256, randomBytes, sha256, toUtf8Bytes } from 'ethers';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
+import type { BallotMode } from '@vocdoni/davinci-sdk';
 import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 
 import artifact from '../artifacts/OpenCitizenCensus.json';
@@ -223,16 +224,7 @@ export interface CreateValues {
   startDate: Date;
   listInExplore: boolean;
   question: CreateQuestion;
-  ballot: {
-    numFields: number;
-    maxValue: string;
-    minValue: string;
-    uniqueValues: boolean;
-    costFromWeight: boolean;
-    costExponent: number;
-    maxValueSum: string;
-    minValueSum: string;
-  };
+  ballot: BallotMode;
 }
 
 export interface ProcessMetaSnapshot {
