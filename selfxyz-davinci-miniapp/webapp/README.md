@@ -96,9 +96,10 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable | Required | Description |
 |---|---|---|
-| `VITE_NETWORK` | Yes | Network key. Supported in code: `celo`, `staging_celo`. |
+| `VITE_NETWORK` | Yes | Network key. Supported in code: `celo`, `staging_celo`, `sepolia`. |
+| `VITE_CHAIN_ID` | Yes | Numeric chain id. Must match the chain id of the selected `VITE_NETWORK`; the app refuses to start if they disagree. Passed to davinci-sdk multichain calls. |
 | `VITE_ONCHAIN_CENSUS_INDEXER_URL` | Yes | Base URL for census indexer. |
-| `VITE_DAVINCI_SEQUENCER_URL` | Yes | Sequencer API URL. |
+| `VITE_DAVINCI_SEQUENCER_URL` | Yes | Sequencer API URL. The sequencer's `/info` networks map must include `VITE_CHAIN_ID`; otherwise the app routes to the maintenance screen. |
 | `VITE_DAVINCI_CENSUS_URL` | No | Census API URL used for proof generation. Falls back to indexer URL when empty. |
 | `VITE_SELF_APP_NAME` | No | Display name used in Self payloads. |
 | `VITE_WALLETCONNECT_PROJECT_ID` | Conditional | Required only when no injected wallet is available in creator flow. |
