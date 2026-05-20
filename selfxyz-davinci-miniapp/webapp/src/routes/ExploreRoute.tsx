@@ -6,7 +6,7 @@ import AppNavbar from '../components/AppNavbar';
 import InternalLink from '../components/InternalLink';
 import RichText from '../components/RichText';
 import { COPY } from '../copy';
-import { CONFIG } from '../lib/occ';
+import { ACTIVE_NETWORK, CONFIG } from '../lib/occ';
 import {
   listProcessesFromSequencer,
   createSequencerSdk,
@@ -102,13 +102,13 @@ export default function ExploreRoute() {
     []
   );
 
-  const getSdk = useCallback(() => {
+  const getSdk = useCallback(async (): Promise<DavinciSDK> => {
     if (sdkRef.current) return sdkRef.current;
     const sequencerUrl = String(CONFIG.davinciSequencerUrl || '').trim();
     if (!sequencerUrl) {
       throw new Error(COPY.explore.missingSequencerUrl);
     }
-    const sdk = createSequencerSdk({ sequencerUrl });
+    const sdk = await createSequencerSdk({ sequencerUrl });
     sdkRef.current = sdk;
     return sdk;
   }, []);
@@ -119,7 +119,7 @@ export default function ExploreRoute() {
       if (cached && !force) return cached;
 
       try {
-        const process = await getProcessFromSequencer(getSdk(), processId);
+        const process = await getProcessFromSequencer(await getSdk(), processId);
         processCacheRef.current.set(processId, process);
         return process;
       } catch {
@@ -136,7 +136,7 @@ export default function ExploreRoute() {
       const cached = metadataCacheRef.current.get(processId);
       if (cached && (!metadataUri || cached.uri === metadataUri)) return cached.metadata;
 
-      const metadata = await fetchProcessMetadata(getSdk(), process);
+      const metadata = await fetchProcessMetadata(await getSdk(), process);
       metadataCacheRef.current.set(processId, {
         uri: metadataUri,
         metadata,
@@ -176,7 +176,7 @@ export default function ExploreRoute() {
   );
 
   const loadSortedProcessIds = useCallback(async (): Promise<string[]> => {
-    const processIds = await listProcessesFromSequencer(getSdk());
+    const processIds = await listProcessesFromSequencer(await getSdk(), ACTIVE_NETWORK.chainId);
     const uniqueProcessIds = Array.from(new Set(processIds.map((processId) => normalizeProcessId(processId)).filter(Boolean)));
     if (!uniqueProcessIds.length) return [];
 
