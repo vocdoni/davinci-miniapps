@@ -41,6 +41,17 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     rpcUrl: 'https://forno.celo-sepolia.celo-testnet.org',
     explorerBaseUrl: 'https://celo-sepolia.blockscout.com',
   },
+  sepolia: {
+    chainId: 11155111,
+    chainHex: '0xaa36a7',
+    label: 'Ethereum Sepolia',
+    // TODO: deployed Self verification hub address on Ethereum Sepolia
+    hubAddress: '0x0000000000000000000000000000000000000000',
+    // TODO: deployed PoseidonT3 library address on Ethereum Sepolia
+    poseidonT3Address: '0x0000000000000000000000000000000000000000',
+    rpcUrl: 'https://ethereum-sepolia.publicnode.com',
+    explorerBaseUrl: 'https://sepolia.etherscan.io',
+  },
 };
 
 export const CONFIG = {
