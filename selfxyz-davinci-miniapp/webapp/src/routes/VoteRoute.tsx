@@ -915,7 +915,7 @@ export default function VoteRoute() {
       }
 
       try {
-        const sdk = createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
+        const sdk = await createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
         await sdk.init();
         const process = await getProcessFromSequencer(sdk, normalizedProcessId);
         const metadata = await fetchProcessMetadata(sdk, process);
@@ -1289,7 +1289,7 @@ export default function VoteRoute() {
         setVoteBallot((previous) => ({ ...previous, submitting: true }));
         setVoteStatusMessage(COPY.vote.status.submittingVote);
 
-        const sdk = createSequencerSdk({
+        const sdk = await createSequencerSdk({
           signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
           censusUrl,
@@ -1589,7 +1589,7 @@ export default function VoteRoute() {
 
     void (async () => {
       try {
-        const sdk = createSequencerSdk({
+        const sdk = await createSequencerSdk({
           signer: connectedWallet.signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
         });
@@ -1631,7 +1631,7 @@ export default function VoteRoute() {
       let readSdk = resolutionRef.current.sdk;
 
       if (!readSdk) {
-        readSdk = createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
+        readSdk = await createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
         await readSdk.init();
       }
 
@@ -1717,7 +1717,7 @@ export default function VoteRoute() {
       try {
         setVoteAdmin((previous) => ({ ...previous, action }));
 
-        const sdk = createSequencerSdk({
+        const sdk = await createSequencerSdk({
           signer: connection.signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
         });
