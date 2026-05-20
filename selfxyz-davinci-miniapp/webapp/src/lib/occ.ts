@@ -55,7 +55,8 @@ export const NETWORKS: Record<string, NetworkConfig> = {
 };
 
 export const CONFIG = {
-  network: String(env.VITE_NETWORK || 'celo').trim(),
+  network: String(env.VITE_NETWORK || '').trim(),
+  chainId: Number(env.VITE_CHAIN_ID),
   onchainIndexerUrl: String(env.VITE_ONCHAIN_CENSUS_INDEXER_URL || '').trim(),
   davinciSequencerUrl: String(env.VITE_DAVINCI_SEQUENCER_URL || '').trim(),
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
@@ -63,7 +64,26 @@ export const CONFIG = {
   txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
 };
 
-export const ACTIVE_NETWORK = NETWORKS[CONFIG.network] || NETWORKS.celo;
+function resolveActiveNetwork(): NetworkConfig {
+  const supportedKeys = Object.keys(NETWORKS).join(', ');
+  const networkEntry = NETWORKS[CONFIG.network];
+  if (!networkEntry) {
+    throw new Error(
+      `VITE_NETWORK="${CONFIG.network}" is not a supported network key. Supported: ${supportedKeys}.`
+    );
+  }
+  if (!Number.isFinite(CONFIG.chainId)) {
+    throw new Error('VITE_CHAIN_ID must be a finite numeric chain id.');
+  }
+  if (networkEntry.chainId !== CONFIG.chainId) {
+    throw new Error(
+      `chain id mismatch: VITE_NETWORK="${CONFIG.network}" implies chainId=${networkEntry.chainId} but VITE_CHAIN_ID=${CONFIG.chainId}.`
+    );
+  }
+  return networkEntry;
+}
+
+export const ACTIVE_NETWORK = resolveActiveNetwork();
 
 export const EMPTY_COUNTRIES = [0n, 0n, 0n, 0n] as const;
 export const EMPTY_OFAC = [false, false, false] as const;
