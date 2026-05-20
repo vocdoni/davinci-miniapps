@@ -1,6 +1,7 @@
 import { DavinciSDK } from '@vocdoni/davinci-sdk';
 import type { DavinciSDKConfig, ElectionMetadata, GetProcessResponse } from '@vocdoni/davinci-sdk';
 
+import { ACTIVE_NETWORK } from '../lib/occ';
 import { normalizeProcessId } from '../utils/normalization';
 
 interface SequencerWeightResponse {
@@ -33,7 +34,20 @@ function isSequencerMetadata(value: unknown): value is SequencerMetadata {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function createSequencerSdk(options: SequencerSdkOptions): DavinciSDK {
+export async function createSequencerSdk(options: SequencerSdkOptions): Promise<DavinciSDK> {
+  if (options.signer) {
+    const provider = options.signer.provider;
+    if (!provider || typeof provider.getNetwork !== 'function') {
+      throw new Error('createSequencerSdk: signer must have a provider with getNetwork().');
+    }
+    const network = await provider.getNetwork();
+    const signerChainId = Number(network.chainId);
+    if (signerChainId !== ACTIVE_NETWORK.chainId) {
+      throw new Error(
+        `Signer is on chain ${signerChainId}, expected ${ACTIVE_NETWORK.chainId}. Switch your wallet to the configured network and retry.`
+      );
+    }
+  }
   return new DavinciSDK(options as DavinciSDKConfig);
 }
 
@@ -75,8 +89,8 @@ export async function fetchProcessMetadata(sdk: DavinciSDK, process: SequencerPr
   }
 }
 
-export async function listProcessesFromSequencer(sdk: DavinciSDK): Promise<string[]> {
-  const list = await sdk?.api?.sequencer?.listProcesses?.();
+export async function listProcessesFromSequencer(sdk: DavinciSDK, chainId: number): Promise<string[]> {
+  const list = await sdk?.api?.sequencer?.listProcesses?.(chainId);
   if (!Array.isArray(list)) return [];
   return list.map((processId) => normalizeProcessId(processId)).filter(Boolean);
 }

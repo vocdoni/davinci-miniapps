@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../lib/occ', () => ({
+  ACTIVE_NETWORK: { chainId: 42220 },
+}));
+
 let fetchProcessMetadata: typeof import('./sequencer').fetchProcessMetadata;
 
 describe('fetchProcessMetadata', () => {
