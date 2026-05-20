@@ -1049,7 +1049,7 @@ export default function CreateRoute() {
         throw new Error(COPY.create.errors.missingSignerOrValues);
       }
 
-      const sdk = createSequencerSdk({
+      const sdk = await createSequencerSdk({
         signer: ctx.signer,
         sequencerUrl: CONFIG.davinciSequencerUrl,
       });
