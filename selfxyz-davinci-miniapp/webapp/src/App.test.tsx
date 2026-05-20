@@ -14,6 +14,7 @@ import {
 const mockCreateSequencerSdk = vi.fn();
 const mockPingSequencer = vi.fn();
 const mockPingIndexer = vi.fn();
+const mockGetInfo = vi.fn();
 const FAILED_ROUND_MS = (HEALTH_CHECK_MAX_ATTEMPTS - 1) * HEALTH_CHECK_RETRY_DELAY_MS;
 
 function failMockNTimes(mockFn: ReturnType<typeof vi.fn>, times: number, message: string) {
@@ -29,6 +30,7 @@ vi.mock('./lib/occ', () => ({
     davinciSequencerUrl: 'https://sequencer.example',
     onchainIndexerUrl: 'https://indexer.example',
   },
+  ACTIVE_NETWORK: { chainId: 42220 },
 }));
 
 vi.mock('./services/sequencer', () => ({
@@ -83,9 +85,13 @@ describe('App sequencer maintenance guard', () => {
     mockCreateSequencerSdk.mockReset();
     mockPingSequencer.mockReset();
     mockPingIndexer.mockReset();
-    mockCreateSequencerSdk.mockReturnValue({ api: { sequencer: {} } });
+    mockGetInfo.mockReset();
+    mockCreateSequencerSdk.mockResolvedValue({ api: { sequencer: { getInfo: mockGetInfo } } });
     mockPingSequencer.mockResolvedValue(undefined);
     mockPingIndexer.mockResolvedValue(undefined);
+    mockGetInfo.mockResolvedValue({
+      networks: { celo: { chainID: 42220, shortName: 'celo', processRegistryContract: '0x0', processIDVersion: '0x0' } },
+    });
   });
 
   afterEach(() => {
@@ -228,5 +234,38 @@ describe('App sequencer maintenance guard', () => {
     await flushRender();
 
     expect(screen.getByTestId('support-popup')).toHaveTextContent('open');
+  });
+
+  it('redirects to maintenance when the sequencer does not serve the configured chain', async () => {
+    mockGetInfo.mockResolvedValue({
+      networks: { sepolia: { chainID: 11155111, shortName: 'sepolia', processRegistryContract: '0x0', processIDVersion: '0x0' } },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/create']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await flushRender();
+    expect(screen.getByText('Create route')).toBeInTheDocument();
+
+    await advanceCheckWindow(FAILED_ROUND_MS + UNHEALTHY_SERVICE_POLL_MS + FAILED_ROUND_MS);
+    expect(screen.getByRole('heading', { name: COPY.app.maintenance.title })).toBeInTheDocument();
+  });
+
+  it('calls getInfo only once across healthy rounds (cached)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/create']}>
+        <App />
+      </MemoryRouter>
+    );
+
+    await flushRender();
+    expect(mockGetInfo).toHaveBeenCalledTimes(1);
+
+    await advanceCheckWindow(HEALTHY_SERVICE_POLL_MS);
+    expect(mockPingSequencer).toHaveBeenCalledTimes(2);
+    expect(mockGetInfo).toHaveBeenCalledTimes(1);
   });
 });

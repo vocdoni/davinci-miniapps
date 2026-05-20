@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { DavinciSDK } from '@vocdoni/davinci-sdk';
 
-import { CONFIG } from '../lib/occ';
+import { ACTIVE_NETWORK, CONFIG } from '../lib/occ';
 import { pingIndexer } from '../services/indexer';
 import {
   type HealthCheckService,
@@ -29,6 +29,7 @@ export default function SequencerMaintenanceGuard() {
   const isMaintenanceRoute = location.pathname === MAINTENANCE_ROUTE;
   const navigateRef = useRef(navigate);
   const sdkRef = useRef<DavinciSDK | null>(null);
+  const chainSupportConfirmedRef = useRef(false);
   const lastHealthyRouteRef = useRef(DEFAULT_ROUTE);
   const isMaintenanceRouteRef = useRef(isMaintenanceRoute);
   const healthStateRef = useRef<MaintenanceHealthState>(isMaintenanceRoute ? 'maintenance' : 'healthy');
@@ -69,10 +70,6 @@ export default function SequencerMaintenanceGuard() {
 
     if (!sequencerUrl && !indexerUrl) return;
 
-    if (sequencerUrl && !sdkRef.current) {
-      sdkRef.current = createSequencerSdk({ sequencerUrl });
-    }
-
     let cancelled = false;
 
     const services: HealthCheckService[] = [];
@@ -81,11 +78,21 @@ export default function SequencerMaintenanceGuard() {
       services.push({
         label: 'Sequencer',
         check: async () => {
-          const sdk = sdkRef.current;
-          if (!sdk) {
-            throw new Error('Sequencer SDK is unavailable.');
+          if (!sdkRef.current) {
+            sdkRef.current = await createSequencerSdk({ sequencerUrl });
           }
+          const sdk = sdkRef.current;
           await pingSequencer(sdk);
+          if (!chainSupportConfirmedRef.current) {
+            const info = await sdk.api.sequencer.getInfo();
+            const supported = Object.values(info?.networks || {}).some(
+              (network) => Number((network as { chainID: number }).chainID) === ACTIVE_NETWORK.chainId
+            );
+            if (!supported) {
+              throw new Error(`Sequencer does not serve configured chain ${ACTIVE_NETWORK.chainId}.`);
+            }
+            chainSupportConfirmedRef.current = true;
+          }
         },
       });
     }
