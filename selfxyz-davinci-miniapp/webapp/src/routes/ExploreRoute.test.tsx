@@ -119,6 +119,7 @@ describe('ExploreRoute', () => {
     expect(screen.queryByText('Invalid process')).not.toBeInTheDocument();
     const link = screen.getByRole('link', { name: /question a/i });
     expect(link).toHaveAttribute('href', `/vote/${encodeURIComponent(id1)}`);
+    expect(mockListProcessesFromSequencer).toHaveBeenCalledWith(expect.anything(), expect.any(Number));
   });
 
   it('supports paginated load more for additional compatible rows', async () => {
