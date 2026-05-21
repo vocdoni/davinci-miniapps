@@ -48,7 +48,11 @@ export async function createSequencerSdk(options: SequencerSdkOptions): Promise<
       );
     }
   }
-  return new DavinciSDK(options as DavinciSDKConfig);
+  const sdk = new DavinciSDK(options as DavinciSDKConfig);
+  if (options.signer?.provider) {
+    await sdk.init();
+  }
+  return sdk;
 }
 
 export async function pingSequencer(sdk: DavinciSDK): Promise<void> {

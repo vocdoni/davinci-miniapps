@@ -1053,7 +1053,6 @@ export default function CreateRoute() {
         signer: ctx.signer,
         sequencerUrl: CONFIG.davinciSequencerUrl,
       });
-      await sdk.init();
 
       const sequencerCensusUri = toSequencerCensusUri(ctx.censusUri);
       if (!sequencerCensusUri) {
