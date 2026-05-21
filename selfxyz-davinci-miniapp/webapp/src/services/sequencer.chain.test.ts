@@ -10,11 +10,13 @@ vi.mock('@vocdoni/davinci-sdk', () => ({
   DavinciSDK: class MockSdk {
     config: unknown;
     api: { sequencer: { listProcesses: ReturnType<typeof vi.fn> } };
+    init: ReturnType<typeof vi.fn>;
     constructor(config: unknown) {
       this.config = config;
       this.api = {
         sequencer: { listProcesses: vi.fn().mockResolvedValue([]) },
       };
+      this.init = vi.fn().mockResolvedValue(undefined);
       sdkInstances.push(this as unknown as Record<string, unknown>);
     }
   },
@@ -62,6 +64,26 @@ describe('createSequencerSdk', () => {
     });
     expect(sdk).toBeDefined();
     expect(signer.provider.getNetwork).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips sdk.init() when no signer is provided', async () => {
+    const sdk = await createSequencerSdk({ sequencerUrl: 'https://seq.example' });
+    const initSpy = (sdk as unknown as { init: ReturnType<typeof vi.fn> }).init;
+    expect(initSpy).not.toHaveBeenCalled();
+  });
+
+  it('calls sdk.init() when a signer with provider is passed', async () => {
+    const signer = {
+      provider: {
+        getNetwork: vi.fn().mockResolvedValue({ chainId: 42220n }),
+      },
+    };
+    const sdk = await createSequencerSdk({
+      sequencerUrl: 'https://seq.example',
+      signer: signer as unknown as never,
+    });
+    const initSpy = (sdk as unknown as { init: ReturnType<typeof vi.fn> }).init;
+    expect(initSpy).toHaveBeenCalledTimes(1);
   });
 });
 

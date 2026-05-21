@@ -916,7 +916,6 @@ export default function VoteRoute() {
 
       try {
         const sdk = await createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
-        await sdk.init();
         const process = await getProcessFromSequencer(sdk, normalizedProcessId);
         const metadata = await fetchProcessMetadata(sdk, process);
 
@@ -1294,7 +1293,6 @@ export default function VoteRoute() {
           sequencerUrl: CONFIG.davinciSequencerUrl,
           censusUrl,
         });
-        await sdk.init();
 
         let ballotValues: number[] = [];
         try {
@@ -1593,7 +1591,6 @@ export default function VoteRoute() {
           signer: connectedWallet.signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
         });
-        await sdk.init();
         const processInfo = await sdk.getProcess(voteResolution.processId);
         const creatorAddress = String(processInfo?.creator || '').trim();
         const isCreator =
@@ -1632,7 +1629,6 @@ export default function VoteRoute() {
 
       if (!readSdk) {
         readSdk = await createSequencerSdk({ sequencerUrl: CONFIG.davinciSequencerUrl });
-        await readSdk.init();
       }
 
       const deadline = Date.now() + ADMIN_STATUS_TIMEOUT_MS;
@@ -1721,7 +1717,6 @@ export default function VoteRoute() {
           signer: connection.signer,
           sequencerUrl: CONFIG.davinciSequencerUrl,
         });
-        await sdk.init();
 
         if (action === 'pause') {
           setVoteStatusMessage(COPY.vote.status.pausingProcess);
