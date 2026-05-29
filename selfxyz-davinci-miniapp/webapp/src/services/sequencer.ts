@@ -34,24 +34,33 @@ function isSequencerMetadata(value: unknown): value is SequencerMetadata {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function createReadOnlySigner(): DavinciSDKConfig['signer'] {
+  return { provider: null } as DavinciSDKConfig['signer'];
+}
+
 export async function createSequencerSdk(options: SequencerSdkOptions): Promise<DavinciSDK> {
   if (options.signer) {
     const provider = options.signer.provider;
-    if (!provider || typeof provider.getNetwork !== 'function') {
-      throw new Error('createSequencerSdk: signer must have a provider with getNetwork().');
+    if (provider) {
+      if (typeof provider.getNetwork !== 'function') {
+        throw new Error('createSequencerSdk: signer provider does not support getNetwork().');
+      }
+      const network = await provider.getNetwork();
+      const signerChainId = Number(network.chainId);
+      if (signerChainId !== ACTIVE_NETWORK.chainId) {
+        throw new Error(
+          `Signer is on chain ${signerChainId}, expected ${ACTIVE_NETWORK.chainId}. Switch your wallet to the configured network and retry.`
+        );
+      }
     }
-    const network = await provider.getNetwork();
-    const signerChainId = Number(network.chainId);
-    if (signerChainId !== ACTIVE_NETWORK.chainId) {
-      throw new Error(
-        `Signer is on chain ${signerChainId}, expected ${ACTIVE_NETWORK.chainId}. Switch your wallet to the configured network and retry.`
-      );
-    }
+    // No provider is valid for vote-only operations (bare Wallet).
   }
-  const sdk = new DavinciSDK(options as DavinciSDKConfig);
-  if (options.signer?.provider) {
-    await sdk.init();
-  }
+  const { signer, ...rest } = options;
+  const sdk = new DavinciSDK({
+    ...rest,
+    signer: signer ?? createReadOnlySigner(),
+  } as DavinciSDKConfig);
+  await sdk.init();
   return sdk;
 }
 

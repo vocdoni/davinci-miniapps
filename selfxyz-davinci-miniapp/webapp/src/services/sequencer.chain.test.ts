@@ -16,7 +16,12 @@ vi.mock('@vocdoni/davinci-sdk', () => ({
       this.api = {
         sequencer: { listProcesses: vi.fn().mockResolvedValue([]) },
       };
-      this.init = vi.fn().mockResolvedValue(undefined);
+      this.init = vi.fn().mockImplementation(async () => {
+        const signer = (this.config as { signer?: { provider?: unknown } } | undefined)?.signer;
+        if (!signer) {
+          throw new Error('Mock SDK init requires a signer.');
+        }
+      });
       sdkInstances.push(this as unknown as Record<string, unknown>);
     }
   },
@@ -36,7 +41,7 @@ beforeEach(async () => {
 });
 
 describe('createSequencerSdk', () => {
-  it('returns an SDK without awaiting any chain probe when no signer is passed', async () => {
+  it('initializes a read-only SDK without crashing when no signer is passed', async () => {
     const sdk = await createSequencerSdk({ sequencerUrl: 'https://seq.example' });
     expect(sdk).toBeDefined();
   });
@@ -50,6 +55,17 @@ describe('createSequencerSdk', () => {
     await expect(
       createSequencerSdk({ sequencerUrl: 'https://seq.example', signer: signer as unknown as never })
     ).rejects.toThrow(/chain.*1.*expected.*42220/i);
+  });
+
+  it('succeeds without chain probe when signer has no provider (bare Wallet)', async () => {
+    const signer = { provider: null };
+    const sdk = await createSequencerSdk({
+      sequencerUrl: 'https://seq.example',
+      signer: signer as unknown as never,
+    });
+    expect(sdk).toBeDefined();
+    const initSpy = (sdk as unknown as { init: ReturnType<typeof vi.fn> }).init;
+    expect(initSpy).toHaveBeenCalledTimes(1);
   });
 
   it('returns the SDK when the signer is on the configured chain', async () => {
@@ -66,10 +82,10 @@ describe('createSequencerSdk', () => {
     expect(signer.provider.getNetwork).toHaveBeenCalledTimes(1);
   });
 
-  it('skips sdk.init() when no signer is provided', async () => {
+  it('calls sdk.init() even when no signer is provided', async () => {
     const sdk = await createSequencerSdk({ sequencerUrl: 'https://seq.example' });
     const initSpy = (sdk as unknown as { init: ReturnType<typeof vi.fn> }).init;
-    expect(initSpy).not.toHaveBeenCalled();
+    expect(initSpy).toHaveBeenCalledTimes(1);
   });
 
   it('calls sdk.init() when a signer with provider is passed', async () => {
