@@ -27,10 +27,8 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    // TODO: fill in deployed OuterCount4 verifier address on Ethereum Sepolia
-    verifierAddress: '',
-    // TODO: fill in deployed PoseidonT3 library address on Ethereum Sepolia
-    poseidonT3Address: '0x0000000000000000000000000000000000000000',
+    verifierAddress: '0xDacEBBE5D4d3d65d941a138bB064FdEbfc3784F6',  // OuterCount4 (HonkVerifier)
+    poseidonT3Address: '0x50050301145D95730112e53284fb5065FD7d0f7D',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
   },
