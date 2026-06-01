@@ -15,33 +15,33 @@ describe('occ.ts startup validation', () => {
   });
 
   it('exposes ACTIVE_NETWORK when VITE_NETWORK and VITE_CHAIN_ID agree', async () => {
-    vi.stubEnv('VITE_NETWORK', 'celo');
-    vi.stubEnv('VITE_CHAIN_ID', '42220');
+    vi.stubEnv('VITE_NETWORK', 'sepolia');
+    vi.stubEnv('VITE_CHAIN_ID', '11155111');
 
     const occ = await import('./occ');
-    expect(occ.ACTIVE_NETWORK.chainId).toBe(42220);
-    expect(occ.CONFIG.network).toBe('celo');
-    expect(occ.CONFIG.chainId).toBe(42220);
+    expect(occ.ACTIVE_NETWORK.chainId).toBe(11155111);
+    expect(occ.CONFIG.network).toBe('sepolia');
+    expect(occ.CONFIG.chainId).toBe(11155111);
   });
 
   it('throws when VITE_NETWORK is not a known key', async () => {
     vi.stubEnv('VITE_NETWORK', 'mars');
-    vi.stubEnv('VITE_CHAIN_ID', '42220');
+    vi.stubEnv('VITE_CHAIN_ID', '11155111');
 
     await expect(import('./occ')).rejects.toThrow(/VITE_NETWORK.*mars/);
   });
 
   it('throws when VITE_CHAIN_ID is not finite', async () => {
-    vi.stubEnv('VITE_NETWORK', 'celo');
+    vi.stubEnv('VITE_NETWORK', 'sepolia');
     vi.stubEnv('VITE_CHAIN_ID', 'not-a-number');
 
     await expect(import('./occ')).rejects.toThrow(/VITE_CHAIN_ID/);
   });
 
   it('throws when VITE_NETWORK and VITE_CHAIN_ID disagree', async () => {
-    vi.stubEnv('VITE_NETWORK', 'celo');
-    vi.stubEnv('VITE_CHAIN_ID', '11155111');
+    vi.stubEnv('VITE_NETWORK', 'sepolia');
+    vi.stubEnv('VITE_CHAIN_ID', '42220');
 
-    await expect(import('./occ')).rejects.toThrow(/chain id mismatch.*42220.*11155111/i);
+    await expect(import('./occ')).rejects.toThrow(/chain id mismatch.*11155111.*42220/i);
   });
 });

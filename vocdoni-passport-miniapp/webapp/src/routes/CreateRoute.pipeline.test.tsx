@@ -51,7 +51,7 @@ vi.mock('../lib/occ', async () => {
     },
     buildCensusUri: (contractAddress: string) =>
       `https://indexer.test/42220/${String(contractAddress || '').toLowerCase()}/graphql`,
-    buildDeployData: () => `0x${'ab'.repeat(100)}`,
+    buildZKPassportCensusDeployData: () => `0x${'ab'.repeat(100)}`,
     computeConfigId: (...args: unknown[]) => mockComputeConfigId(...args),
   };
 });

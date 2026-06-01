@@ -3,7 +3,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import type { BallotMode } from '@vocdoni/davinci-sdk';
 import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 
-import artifact from '../artifacts/OpenCitizenCensus.json';
+import artifact from '../artifacts/ZKPassportCensus.json';
 import { COPY } from '../copy';
 import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { toRecord } from '../utils/records';
@@ -16,38 +16,20 @@ export interface NetworkConfig {
   chainId: number;
   chainHex: string;
   label: string;
-  hubAddress: string;
+  verifierAddress: string;
   poseidonT3Address: string;
   rpcUrl: string;
   explorerBaseUrl: string;
 }
 
 export const NETWORKS: Record<string, NetworkConfig> = {
-  celo: {
-    chainId: 42220,
-    chainHex: '0xa4ec',
-    label: 'Celo Mainnet',
-    hubAddress: '0xe57F4773bd9c9d8b6Cd70431117d353298B9f5BF',
-    poseidonT3Address: '0xF134707a4C4a3a76b8410fC0294d620A7c341581',
-    rpcUrl: 'https://forno.celo.org',
-    explorerBaseUrl: 'https://celoscan.io',
-  },
-  staging_celo: {
-    chainId: 44787,
-    chainHex: '0xaef3',
-    label: 'Celo Sepolia',
-    hubAddress: '0x16ECBA51e18a4a7e61fdC417f0d47AFEeDfbed74',
-    poseidonT3Address: '0x0A782f7F9f8AaC6E0BACAF3cd4Aa292C3275c6F2',
-    rpcUrl: 'https://forno.celo-sepolia.celo-testnet.org',
-    explorerBaseUrl: 'https://celo-sepolia.blockscout.com',
-  },
   sepolia: {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    // TODO: deployed Self verification hub address on Ethereum Sepolia
-    hubAddress: '0x0000000000000000000000000000000000000000',
-    // TODO: deployed PoseidonT3 library address on Ethereum Sepolia
+    // TODO: fill in deployed OuterCount4 verifier address on Ethereum Sepolia
+    verifierAddress: '',
+    // TODO: fill in deployed PoseidonT3 library address on Ethereum Sepolia
     poseidonT3Address: '0x0000000000000000000000000000000000000000',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
@@ -706,18 +688,16 @@ function ensureValidHexBytecode(bytecode: string): void {
   }
 }
 
-export function buildDeployData(input: {
-  scopeSeed: string;
-  countries: string[];
-  country: string;
-  minAge: number;
-  configId: string;
+export function buildZKPassportCensusDeployData(input: {
+  verifierAddress: string;
+  backendAddress: string;
 }): string {
   const artifactBytecode = (artifact as { bytecode?: ArtifactBytecode | string }).bytecode;
   const rawBytecode = typeof artifactBytecode === 'string' ? artifactBytecode : artifactBytecode?.object;
   if (!rawBytecode) throw new Error('Contract artifact bytecode is missing.');
 
-  const linkedBytecode = linkBytecodeLibraries(rawBytecode, typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences, {
+  const linkReferences = typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences;
+  const linkedBytecode = linkBytecodeLibraries(rawBytecode, linkReferences, {
     PoseidonT3: ACTIVE_NETWORK.poseidonT3Address,
     'lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3': ACTIVE_NETWORK.poseidonT3Address,
   });
@@ -727,18 +707,9 @@ export function buildDeployData(input: {
   }
   ensureValidHexBytecode(linkedBytecode);
 
-  const countries = Array.isArray(input.countries)
-    ? input.countries.map((country) => normalizeCountry(country)).filter((country) => isValidCountryCode(country))
-    : [];
-  const fallbackCountry = normalizeCountry(input.country);
-  const targetCountries = countries.length ? countries : isValidCountryCode(fallbackCountry) ? [fallbackCountry] : [];
-  if (!targetCountries.length) {
-    throw new Error('At least one country is required to deploy the census contract.');
-  }
-
   const encodedArgs = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'string', 'bytes32', 'string[]', 'uint256'],
-    [ACTIVE_NETWORK.hubAddress, input.scopeSeed, input.configId, targetCountries, BigInt(input.minAge)]
+    ['address', 'address'],
+    [input.verifierAddress, input.backendAddress]
   );
 
   return `${linkedBytecode}${encodedArgs.slice(2)}`;

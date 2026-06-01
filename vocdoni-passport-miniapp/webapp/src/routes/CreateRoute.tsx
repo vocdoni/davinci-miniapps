@@ -11,7 +11,7 @@ import {
   INTERNAL_RPC_RETRY_MAX_ATTEMPTS,
   PIPELINE_STAGES,
   buildCensusUri,
-  buildDeployData,
+  buildZKPassportCensusDeployData,
   buildTxExplorerUrl,
   buildVoteUrl,
   collectErrorMessages,
@@ -903,15 +903,9 @@ export default function CreateRoute() {
         throw new Error(COPY.create.errors.missingWalletContextDeployment);
       }
 
-      // TODO: replace buildDeployData with ZKPassportCensus deployment once the
-      // artifact is available. configId defaults to zero bytes32 when not provided
-      // (previously set by the removed ensure_self_config_registered stage).
-      const data = buildDeployData({
-        scopeSeed: ctx.values.scopeSeed,
-        countries: ctx.values.countries,
-        country: ctx.values.country,
-        minAge: ctx.values.minAge,
-        configId: ctx.configId || `0x${'0'.repeat(64)}`,
+      const data = buildZKPassportCensusDeployData({
+        verifierAddress: ACTIVE_NETWORK.verifierAddress,
+        backendAddress: ctx.creatorAddress,
       });
 
       const tx = await ctx.signer.sendTransaction({ data });
