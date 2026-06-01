@@ -48,27 +48,20 @@ vi.mock('../services/readiness', () => ({
 
 const mockConnectBrowserWallet = vi.fn();
 const mockResumeConnectedBrowserWallet = vi.fn();
-const mockSelfAppBuilderInputs = vi.fn();
+const mockBuildPassportPayload = vi.fn();
 
 vi.mock('../services/wallet', () => ({
   connectBrowserWallet: (...args: unknown[]) => mockConnectBrowserWallet(...args),
   resumeConnectedBrowserWallet: (...args: unknown[]) => mockResumeConnectedBrowserWallet(...args),
 }));
 
-vi.mock('@selfxyz/qrcode', () => ({
-  SelfAppBuilder: class MockSelfAppBuilder {
-    input: Record<string, unknown>;
-
-    constructor(input: Record<string, unknown>) {
-      this.input = input;
-      mockSelfAppBuilderInputs(input);
-    }
-
-    build() {
-      return { userId: this.input.userId };
-    }
+vi.mock('../passportRequest', () => ({
+  buildPassportPayload: (...args: unknown[]) => {
+    mockBuildPassportPayload(...args);
+    return { kind: 'vocdoni-passport-request', version: 1, aggregateUrl: 'https://backend.test/api/proofs/aggregate', service: { scope: 'davinci-census' } };
   },
-  SelfQRcodeWrapper: () => <div data-testid="self-qr" />,
+  buildPassportDeepLink: () => 'https://backend.test/passport?request=test',
+  buildPassportQRUrl: () => 'https://backend.test/api/request-qr.png?payload=test',
 }));
 
 import { COPY } from '../copy';
@@ -155,7 +148,7 @@ describe('VoteRoute identity popup', () => {
     mockEthCall.mockReset();
     mockConnectBrowserWallet.mockReset();
     mockResumeConnectedBrowserWallet.mockReset();
-    mockSelfAppBuilderInputs.mockReset();
+    mockBuildPassportPayload.mockReset();
     currentProcessStatus = 0;
     currentCreatorAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     queuedProcessStatuses = [];
@@ -484,7 +477,7 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
     });
 
     const registrationWalletWidget = document.getElementById('registrationWalletWidget') as HTMLDivElement;
@@ -507,7 +500,7 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
     });
 
     const registrationWalletWidget = document.getElementById('registrationWalletWidget') as HTMLDivElement;
@@ -541,7 +534,7 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
     });
 
     expect(document.getElementById('voteRegistrationCompleteOverlay')).toBeInTheDocument();
@@ -573,10 +566,10 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: 'Open in Self app' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Open in Vocdoni Passport' })).toBeDisabled();
   });
 
   it('shows the submit vote progress guide with the submitting step inside the registration popup', async () => {
@@ -590,7 +583,7 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
     });
 
     const registrationStatusGuide = document.getElementById('registrationStatusGuide');
@@ -625,8 +618,8 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
-      expect(mockSelfAppBuilderInputs).toHaveBeenCalledWith(expect.objectContaining({ userId: derivedAddress }));
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
+      expect(mockBuildPassportPayload).toHaveBeenCalledWith(expect.objectContaining({ walletAddress: derivedAddress }));
     });
 
     fireEvent.click(document.querySelector('#voteRegistrationPopup .app-popup-close') as HTMLButtonElement);
@@ -646,11 +639,11 @@ describe('VoteRoute identity popup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Submit vote' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Complete Self verification to continue' })).toBeInTheDocument();
-      expect(mockSelfAppBuilderInputs).toHaveBeenCalledWith(expect.objectContaining({ userId: connectedAddress }));
+      expect(screen.getByRole('dialog', { name: 'Complete passport verification to continue' })).toBeInTheDocument();
+      expect(mockBuildPassportPayload).toHaveBeenCalledWith(expect.objectContaining({ walletAddress: connectedAddress }));
     });
 
-    expect(mockSelfAppBuilderInputs).toHaveBeenCalledTimes(2);
+    expect(mockBuildPassportPayload).toHaveBeenCalledTimes(2);
   });
 
   it('restores a connected wallet after refresh when the provider can resume silently', async () => {

@@ -1,5 +1,2 @@
-const REDIRECT_URL = 'https://redirect.self.xyz';
-
-export function getUniversalLink(selfApp: unknown): string {
-  return `${REDIRECT_URL}?selfApp=${encodeURIComponent(JSON.stringify(selfApp))}`;
-}
+// Legacy shim — see passportRequest.ts for the Vocdoni Passport deep-link builder.
+export { buildPassportDeepLink as getUniversalLink } from './passportRequest';
