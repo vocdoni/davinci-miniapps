@@ -62,6 +62,7 @@ export const CONFIG = {
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
   selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
   txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
+  passportBackendUrl: String(env.VITE_PASSPORT_BACKEND_URL || '').trim(),
 };
 
 function resolveActiveNetwork(): NetworkConfig {
@@ -139,7 +140,6 @@ export interface PipelineStageState {
 export const PIPELINE_STAGES: PipelineStageDef[] = [
   { id: 'validate_form', label: COPY.occ.pipelineStages.validateForm },
   { id: 'connect_creator_wallet_walletconnect', label: COPY.occ.pipelineStages.connectCreatorWallet },
-  { id: 'ensure_self_config_registered', label: COPY.occ.pipelineStages.ensureSelfConfigRegistered },
   { id: 'deploy_census_contract', label: COPY.occ.pipelineStages.deployCensusContract },
   { id: 'start_indexer', label: COPY.occ.pipelineStages.startIndexer },
   { id: 'wait_indexer_ready', label: COPY.occ.pipelineStages.waitIndexerReady },
@@ -792,9 +792,6 @@ export function stringifyMetaValues(value: unknown): StringifiedMetaValue | '' {
   return String(value);
 }
 
-export function toSelfEndpointType(network: string): 'staging_celo' | 'celo' {
-  return network === 'staging_celo' ? 'staging_celo' : 'celo';
-}
 
 export function computeIndexerExpiresAt(values: { startDate: Date; duration: number }): string {
   const startDate = values?.startDate instanceof Date ? values.startDate : new Date(values?.startDate);
