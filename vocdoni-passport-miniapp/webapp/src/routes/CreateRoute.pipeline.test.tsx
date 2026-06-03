@@ -51,6 +51,7 @@ vi.mock('../lib/occ', async () => {
     },
     buildCensusUri: (contractAddress: string) =>
       `https://indexer.test/42220/${String(contractAddress || '').toLowerCase()}/graphql`,
+    buildZKPassportCensusDeployData: () => `0x${'ab'.repeat(100)}`,
     computeConfigId: (...args: unknown[]) => mockComputeConfigId(...args),
   };
 });
@@ -206,7 +207,7 @@ describe('CreateRoute pipeline retries', () => {
       });
 
       expect(signerSendTransaction).toHaveBeenCalledTimes(1);
-      expect(providerRequest).toHaveBeenCalledTimes(1);
+      expect(providerRequest).toHaveBeenCalledTimes(0);
 
       const timelinePanel = document.getElementById('createTimelineCard') as HTMLDetailsElement | null;
       if (timelinePanel) {
@@ -250,7 +251,7 @@ describe('CreateRoute pipeline retries', () => {
       });
 
       expect(signerSendTransaction).toHaveBeenCalledTimes(1);
-      expect(providerRequest).toHaveBeenCalledTimes(1);
+      expect(providerRequest).toHaveBeenCalledTimes(0);
       expect(contractsAttempts).toBe(2);
 
       cleanup();

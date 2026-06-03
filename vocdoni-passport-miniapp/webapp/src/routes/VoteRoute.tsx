@@ -3,9 +3,6 @@ import { Wallet } from 'ethers';
 import { useParams } from 'react-router-dom';
 import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import type { DavinciSDK } from '@vocdoni/davinci-sdk';
-import { SelfAppBuilder, SelfQRcodeWrapper } from '@selfxyz/qrcode';
-import type { SelfApp } from '@selfxyz/qrcode';
-
 import { COPY } from '../copy';
 import {
   ACTIVE_NETWORK,
@@ -47,12 +44,11 @@ import {
   persistVoteSubmission,
   setWalletOverride,
   toSafeInteger,
-  toSelfEndpointType,
   trimTrailingSlash,
   wait,
   type VoteStatusKey,
 } from '../lib/occ';
-import { getUniversalLink } from '../selfApp';
+import { buildPassportPayload, buildPassportDeepLink, buildPassportQRUrl } from '../passportRequest';
 import { buildAssetUrl } from '../utils/assets';
 import { isValidCountryCode, isValidProcessId, normalizeCountry, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { ethCall, fetchOnchainWeight } from '../services/readiness';
@@ -121,8 +117,8 @@ interface VoteSelfState {
   countries: string[];
   country: string;
   link: string;
+  qrUrl: string;
   generating: boolean;
-  selfApp: SelfApp | null;
 }
 
 interface VoteBallotState {
@@ -176,8 +172,8 @@ const EMPTY_VOTE_SELF: VoteSelfState = {
   countries: [],
   country: '',
   link: '',
+  qrUrl: '',
   generating: false,
-  selfApp: null,
 };
 
 const EMPTY_REGISTRATION_MODAL: RegistrationModalState = {
@@ -651,7 +647,7 @@ export default function VoteRoute() {
     setVoteSelf((previous) => ({
       ...previous,
       link: '',
-      selfApp: null,
+      qrUrl: '',
     }));
   }, []);
 
@@ -1094,28 +1090,25 @@ export default function VoteRoute() {
         }
       }
 
-      const disclosures = {
-        minimumAge: minAge ?? undefined,
-        nationality: true,
-      };
-
-      const selfApp = new SelfAppBuilder({
+      const backendUrl = trimTrailingSlash(CONFIG.passportBackendUrl);
+      const payload = buildPassportPayload({
+        backendUrl,
+        processId: resolution.processId,
+        censusContract: contractAddress,
+        walletAddress: managedAddress,
+        scope: scopeSeed || 'davinci-census',
+        minAge: minAge ?? undefined,
+        countries: self.countries.length ? self.countries : undefined,
         appName: CONFIG.selfAppName || COPY.brand.documentTitle,
-        scope: scopeSeed,
-        endpoint: String(contractAddress).toLowerCase(),
-        endpointType: toSelfEndpointType(resolution.network),
-        userId: managedAddress,
-        userIdType: 'hex',
-        disclosures,
-        userDefinedData: '',
-      }).build();
+      });
 
-      const universalLink = getUniversalLink(selfApp);
+      const universalLink = backendUrl ? buildPassportDeepLink(backendUrl, payload) : '';
+      const qrUrl = backendUrl ? buildPassportQRUrl(backendUrl, payload) : '';
 
       setVoteSelf((previous) => ({
         ...previous,
-        selfApp,
         link: universalLink,
+        qrUrl,
       }));
 
       if (!auto) {
@@ -2511,23 +2504,16 @@ export default function VoteRoute() {
               <div
                 id="voteSelfQrWrap"
                 className={`self-qr-wrap${registrationOnchainReady ? ' is-complete' : ''}`}
-                hidden={!voteSelf.selfApp}
+                hidden={!voteSelf.qrUrl}
               >
                 <div id="voteSelfQrRoot" className="self-qr-root" aria-label={COPY.vote.registration.qrAria}>
-                  {voteSelf.selfApp ? (
-                    <SelfQRcodeWrapper
-                      key={`${voteResolution.processId}-${voteSelf.link}`}
-                      selfApp={voteSelf.selfApp}
-                      type="deeplink"
-                      size={280}
-                      onSuccess={() => {
-                        setVoteStatusMessage(COPY.vote.status.selfVerificationCompleted);
-                        void refreshVoteReadiness();
-                      }}
-                      onError={(data: SelfQrErrorData = {}) => {
-                        const reason = String(data.reason || data.error_code || '').trim();
-                        setVoteStatusMessage(COPY.vote.status.selfQrError(reason), true);
-                      }}
+                  {voteSelf.qrUrl ? (
+                    <img
+                      key={`${voteResolution.processId}-${voteSelf.qrUrl}`}
+                      src={voteSelf.qrUrl}
+                      alt={COPY.vote.registration.qrAria}
+                      width={280}
+                      height={280}
                     />
                   ) : (
                     <p className="muted">{COPY.vote.registration.preparingQr}</p>

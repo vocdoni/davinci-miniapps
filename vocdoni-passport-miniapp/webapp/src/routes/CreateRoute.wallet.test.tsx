@@ -1,0 +1,183 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockConnectBrowserWallet = vi.fn();
+const mockResumeConnectedBrowserWallet = vi.fn();
+const mockDisconnectWalletConnection = vi.fn();
+const mockGetInjectedProvider = vi.fn();
+const mockEnsureProviderChain = vi.fn();
+
+vi.mock('@vocdoni/davinci-sdk', () => ({
+  ProcessStatus: {
+    READY: 0,
+    ENDED: 1,
+    CANCELED: 2,
+    PAUSED: 3,
+    RESULTS: 4,
+  },
+  OnchainCensus: class MockOnchainCensus {},
+  DavinciSDK: class MockDavinciSDK {},
+}));
+
+vi.mock('../services/wallet', () => ({
+  connectBrowserWallet: (...args: unknown[]) => mockConnectBrowserWallet(...args),
+  resumeConnectedBrowserWallet: (...args: unknown[]) => mockResumeConnectedBrowserWallet(...args),
+  disconnectWalletConnection: (...args: unknown[]) => mockDisconnectWalletConnection(...args),
+  getInjectedProvider: (...args: unknown[]) => mockGetInjectedProvider(...args),
+  ensureProviderChain: (...args: unknown[]) => mockEnsureProviderChain(...args),
+}));
+
+import CreateRoute from './CreateRoute';
+
+function shortenWalletAddress(address: string): string {
+  const normalized = String(address || '').trim();
+  if (!/^0x[a-fA-F0-9]{10,}$/.test(normalized)) return normalized;
+  return `${normalized.slice(0, 8)}...${normalized.slice(-4)}`;
+}
+
+describe('CreateRoute creator wallet persistence', () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storage.set(key, String(value));
+        },
+        removeItem: (key: string) => {
+          storage.delete(key);
+        },
+        clear: () => {
+          storage.clear();
+        },
+      },
+    });
+
+    mockConnectBrowserWallet.mockReset();
+    mockResumeConnectedBrowserWallet.mockReset();
+    mockDisconnectWalletConnection.mockReset();
+    mockGetInjectedProvider.mockReset();
+    mockEnsureProviderChain.mockReset();
+    mockGetInjectedProvider.mockReturnValue(null);
+    mockResumeConnectedBrowserWallet.mockResolvedValue(null);
+    mockEnsureProviderChain.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it(
+    'restores a connected creator wallet after refresh when the provider can resume silently',
+    async () => {
+      const connectedAddress = '0x8888888888888888888888888888888888888888';
+      const connectedWallet = {
+        provider: { request: vi.fn() },
+        browserProvider: { getBalance: vi.fn().mockResolvedValue(1n) },
+        signer: { signMessage: vi.fn() },
+        address: connectedAddress,
+        sourceLabel: 'MetaMask',
+        connectorType: 'injected' as const,
+      };
+
+      mockConnectBrowserWallet.mockResolvedValue(connectedWallet);
+
+      const firstRender = render(<CreateRoute />);
+
+      fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
+
+      await waitFor(() => {
+        expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+        expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
+        expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
+          `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
+        );
+      });
+
+      const walletButton = document.getElementById('createWalletWidget') as HTMLButtonElement;
+      expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+
+      fireEvent.mouseEnter(walletButton);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent('Disconnect');
+      expect(walletButton.querySelector('.iconoir-log-out')).not.toBeNull();
+
+      fireEvent.mouseLeave(walletButton);
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+      expect(walletButton.querySelector('.iconoir-user')).not.toBeNull();
+
+      firstRender.unmount();
+
+      mockResumeConnectedBrowserWallet.mockResolvedValue(connectedWallet);
+
+      render(<CreateRoute />);
+
+      await waitFor(() => {
+        expect(mockResumeConnectedBrowserWallet).toHaveBeenCalledWith(
+          expect.objectContaining({
+            address: connectedAddress,
+            sourceLabel: 'MetaMask',
+            connectorType: 'injected',
+          }),
+          null
+        );
+        expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+        expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeInTheDocument();
+      });
+    },
+    10_000
+  );
+
+  it('disables creation and shows the CELO faucet when the connected wallet has no balance', async () => {
+    const connectedAddress = '0x9999999999999999999999999999999999999999';
+    mockConnectBrowserWallet.mockResolvedValue({
+      provider: { request: vi.fn() },
+      browserProvider: { getBalance: vi.fn().mockResolvedValue(0n) },
+      signer: { signMessage: vi.fn() },
+      address: connectedAddress,
+      sourceLabel: 'MetaMask',
+      connectorType: 'injected' as const,
+    });
+
+    render(<CreateRoute />);
+
+    fireEvent.click(document.getElementById('createWalletWidget') as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(document.getElementById('creatorWalletNavbarAddress')).toHaveTextContent(shortenWalletAddress(connectedAddress));
+      expect(screen.getByRole('button', { name: 'Create the voting process' })).toBeDisabled();
+      expect(document.getElementById('createWalletConnectedNote')).toHaveTextContent(
+        `Connected as ${shortenWalletAddress(connectedAddress)}. Early users won't be forgotten.`
+      );
+      expect(screen.getByText(/almost there! creating a vote requires a tiny bit of celo/i)).toBeInTheDocument();
+    });
+
+    const faucetLink = screen.getByRole('link', { name: 'here' });
+    expect(faucetLink).toHaveAttribute('href', 'https://stakely.io/faucet/celo-celo');
+  });
+
+  it('restores in-progress create form values after refresh', async () => {
+    const firstRender = render(<CreateRoute />);
+
+    fireEvent.change(screen.getByPlaceholderText('Type your question here...'), {
+      target: { value: 'Should the city add more trees?' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Option 1'), {
+      target: { value: 'Yes' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Option 2'), {
+      target: { value: 'No' },
+    });
+
+    firstRender.unmount();
+
+    render(<CreateRoute />);
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Type your question here...')).toHaveValue('Should the city add more trees?');
+      expect(screen.getByPlaceholderText('Option 1')).toHaveValue('Yes');
+      expect(screen.getByPlaceholderText('Option 2')).toHaveValue('No');
+    });
+  });
+});

@@ -3,7 +3,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import type { BallotMode } from '@vocdoni/davinci-sdk';
 import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 
-import artifact from '../artifacts/OpenCitizenCensus.json';
+import artifact from '../artifacts/ZKPassportCensus.json';
 import { COPY } from '../copy';
 import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { toRecord } from '../utils/records';
@@ -16,39 +16,19 @@ export interface NetworkConfig {
   chainId: number;
   chainHex: string;
   label: string;
-  hubAddress: string;
+  verifierAddress: string;
   poseidonT3Address: string;
   rpcUrl: string;
   explorerBaseUrl: string;
 }
 
 export const NETWORKS: Record<string, NetworkConfig> = {
-  celo: {
-    chainId: 42220,
-    chainHex: '0xa4ec',
-    label: 'Celo Mainnet',
-    hubAddress: '0xe57F4773bd9c9d8b6Cd70431117d353298B9f5BF',
-    poseidonT3Address: '0xF134707a4C4a3a76b8410fC0294d620A7c341581',
-    rpcUrl: 'https://forno.celo.org',
-    explorerBaseUrl: 'https://celoscan.io',
-  },
-  staging_celo: {
-    chainId: 44787,
-    chainHex: '0xaef3',
-    label: 'Celo Sepolia',
-    hubAddress: '0x16ECBA51e18a4a7e61fdC417f0d47AFEeDfbed74',
-    poseidonT3Address: '0x0A782f7F9f8AaC6E0BACAF3cd4Aa292C3275c6F2',
-    rpcUrl: 'https://forno.celo-sepolia.celo-testnet.org',
-    explorerBaseUrl: 'https://celo-sepolia.blockscout.com',
-  },
   sepolia: {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    // TODO: deployed Self verification hub address on Ethereum Sepolia
-    hubAddress: '0x0000000000000000000000000000000000000000',
-    // TODO: deployed PoseidonT3 library address on Ethereum Sepolia
-    poseidonT3Address: '0x0000000000000000000000000000000000000000',
+    verifierAddress: '0xDacEBBE5D4d3d65d941a138bB064FdEbfc3784F6',  // OuterCount4 (HonkVerifier)
+    poseidonT3Address: '0x50050301145D95730112e53284fb5065FD7d0f7D',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
   },
@@ -62,6 +42,7 @@ export const CONFIG = {
   walletConnectProjectId: String(env.VITE_WALLETCONNECT_PROJECT_ID || '').trim(),
   selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
   txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
+  passportBackendUrl: String(env.VITE_PASSPORT_BACKEND_URL || '').trim(),
 };
 
 function resolveActiveNetwork(): NetworkConfig {
@@ -139,7 +120,6 @@ export interface PipelineStageState {
 export const PIPELINE_STAGES: PipelineStageDef[] = [
   { id: 'validate_form', label: COPY.occ.pipelineStages.validateForm },
   { id: 'connect_creator_wallet_walletconnect', label: COPY.occ.pipelineStages.connectCreatorWallet },
-  { id: 'ensure_self_config_registered', label: COPY.occ.pipelineStages.ensureSelfConfigRegistered },
   { id: 'deploy_census_contract', label: COPY.occ.pipelineStages.deployCensusContract },
   { id: 'start_indexer', label: COPY.occ.pipelineStages.startIndexer },
   { id: 'wait_indexer_ready', label: COPY.occ.pipelineStages.waitIndexerReady },
@@ -706,18 +686,16 @@ function ensureValidHexBytecode(bytecode: string): void {
   }
 }
 
-export function buildDeployData(input: {
-  scopeSeed: string;
-  countries: string[];
-  country: string;
-  minAge: number;
-  configId: string;
+export function buildZKPassportCensusDeployData(input: {
+  verifierAddress: string;
+  backendAddress: string;
 }): string {
   const artifactBytecode = (artifact as { bytecode?: ArtifactBytecode | string }).bytecode;
   const rawBytecode = typeof artifactBytecode === 'string' ? artifactBytecode : artifactBytecode?.object;
   if (!rawBytecode) throw new Error('Contract artifact bytecode is missing.');
 
-  const linkedBytecode = linkBytecodeLibraries(rawBytecode, typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences, {
+  const linkReferences = typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences;
+  const linkedBytecode = linkBytecodeLibraries(rawBytecode, linkReferences, {
     PoseidonT3: ACTIVE_NETWORK.poseidonT3Address,
     'lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3': ACTIVE_NETWORK.poseidonT3Address,
   });
@@ -727,18 +705,9 @@ export function buildDeployData(input: {
   }
   ensureValidHexBytecode(linkedBytecode);
 
-  const countries = Array.isArray(input.countries)
-    ? input.countries.map((country) => normalizeCountry(country)).filter((country) => isValidCountryCode(country))
-    : [];
-  const fallbackCountry = normalizeCountry(input.country);
-  const targetCountries = countries.length ? countries : isValidCountryCode(fallbackCountry) ? [fallbackCountry] : [];
-  if (!targetCountries.length) {
-    throw new Error('At least one country is required to deploy the census contract.');
-  }
-
   const encodedArgs = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'string', 'bytes32', 'string[]', 'uint256'],
-    [ACTIVE_NETWORK.hubAddress, input.scopeSeed, input.configId, targetCountries, BigInt(input.minAge)]
+    ['address', 'address'],
+    [input.verifierAddress, input.backendAddress]
   );
 
   return `${linkedBytecode}${encodedArgs.slice(2)}`;
@@ -792,9 +761,6 @@ export function stringifyMetaValues(value: unknown): StringifiedMetaValue | '' {
   return String(value);
 }
 
-export function toSelfEndpointType(network: string): 'staging_celo' | 'celo' {
-  return network === 'staging_celo' ? 'staging_celo' : 'celo';
-}
 
 export function computeIndexerExpiresAt(values: { startDate: Date; duration: number }): string {
   const startDate = values?.startDate instanceof Date ? values.startDate : new Date(values?.startDate);
