@@ -4,7 +4,7 @@ SHELL := /bin/bash
 export
 
 DEPLOY_SCRIPT := script/DeployOpenCitizenCensus.s.sol:DeployOpenCitizenCensus
-POSEIDON_LIB := lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3:$(POSEIDON_T3)
+POSEIDON_LIB := lib/davinci-onchain-census-contract/lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3:$(POSEIDON_T3)
 VERIFIER ?= etherscan
 VERIFY ?= 1
 CHAIN_ID ?=

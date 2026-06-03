@@ -3,6 +3,10 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 
+import {
+    ISelfVerificationRoot
+} from "@selfxyz/contracts/contracts/interfaces/ISelfVerificationRoot.sol";
+
 import {OpenCitizenCensus} from "../src/OpenCitizenCensus.sol";
 
 contract OpenCitizenCensusHarness is OpenCitizenCensus {
@@ -26,6 +30,12 @@ contract OpenCitizenCensusHarness is OpenCitizenCensus {
         string memory nationality
     ) external view returns (bool) {
         return _isAllowedNationality(nationality);
+    }
+
+    function registerForTest(
+        ISelfVerificationRoot.GenericDiscloseOutputV2 memory output
+    ) external {
+        customVerificationHook(output, "");
     }
 }
 
@@ -88,5 +98,64 @@ contract OpenCitizenCensusNationalityTest is Test {
         assertTrue(census.isAllowedNationalityForTest("USA"));
         assertTrue(census.isAllowedNationalityForTest("FRA"));
         assertFalse(census.isAllowedNationalityForTest("ESP"));
+    }
+
+    function testRegistrationUsesOnchainCensusBase() public {
+        string[] memory countries = new string[](1);
+        countries[0] = "USA";
+        OpenCitizenCensusHarness census = _deploy(countries);
+        address user = address(0x1234);
+
+        census.registerForTest(_output(user, 1, "USA", 18));
+        uint256 root = census.getCensusRoot();
+
+        assertEq(census.weightOf(user), 1);
+        assertEq(census.treeSize(), 1);
+        assertEq(census.totalVotingPower(), 1);
+        assertEq(census.getRootBlockNumber(root), block.number);
+        assertEq(census.getTotalVotingPowerAtRoot(root), 1);
+        assertEq(census.leafOf(user), census.leafFor(user, 1));
+        assertTrue(census.nullifierUsed(1));
+    }
+
+    function testRegistrationRejectsDuplicateNullifier() public {
+        string[] memory countries = new string[](1);
+        countries[0] = "USA";
+        OpenCitizenCensusHarness census = _deploy(countries);
+
+        census.registerForTest(_output(address(0x1234), 1, "USA", 18));
+
+        vm.expectRevert(OpenCitizenCensus.NullifierAlreadyUsed.selector);
+        census.registerForTest(_output(address(0x5678), 1, "USA", 18));
+    }
+
+    function testRegistrationRejectsUnderageUser() public {
+        string[] memory countries = new string[](1);
+        countries[0] = "USA";
+        OpenCitizenCensusHarness census = _deploy(countries);
+
+        vm.expectRevert(OpenCitizenCensus.NotAdult.selector);
+        census.registerForTest(_output(address(0x1234), 1, "USA", 17));
+    }
+
+    function testRegistrationRejectsWrongNationality() public {
+        string[] memory countries = new string[](1);
+        countries[0] = "USA";
+        OpenCitizenCensusHarness census = _deploy(countries);
+
+        vm.expectRevert(OpenCitizenCensus.WrongNationality.selector);
+        census.registerForTest(_output(address(0x1234), 1, "FRA", 18));
+    }
+
+    function _output(
+        address user,
+        uint256 nullifier,
+        string memory nationality,
+        uint256 olderThan
+    ) internal pure returns (ISelfVerificationRoot.GenericDiscloseOutputV2 memory output) {
+        output.userIdentifier = uint256(uint160(user));
+        output.nullifier = nullifier;
+        output.nationality = nationality;
+        output.olderThan = olderThan;
     }
 }
