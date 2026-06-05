@@ -7,6 +7,7 @@ export interface PassportRequestPayload {
   aggregateUrl: string;
   processId?: string;
   censusContract?: string;
+  walletAddress?: string;
   service: {
     name: string;
     purpose?: string;
@@ -39,6 +40,7 @@ export function buildPassportPayload(params: {
     aggregateUrl: `${params.backendUrl.replace(/\/+$/, '')}/api/proofs/aggregate`,
     processId: params.processId || undefined,
     censusContract: params.censusContract || undefined,
+    walletAddress: params.walletAddress || undefined,
     service: {
       name: params.appName || 'Vocdoni Passport',
       scope: params.scope || 'davinci-census',
