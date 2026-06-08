@@ -899,13 +899,19 @@ export default function CreateRoute() {
 
   const deployCensusContract = useCallback(
     async (ctx: PipelineContext) => {
+      if (CONFIG.censusContract) {
+        ctx.contractAddress = CONFIG.censusContract;
+        setOutputs((previous) => ({ ...previous, censusContract: CONFIG.censusContract }));
+        return CONFIG.censusContract;
+      }
+
       if (!ctx.values || !ctx.signer || !ctx.browserProvider) {
         throw new Error(COPY.create.errors.missingWalletContextDeployment);
       }
 
       const data = buildZKPassportCensusDeployData({
         verifierAddress: ACTIVE_NETWORK.verifierAddress,
-        backendAddress: ctx.creatorAddress,
+        backendAddress: ACTIVE_NETWORK.censusBackendAddress,
       });
 
       const tx = await ctx.signer.sendTransaction({ data });
