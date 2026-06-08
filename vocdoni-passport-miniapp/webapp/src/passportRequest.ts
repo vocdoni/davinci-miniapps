@@ -6,6 +6,9 @@ export interface PassportRequestPayload {
   aggregateUrl: string;
   processId?: string;
   censusContract?: string;
+  // Voter's Ethereum address. Relayed by the Android app to the backend so the
+  // backend knows which address to register in the census contract.
+  walletAddress?: string;
   service: {
     name: string;
     purpose?: string;
@@ -19,6 +22,7 @@ export function buildPassportPayload(params: {
   backendUrl: string;
   processId?: string;
   censusContract?: string;
+  walletAddress?: string;
   scope: string;
   minAge?: number | null;
   countries?: string[];
@@ -43,6 +47,7 @@ export function buildPassportPayload(params: {
     aggregateUrl: `${params.backendUrl.replace(/\/+$/, '')}/api/proofs/aggregate`,
     processId: params.processId || undefined,
     censusContract: params.censusContract || undefined,
+    walletAddress: params.walletAddress || undefined,
     service: {
       name: params.appName || 'Vocdoni Passport',
       scope: params.scope || 'davinci-census',
