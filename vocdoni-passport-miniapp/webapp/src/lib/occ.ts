@@ -24,6 +24,8 @@ export interface NetworkConfig {
   bindChain: string;
   // Address of the Vocdoni passport-prover backend wallet (TRUSTED_BACKEND in ZKPassportCensus).
   censusBackendAddress: string;
+  // Pre-deployed ZKPassportCensus. When set, /create skips contract deployment.
+  censusContract?: string;
 }
 
 export const NETWORKS: Record<string, NetworkConfig> = {
@@ -37,6 +39,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     explorerBaseUrl: 'https://sepolia.etherscan.io',
     bindChain: 'ethereum_sepolia',
     censusBackendAddress: '0x1823c6cb39b19c93407e3ad186401ec6d3bed485',
+    censusContract: '0x3b345a748d2669dfdd54a9439a22c017aac3fdf4',
   },
 };
 
@@ -50,7 +53,8 @@ export const CONFIG = {
   txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
   passportBackendUrl: String(env.VITE_PASSPORT_BACKEND_URL || '').trim(),
   // Pre-deployed ZKPassportCensus contract. When set, /create skips contract deployment.
-  censusContract: String(env.VITE_CENSUS_CONTRACT || '').trim(),
+  // Falls back to the network config's censusContract (e.g. the shared sepolia deployment).
+  censusContract: String(env.VITE_CENSUS_CONTRACT || NETWORKS[String(env.VITE_NETWORK || '').trim()]?.censusContract || '').trim(),
 };
 
 function resolveActiveNetwork(): NetworkConfig {
