@@ -33,13 +33,13 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    verifierAddress: '0xDacEBBE5D4d3d65d941a138bB064FdEbfc3784F6',  // OuterCount4 (HonkVerifier)
+    verifierAddress: '0x9e86442a8b2B3E8d1fe20bFb67b32edfb9D9382E',  // OuterCount5 (HonkVerifier)
     poseidonT3Address: '0x50050301145D95730112e53284fb5065FD7d0f7D',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
     bindChain: 'ethereum_sepolia',
     censusBackendAddress: '0x1823c6cb39b19c93407e3ad186401ec6d3bed485',
-    censusContract: '0x3b345a748d2669dfdd54a9439a22c017aac3fdf4',
+    censusContract: '0x5cc6f778596b69ca5ea44123c6b9f91058ab7b88',  // ZKPassportCensus (OuterCount5)
   },
 };
 
