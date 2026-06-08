@@ -34,12 +34,12 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
     verifierAddress: '0x1D000001000EFD9a6371f4d90bB8920D5431c0D8',  // ZKPassport RootVerifier (universal)
-    poseidonT3Address: '0x50050301145D95730112e53284fb5065FD7d0f7D',
+    poseidonT3Address: '0xc2e82d36d441c93df4baef1e873aea567f07c21f',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
     bindChain: 'ethereum_sepolia',
     censusBackendAddress: '',  // no trusted backend — permissionless on-chain verification
-    censusContract: '',  // set after deploying ZKPassportCensus with new constructor
+    censusContract: '0xeD923050b74ca8bE16DfdC12eC6Bd714BeFB1Ed9',
   },
 };
 
