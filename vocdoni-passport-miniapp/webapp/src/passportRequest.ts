@@ -24,23 +24,8 @@ export function buildPassportPayload(params: {
   censusContract?: string;
   walletAddress?: string;
   scope: string;
-  minAge?: number | null;
-  countries?: string[];
   appName?: string;
 }): PassportRequestPayload {
-  const query: Record<string, unknown> = {
-    nationality: { disclose: true },
-    gender: { disclose: true },
-  };
-
-  if (params.minAge && params.minAge > 0) {
-    query['age'] = { gte: params.minAge };
-  }
-
-  if (params.countries && params.countries.length > 0) {
-    query['nationality'] = { in: params.countries };
-  }
-
   return {
     kind: 'vocdoni-passport-request',
     version: 1,
@@ -51,9 +36,8 @@ export function buildPassportPayload(params: {
     service: {
       name: params.appName || 'Vocdoni Passport',
       scope: params.scope || 'davinci-census',
-      mode: 'fast',
     },
-    query,
+    query: { gender: { disclose: true } },
   };
 }
 

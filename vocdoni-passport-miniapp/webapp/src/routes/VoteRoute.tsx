@@ -1097,8 +1097,6 @@ export default function VoteRoute() {
         censusContract: contractAddress,
         walletAddress: managedAddress || undefined,
         scope: scopeSeed || 'davinci-census',
-        minAge: minAge ?? undefined,
-        countries: self.countries.length ? self.countries : undefined,
         appName: CONFIG.selfAppName || COPY.brand.documentTitle,
       });
 
