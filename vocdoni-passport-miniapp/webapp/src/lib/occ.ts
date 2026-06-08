@@ -33,13 +33,13 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    verifierAddress: '0x9e86442a8b2B3E8d1fe20bFb67b32edfb9D9382E',  // OuterCount5 (HonkVerifier)
+    verifierAddress: '0x1D000001000EFD9a6371f4d90bB8920D5431c0D8',  // ZKPassport RootVerifier (universal)
     poseidonT3Address: '0x50050301145D95730112e53284fb5065FD7d0f7D',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
     bindChain: 'ethereum_sepolia',
-    censusBackendAddress: '0x1823c6cb39b19c93407e3ad186401ec6d3bed485',
-    censusContract: '0x5cc6f778596b69ca5ea44123c6b9f91058ab7b88',  // ZKPassportCensus (OuterCount5)
+    censusBackendAddress: '',  // no trusted backend — permissionless on-chain verification
+    censusContract: '',  // set after deploying ZKPassportCensus with new constructor
   },
 };
 
@@ -700,7 +700,7 @@ function ensureValidHexBytecode(bytecode: string): void {
 
 export function buildZKPassportCensusDeployData(input: {
   verifierAddress: string;
-  backendAddress: string;
+  scope: string;
 }): string {
   const artifactBytecode = (artifact as { bytecode?: ArtifactBytecode | string }).bytecode;
   const rawBytecode = typeof artifactBytecode === 'string' ? artifactBytecode : artifactBytecode?.object;
@@ -718,8 +718,8 @@ export function buildZKPassportCensusDeployData(input: {
   ensureValidHexBytecode(linkedBytecode);
 
   const encodedArgs = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'address'],
-    [input.verifierAddress, input.backendAddress]
+    ['address', 'string'],
+    [input.verifierAddress, input.scope]
   );
 
   return `${linkedBytecode}${encodedArgs.slice(2)}`;

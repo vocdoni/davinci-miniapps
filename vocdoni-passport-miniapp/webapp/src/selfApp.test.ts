@@ -5,14 +5,15 @@ import { buildPassportPayload, buildPassportDeepLink, buildPassportQRUrl } from 
 describe('passportRequest utilities', () => {
   const backendUrl = 'https://passport.example.com';
 
-  it('builds a payload with age and nationality query', () => {
+  it('builds a payload with all fields', () => {
     const payload = buildPassportPayload({
       backendUrl,
       processId: '0xabc',
       censusContract: '0xdef',
+      walletAddress: '0x1234',
+      bindChain: 'ethereum_sepolia',
       scope: 'davinci-census',
-      minAge: 18,
-      countries: ['ESP', 'FRA'],
+      appName: 'Test App',
     });
 
     expect(payload.kind).toBe('vocdoni-passport-request');
@@ -20,13 +21,15 @@ describe('passportRequest utilities', () => {
     expect(payload.aggregateUrl).toBe('https://passport.example.com/api/proofs/aggregate');
     expect(payload.processId).toBe('0xabc');
     expect(payload.censusContract).toBe('0xdef');
-    expect(payload.query?.['age']).toEqual({ gte: 18 });
-    expect((payload.query?.['nationality'] as { in: string[] }).in).toEqual(['ESP', 'FRA']);
+    expect(payload.walletAddress).toBe('0x1234');
+    expect(payload.bindChain).toBe('ethereum_sepolia');
+    expect(payload.query).toBeUndefined();
   });
 
-  it('omits query when no age or countries', () => {
+  it('omits optional fields when not provided', () => {
     const payload = buildPassportPayload({ backendUrl, scope: 'davinci-census' });
     expect(payload.query).toBeUndefined();
+    expect(payload.bindChain).toBeUndefined();
   });
 
   it('builds a QR image URL', () => {

@@ -1096,6 +1096,7 @@ export default function VoteRoute() {
         processId: resolution.processId,
         censusContract: contractAddress,
         walletAddress: managedAddress || undefined,
+        bindChain: ACTIVE_NETWORK.bindChain,
         scope: scopeSeed || 'davinci-census',
         appName: CONFIG.selfAppName || COPY.brand.documentTitle,
       });

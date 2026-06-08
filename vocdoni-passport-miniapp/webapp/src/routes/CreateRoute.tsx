@@ -911,7 +911,7 @@ export default function CreateRoute() {
 
       const data = buildZKPassportCensusDeployData({
         verifierAddress: ACTIVE_NETWORK.verifierAddress,
-        backendAddress: ACTIVE_NETWORK.censusBackendAddress,
+        scope: ctx.values.scopeSeed || 'davinci-census',
       });
 
       const tx = await ctx.signer.sendTransaction({ data });
