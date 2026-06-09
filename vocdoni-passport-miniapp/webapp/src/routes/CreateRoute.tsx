@@ -11,7 +11,7 @@ import {
   INTERNAL_RPC_RETRY_MAX_ATTEMPTS,
   PIPELINE_STAGES,
   buildCensusUri,
-  buildZKPassportCensusDeployData,
+  buildTrustedCensusDeployData,
   buildTxExplorerUrl,
   buildVoteUrl,
   collectErrorMessages,
@@ -899,20 +899,11 @@ export default function CreateRoute() {
 
   const deployCensusContract = useCallback(
     async (ctx: PipelineContext) => {
-      if (CONFIG.censusContract) {
-        ctx.contractAddress = CONFIG.censusContract;
-        setOutputs((previous) => ({ ...previous, censusContract: CONFIG.censusContract }));
-        return CONFIG.censusContract;
-      }
-
       if (!ctx.values || !ctx.signer || !ctx.browserProvider) {
         throw new Error(COPY.create.errors.missingWalletContextDeployment);
       }
 
-      const data = buildZKPassportCensusDeployData({
-        verifierAddress: ACTIVE_NETWORK.verifierAddress,
-        scope: ctx.values.scopeSeed || 'davinci-census',
-      });
+      const data = buildTrustedCensusDeployData(ACTIVE_NETWORK.censusBackendAddress);
 
       const tx = await ctx.signer.sendTransaction({ data });
       setOutputs((previous) => ({ ...previous, deploymentTxHash: tx.hash }));

@@ -3,7 +3,7 @@ import { ProcessStatus } from '@vocdoni/davinci-sdk';
 import type { BallotMode } from '@vocdoni/davinci-sdk';
 import type { SequencerMetadata, SequencerProcess } from '../services/sequencer';
 
-import artifact from '../artifacts/ZKPassportCensus.json';
+import artifact from '../artifacts/TrustedCensus.json';
 import { COPY } from '../copy';
 import { isAsciiText, isValidCountryCode, normalizeCountry, normalizeMinAge, normalizeProcessId, normalizeScope } from '../utils/normalization';
 import { toRecord } from '../utils/records';
@@ -16,16 +16,12 @@ export interface NetworkConfig {
   chainId: number;
   chainHex: string;
   label: string;
-  verifierAddress: string;
-  poseidonT3Address: string;
   rpcUrl: string;
   explorerBaseUrl: string;
   // zkPassport SupportedChain string for the bind_evm disclosure circuit.
   bindChain: string;
-  // Address of the Vocdoni passport-prover backend wallet (TRUSTED_BACKEND in ZKPassportCensus).
+  // Address of the Vocdoni passport-prover backend wallet (TRUSTED_BACKEND in TrustedCensus).
   censusBackendAddress: string;
-  // Pre-deployed ZKPassportCensus. When set, /create skips contract deployment.
-  censusContract?: string;
 }
 
 export const NETWORKS: Record<string, NetworkConfig> = {
@@ -33,13 +29,10 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     chainId: 11155111,
     chainHex: '0xaa36a7',
     label: 'Ethereum Sepolia',
-    verifierAddress: '0x1D000001000EFD9a6371f4d90bB8920D5431c0D8',  // ZKPassport RootVerifier (universal)
-    poseidonT3Address: '0xc2e82d36d441c93df4baef1e873aea567f07c21f',
     rpcUrl: 'https://ethereum-sepolia.publicnode.com',
     explorerBaseUrl: 'https://sepolia.etherscan.io',
     bindChain: 'ethereum_sepolia',
-    censusBackendAddress: '',  // no trusted backend — permissionless on-chain verification
-    censusContract: '0xeD923050b74ca8bE16DfdC12eC6Bd714BeFB1Ed9',
+    censusBackendAddress: '0x1823C6cb39B19c93407E3aD186401Ec6d3bed485',
   },
 };
 
@@ -52,9 +45,6 @@ export const CONFIG = {
   selfAppName: String(env.VITE_SELF_APP_NAME || COPY.brand.documentTitle).trim(),
   txExplorerBaseUrl: String(env.VITE_TX_EXPLORER_BASE_URL || '').trim(),
   passportBackendUrl: String(env.VITE_PASSPORT_BACKEND_URL || '').trim(),
-  // Pre-deployed ZKPassportCensus contract. When set, /create skips contract deployment.
-  // Falls back to the network config's censusContract (e.g. the shared sepolia deployment).
-  censusContract: String(env.VITE_CENSUS_CONTRACT || NETWORKS[String(env.VITE_NETWORK || '').trim()]?.censusContract || '').trim(),
 };
 
 function resolveActiveNetwork(): NetworkConfig {
@@ -633,60 +623,8 @@ export function computeConfigId(minAge: number): string {
   return sha256(encoded);
 }
 
-interface BytecodeLinkReference {
-  start: number;
-  length: number;
-}
-
-type BytecodeLinkReferences = Record<string, Record<string, BytecodeLinkReference[]>>;
-
 interface ArtifactBytecode {
   object?: string;
-  linkReferences?: BytecodeLinkReferences;
-}
-
-function normalizeHexAddress(value: string, label: string): string {
-  const normalized = String(value || '').trim();
-  if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
-    throw new Error(`${label} must be a 20-byte hex address.`);
-  }
-  return normalized.toLowerCase();
-}
-
-function linkBytecodeLibraries(
-  bytecode: string,
-  linkReferences: BytecodeLinkReferences | undefined,
-  libraries: Record<string, string>
-): string {
-  if (!linkReferences || !Object.keys(linkReferences).length) {
-    return bytecode;
-  }
-
-  const hasPrefix = bytecode.startsWith('0x');
-  let hexData = hasPrefix ? bytecode.slice(2) : bytecode;
-
-  for (const [sourceName, refsByLibrary] of Object.entries(linkReferences)) {
-    for (const [libraryName, refs] of Object.entries(refsByLibrary)) {
-      const libraryKey = `${sourceName}:${libraryName}`;
-      const linkedAddress = libraries[libraryKey] || libraries[libraryName];
-      if (!linkedAddress) {
-        throw new Error(`Missing linked address for library "${libraryName}".`);
-      }
-
-      const addressHex = normalizeHexAddress(linkedAddress, `Library ${libraryName}`).slice(2);
-      for (const ref of refs) {
-        const offset = Number(ref.start) * 2;
-        const length = Number(ref.length) * 2;
-        if (!Number.isFinite(offset) || !Number.isFinite(length) || offset < 0 || length <= 0) {
-          throw new Error(`Invalid link reference for library "${libraryName}".`);
-        }
-        const replacement = addressHex.padStart(length, '0').slice(-length);
-        hexData = `${hexData.slice(0, offset)}${replacement}${hexData.slice(offset + length)}`;
-      }
-    }
-  }
-
-  return hasPrefix ? `0x${hexData}` : hexData;
 }
 
 function ensureValidHexBytecode(bytecode: string): void {
@@ -698,31 +636,18 @@ function ensureValidHexBytecode(bytecode: string): void {
   }
 }
 
-export function buildZKPassportCensusDeployData(input: {
-  verifierAddress: string;
-  scope: string;
-}): string {
+export function buildTrustedCensusDeployData(backendAddress: string): string {
   const artifactBytecode = (artifact as { bytecode?: ArtifactBytecode | string }).bytecode;
   const rawBytecode = typeof artifactBytecode === 'string' ? artifactBytecode : artifactBytecode?.object;
   if (!rawBytecode) throw new Error('Contract artifact bytecode is missing.');
 
-  const linkReferences = typeof artifactBytecode === 'string' ? undefined : artifactBytecode?.linkReferences;
-  const linkedBytecode = linkBytecodeLibraries(rawBytecode, linkReferences, {
-    PoseidonT3: ACTIVE_NETWORK.poseidonT3Address,
-    'lib/poseidon-solidity/contracts/PoseidonT3.sol:PoseidonT3': ACTIVE_NETWORK.poseidonT3Address,
-  });
-
-  if (/__\$[a-fA-F0-9]{34}\$__/.test(linkedBytecode)) {
+  if (/__\$[a-fA-F0-9]{34}\$__/.test(rawBytecode)) {
     throw new Error('Contract bytecode still contains unresolved library placeholders.');
   }
-  ensureValidHexBytecode(linkedBytecode);
+  ensureValidHexBytecode(rawBytecode);
 
-  const encodedArgs = AbiCoder.defaultAbiCoder().encode(
-    ['address', 'string'],
-    [input.verifierAddress, input.scope]
-  );
-
-  return `${linkedBytecode}${encodedArgs.slice(2)}`;
+  const encodedArgs = AbiCoder.defaultAbiCoder().encode(['address'], [backendAddress]);
+  return `${rawBytecode}${encodedArgs.slice(2)}`;
 }
 
 export function buildCensusUri(contractAddress: string): string {
