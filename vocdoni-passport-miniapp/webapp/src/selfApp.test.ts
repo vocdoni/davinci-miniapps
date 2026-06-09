@@ -27,25 +27,25 @@ describe('passportRequest utilities', () => {
   });
 
   it('omits optional fields when not provided', () => {
-    const payload = buildPassportPayload({ backendUrl, scope: 'davinci-census' });
+    const payload = buildPassportPayload({ backendUrl, censusContract: '0xdef', scope: 'davinci-census' });
     expect(payload.query).toBeUndefined();
     expect(payload.bindChain).toBeUndefined();
   });
 
   it('builds a QR image URL', () => {
-    const payload = buildPassportPayload({ backendUrl, scope: 'davinci-census' });
+    const payload = buildPassportPayload({ backendUrl, censusContract: '0xdef', scope: 'davinci-census' });
     const qrUrl = buildPassportQRUrl(backendUrl, payload);
     expect(qrUrl).toContain('/api/request-qr.png?payload=');
   });
 
   it('builds a deep link URL', () => {
-    const payload = buildPassportPayload({ backendUrl, scope: 'davinci-census' });
+    const payload = buildPassportPayload({ backendUrl, censusContract: '0xdef', scope: 'davinci-census' });
     const link = buildPassportDeepLink(backendUrl, payload);
     expect(link).toContain('/passport?request=');
   });
 
   it('strips trailing slashes from backendUrl', () => {
-    const payload = buildPassportPayload({ backendUrl: 'https://example.com///', scope: 'davinci-census' });
+    const payload = buildPassportPayload({ backendUrl: 'https://example.com///', censusContract: '0xdef', scope: 'davinci-census' });
     expect(payload.aggregateUrl).toBe('https://example.com/api/proofs/aggregate');
   });
 });

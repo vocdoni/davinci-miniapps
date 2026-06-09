@@ -5,7 +5,7 @@ export interface PassportRequestPayload {
   version: number;
   aggregateUrl: string;
   processId?: string;
-  censusContract?: string;
+  censusContract: string;
   // Voter's Ethereum address. Triggers the bind_evm circuit in the passport app,
   // linking the proof to this address on-chain.
   walletAddress?: string;
@@ -23,7 +23,7 @@ export interface PassportRequestPayload {
 export function buildPassportPayload(params: {
   backendUrl: string;
   processId?: string;
-  censusContract?: string;
+  censusContract: string;
   walletAddress?: string;
   bindChain?: string;
   scope: string;
@@ -34,7 +34,7 @@ export function buildPassportPayload(params: {
     version: 1,
     aggregateUrl: `${params.backendUrl.replace(/\/+$/, '')}/api/proofs/aggregate`,
     processId: params.processId || undefined,
-    censusContract: params.censusContract || undefined,
+    censusContract: params.censusContract,
     walletAddress: params.walletAddress || undefined,
     bindChain: params.bindChain || undefined,
     service: {
