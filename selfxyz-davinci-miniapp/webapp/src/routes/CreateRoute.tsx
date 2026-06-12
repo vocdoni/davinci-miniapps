@@ -7,6 +7,7 @@ import {
   ACTIVE_NETWORK,
   CENSUS_MEMBERS_QUERY,
   CONFIG,
+  HUB_INTERFACE,
   INTERNAL_RPC_RETRY_DELAY_MS,
   INTERNAL_RPC_RETRY_MAX_ATTEMPTS,
   PIPELINE_STAGES,
@@ -15,6 +16,7 @@ import {
   buildTxExplorerUrl,
   buildVoteUrl,
   collectErrorMessages,
+  computeConfigId,
   computeIndexerExpiresAt,
   clearConnectedWalletPreference,
   isInternalJsonRpcError,
@@ -897,21 +899,58 @@ export default function CreateRoute() {
     return `Using connected wallet ${ctx.creatorAddress}`;
   }, [applyWalletConnection]);
 
+  const ensureSelfConfigRegistered = useCallback(
+    async (ctx: PipelineContext) => {
+      if (!ctx.provider || !ctx.signer || !ctx.values || !ctx.browserProvider) {
+        throw new Error(COPY.create.errors.missingWalletContextSelfConfig);
+      }
+
+      const configId = computeConfigId(ctx.values.minAge);
+      ctx.configId = configId;
+
+      const existsData = HUB_INTERFACE.encodeFunctionData('verificationConfigV2Exists', [configId]);
+      const existsRaw = await ctx.provider.request({
+        method: 'eth_call',
+        params: [{ to: ACTIVE_NETWORK.hubAddress, data: existsData }, 'latest'],
+      });
+
+      const [exists] = HUB_INTERFACE.decodeFunctionResult('verificationConfigV2Exists', existsRaw);
+      if (exists) {
+        return `Config already registered (${configId})`;
+      }
+
+      const verificationConfig = {
+        olderThanEnabled: ctx.values.minAge > 0,
+        olderThan: BigInt(ctx.values.minAge),
+        forbiddenCountriesEnabled: false,
+        forbiddenCountriesListPacked: [0n, 0n, 0n, 0n],
+        ofacEnabled: [false, false, false],
+      };
+
+      const txData = HUB_INTERFACE.encodeFunctionData('setVerificationConfigV2', [verificationConfig]);
+      const tx = await ctx.signer.sendTransaction({
+        to: ACTIVE_NETWORK.hubAddress,
+        data: txData,
+      });
+
+      await waitForTransaction(ctx.browserProvider, tx.hash);
+      return `Config registered (${tx.hash})`;
+    },
+    [waitForTransaction]
+  );
+
   const deployCensusContract = useCallback(
     async (ctx: PipelineContext) => {
       if (!ctx.values || !ctx.signer || !ctx.browserProvider) {
         throw new Error(COPY.create.errors.missingWalletContextDeployment);
       }
 
-      // TODO: replace buildDeployData with ZKPassportCensus deployment once the
-      // artifact is available. configId defaults to zero bytes32 when not provided
-      // (previously set by the removed ensure_self_config_registered stage).
       const data = buildDeployData({
         scopeSeed: ctx.values.scopeSeed,
         countries: ctx.values.countries,
         country: ctx.values.country,
         minAge: ctx.values.minAge,
-        configId: ctx.configId || `0x${'0'.repeat(64)}`,
+        configId: ctx.configId,
       });
 
       const tx = await ctx.signer.sendTransaction({ data });
@@ -1245,6 +1284,8 @@ export default function CreateRoute() {
             await runStage('connect_creator_wallet_walletconnect', () => ensureCreatorWalletForPipeline(ctx));
             break;
           case 'ensure_self_config_registered':
+            await runStage('ensure_self_config_registered', () => ensureSelfConfigRegistered(ctx));
+            break;
           case 'deploy_census_contract':
             await runStage('deploy_census_contract', () => deployCensusContract(ctx));
             break;
@@ -1276,6 +1317,7 @@ export default function CreateRoute() {
       createDavinciProcess,
       deployCensusContract,
       ensureCreatorWalletForPipeline,
+      ensureSelfConfigRegistered,
       runStage,
       startIndexer,
       waitIndexerReady,
@@ -1351,6 +1393,7 @@ export default function CreateRoute() {
       createSubmitting,
       deployCensusContract,
       ensureCreatorWalletForPipeline,
+      ensureSelfConfigRegistered,
       runCreatePipelineFrom,
     ]
   );
