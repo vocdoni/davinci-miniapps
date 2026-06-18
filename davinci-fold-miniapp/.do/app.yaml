@@ -1,0 +1,29 @@
+name: davinci-fold-miniapp
+region: nyc
+static_sites:
+  - name: webapp
+    source_dir: webapp
+    build_command: npm ci && npm run build
+    output_dir: dist
+    routes:
+      - path: /
+        preserve_path_prefix: false
+    envs:
+      - key: VITE_DAVINCI_FOLD_URL
+        value: https://your-fold-backend.example.com
+      - key: VITE_ADMIN_JWT
+        type: SECRET
+      - key: VITE_CENSUS_SERVICE_URL
+        value: https://your-census-service.example.com
+      - key: VITE_CIRCUIT_URL
+        value: https://your-circuit-files.example.com
+      - key: VITE_ELECTION_VK_URL
+        value: https://your-circuit-files.example.com/ballot_vk.json
+      - key: VITE_ENC_X
+        type: SECRET
+      - key: VITE_ENC_Y
+        type: SECRET
+      - key: VITE_BALLOT_MODE
+        value: "0x01"
+      - key: VITE_WALLETCONNECT_PROJECT_ID
+        value: ""
