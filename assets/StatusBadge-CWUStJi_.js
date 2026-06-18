@@ -1,0 +1,1 @@
+import{j as t}from"./index-DySVMhS3.js";import{h as o,j as e}from"./fold-qHkIafk9.js";function c({status:s}){const a=e(s);return t.jsxs("span",{className:`status-badge ${a}`,children:[t.jsx("span",{className:"status-dot"}),o(s)]})}export{c as S};
