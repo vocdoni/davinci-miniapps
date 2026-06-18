@@ -2,28 +2,43 @@ name: davinci-fold-miniapp
 region: nyc
 static_sites:
   - name: webapp
-    source_dir: webapp
+    github:
+      repo: vocdoni/davinci-miniapps
+      branch: feat/davinci-fold-miniapp
+      deploy_on_push: false
+    source_dir: davinci-fold-miniapp/webapp
     build_command: npm ci && npm run build
     output_dir: dist
+    catchall_document: index.html
+    environment_slug: node-js
     routes:
       - path: /
         preserve_path_prefix: false
     envs:
       - key: VITE_DAVINCI_FOLD_URL
-        value: https://your-fold-backend.example.com
+        scope: BUILD_TIME
+        value: https://dress-oklahoma-beans-shuttle.trycloudflare.com
       - key: VITE_ADMIN_JWT
+        scope: BUILD_TIME
         type: SECRET
       - key: VITE_CENSUS_SERVICE_URL
-        value: https://your-census-service.example.com
+        scope: BUILD_TIME
+        value: ""
       - key: VITE_CIRCUIT_URL
-        value: https://your-circuit-files.example.com
+        scope: BUILD_TIME
+        value: ""
       - key: VITE_ELECTION_VK_URL
-        value: https://your-circuit-files.example.com/ballot_vk.json
+        scope: BUILD_TIME
+        value: ""
       - key: VITE_ENC_X
+        scope: BUILD_TIME
         type: SECRET
       - key: VITE_ENC_Y
+        scope: BUILD_TIME
         type: SECRET
       - key: VITE_BALLOT_MODE
+        scope: BUILD_TIME
         value: "0x01"
       - key: VITE_WALLETCONNECT_PROJECT_ID
+        scope: BUILD_TIME
         value: ""
